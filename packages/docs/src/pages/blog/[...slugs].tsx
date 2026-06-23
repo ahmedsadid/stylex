@@ -15,6 +15,7 @@ import {
 } from '@/components/layout/page';
 import { baseOptions } from '@/lib/layout.shared';
 import { parseBlogDate, formatBlogDate } from '@/lib/blog-date';
+import { getExcerpt } from '@/lib/excerpt';
 import { Seo } from '@/components/Seo';
 import { mdxComponents } from '@/components/mdx';
 import nmnImage from '@/static/img/nmn.jpg';
@@ -23,7 +24,9 @@ import mellyeliuImage from '@/static/img/mellyeliu.jpg';
 import vincentriemerImage from '@/static/img/vincentriemer.png';
 import { vars } from '@/theming/vars.stylex';
 
-export default function BlogPage({ slugs }: PageProps<'/blog/[...slugs]'>) {
+export default async function BlogPage({
+  slugs,
+}: PageProps<'/blog/[...slugs]'>) {
   const pages = blogSource.getPages();
 
   const slug = slugs[0];
@@ -46,6 +49,9 @@ export default function BlogPage({ slugs }: PageProps<'/blog/[...slugs]'>) {
     (author) => AUTHORS[author as keyof typeof AUTHORS],
   );
   const publishedDate = parseBlogDate(page.path);
+  // Blog posts have no `description` frontmatter; derive one from the content.
+  const description =
+    page.data.description || getExcerpt(await page.data.getText('processed'));
 
   return (
     <DocsPage
@@ -55,10 +61,7 @@ export default function BlogPage({ slugs }: PageProps<'/blog/[...slugs]'>) {
       // breadcrumb={{ enabled: true }}
     >
       <title>{`${page.data.title} | StyleX`}</title>
-      <Seo
-        title={page.data.title}
-        description={page.data.description || undefined}
-      />
+      <Seo title={page.data.title} description={description} />
       <DocsTitle>
         {page.data.title}{' '}
         {/* <code>
