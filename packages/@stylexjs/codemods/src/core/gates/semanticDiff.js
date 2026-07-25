@@ -349,9 +349,11 @@ export function netCssFromStylexMetadata(metadata: mixed): NetCss {
 
   const out: { [string]: NetDeclaration } = {};
   for (const { ltr } of entries) {
-    // @keyframes rules are compared separately (frame contents), not as
-    // per-property net CSS.
-    if (ltr.trim().startsWith('@keyframes')) {
+    const trimmed = ltr.trim();
+    // @keyframes rules are compared separately (frame contents); @property
+    // rules register a dynamic-value variable (`@property --x-… {…}`) and carry
+    // no per-property net CSS to diff.
+    if (trimmed.startsWith('@keyframes') || trimmed.startsWith('@property')) {
       continue;
     }
     parseStylexRule(ltr, out);
@@ -554,10 +556,24 @@ export const allowGeneratedAnimationName: AllowlistRule = (entry) =>
   entry.beforeValue == null &&
   entry.afterValue != null;
 
+/**
+ * Sanctioned: a dynamic (props-driven) value. It compiles to
+ * `property: var(--…)`, present only on the after side — the Emotion "before"
+ * omits it because the runtime value is unknowable (a trusted transformation,
+ * ADR-0002: the wiring is verified, not the value). An after-only `var(--…)`
+ * can only come from a StyleX dynamic conversion; a static `var(--…)` the user
+ * wrote appears on BOTH sides and matches before the allowlist is consulted.
+ */
+export const allowDynamicVar: AllowlistRule = (entry) =>
+  entry.beforeValue == null &&
+  entry.afterValue != null &&
+  entry.afterValue.startsWith('var(--');
+
 export const DEFAULT_ALLOWLIST: $ReadOnlyArray<AllowlistRule> = [
   allowPhysicalToLogical,
   allowHoverGuard,
   allowGeneratedAnimationName,
+  allowDynamicVar,
 ];
 
 // --- the gate -----------------------------------------------------------
