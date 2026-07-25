@@ -24,7 +24,7 @@ test('a flag marker is not duplicated on a second run (re-run guard)', () => {
     'export default function C() {\n' +
     '  return (\n' +
     '    <div>\n' +
-    '      <button css={{ color: fn() }}>x</button>\n' +
+    "      <button css={{ color: 'blue', '& > li': { color: 'red' } }}>x</button>\n" +
     '    </div>\n' +
     '  );\n' +
     '}\n';

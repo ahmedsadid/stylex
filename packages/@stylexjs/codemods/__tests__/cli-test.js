@@ -30,7 +30,7 @@ const FLAGGED =
   '/** @jsxImportSource @emotion/react */\n' +
   "import * as React from 'react';\n" +
   'export default function B() {\n' +
-  '  return <span css={{ color: fn() }}>B</span>;\n' +
+  "  return <span css={{ '& > li': { color: 'red' } }}>B</span>;\n" +
   '}\n';
 
 const REFUSED =

@@ -33,6 +33,10 @@ export type ReadSite =
       +declarations: Array<Declaration>,
       +cssObject: PlainStyleObject,
       +nameHint: string,
+      /** Props-driven values lifted to function-form parameters: the parameter
+       * identifier and the source expression it stands for (passed verbatim at
+       * the call site). Empty when the site has no dynamic values. */
+      +dynamicExprs: $ReadOnlyArray<{ +param: string, +node: $FlowFixMe }>,
     }
   | { +ok: false, +blocker: string };
 
@@ -40,6 +44,43 @@ const IDENTIFIER = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
 const SIMPLE_PSEUDO_CLASS = /^:[a-zA-Z][a-zA-Z-]*$/;
 const SIMPLE_PSEUDO_ELEMENT = /^::[a-zA-Z][a-zA-Z-]*$/;
 const AT_RULE = /^@(media|supports|container)\b/;
+
+/** Expression kinds we convert as a dynamic (props-driven) value: each is a
+ * single expression evaluated at the call site, so moving it verbatim from the
+ * css object into a `create` function argument preserves its meaning. Array
+ * and object values are excluded (a fallback list / nested condition, handled
+ * elsewhere); so are function/tagged-template values. */
+const DYNAMIC_VALUE_TYPES: Set<string> = new Set([
+  'Identifier',
+  'MemberExpression',
+  'OptionalMemberExpression',
+  'CallExpression',
+  'OptionalCallExpression',
+  'ConditionalExpression',
+  'LogicalExpression',
+  'BinaryExpression',
+  'UnaryExpression',
+  'TemplateLiteral',
+]);
+
+/** camelCases a CSS property name into a valid identifier for a function-form
+ * parameter (`background-color` -> `backgroundColor`). */
+function toIdentifier(property: string): string {
+  const camel = property.replace(/-([a-z])/g, (_, c: string) =>
+    c.toUpperCase(),
+  );
+  return IDENTIFIER.test(camel) ? camel : 'value';
+}
+
+/** Makes a param name unique within one site's function signature. */
+function uniqueParam(base: string, used: Set<string>): string {
+  let name = base;
+  for (let n = 2; used.has(name); n++) {
+    name = `${base}${n}`;
+  }
+  used.add(name);
+  return name;
+}
 
 type Classified =
   | { +role: 'condition', +condition: Condition, +normalizedKey: string }
@@ -167,6 +208,8 @@ export function readSite(
   const knownKeyframes = keyframesNames ?? new Set<string>();
   const declarations: Array<Declaration> = [];
   const cssObject: { [string]: mixed } = {};
+  const dynamicExprs: Array<{ param: string, node: $FlowFixMe }> = [];
+  const usedParams: Set<string> = new Set();
   let label: string | null = null;
 
   const walk = (
@@ -241,11 +284,29 @@ export function readSite(
       }
 
       const value = valueOf(valueNode);
-      if (value == null) {
+      if (value != null) {
+        declarations.push({ property: key, value, conditions });
+        mirror[key] = plainOf(value);
+        continue;
+      }
+
+      // Non-static value → convert as a dynamic (props-driven) value when it is
+      // a clean pass-through expression under no condition (slice 1): lifted to
+      // a StyleX function-form `create` parameter, the expression moved verbatim
+      // to the call site (M8). It is OMITTED from the mirror — its runtime value
+      // is unknowable, so the semantic-diff gate verifies only the wiring, not
+      // the value (a trusted transformation, ADR-0002). Conditional dynamic
+      // values and non-pass-through expressions are flagged for a later slice.
+      if (conditions.length > 0 || !DYNAMIC_VALUE_TYPES.has(valueNode.type)) {
         return `dynamic value (props-driven) on '${key}'`;
       }
-      declarations.push({ property: key, value, conditions });
-      mirror[key] = plainOf(value);
+      const param = uniqueParam(toIdentifier(key), usedParams);
+      declarations.push({
+        property: key,
+        value: { kind: 'dynamic', param },
+        conditions,
+      });
+      dynamicExprs.push({ param, node: valueNode });
     }
     return null;
   };
@@ -300,6 +361,7 @@ export function readSite(
     declarations,
     cssObject,
     nameHint: label ?? enclosingComponentName(site) ?? site.tagName,
+    dynamicExprs,
   };
 }
 

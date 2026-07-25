@@ -36,6 +36,7 @@ import {
   printSource,
   parserForFile,
   styleToObjectAst,
+  createObjectAst,
   jsxComment,
 } from '../../core/rewriter';
 import {
@@ -204,13 +205,18 @@ export function transformEmotionFile(
     return { status: 'skipped', reasons: fixed.residualErrors };
   }
 
-  // Rewrite converted sites; flag the rest in place.
+  // Rewrite converted sites; flag the rest in place. For a dynamic rule, pass
+  // the captured source expressions as call args, in the emitted param order.
   convertRules.forEach((c, k) => {
+    const { dynamicExprs } = candidates[c.candidateIndex].read;
+    const byParam = new Map(dynamicExprs.map((d) => [d.param, d.node]));
+    const args = rules[k].params.map((p) => byParam.get(p));
     rewriteSite(
       j,
       candidates[c.candidateIndex].site,
       stylesLocalName,
       bindings[k],
+      args,
     );
   });
   rewriteKeyframes(j, kfDetection.sites, fixed.keyframesByName);
@@ -354,17 +360,18 @@ function scopedFix(
     );
   }
   if (rules.length > 0) {
-    const createStyle: { [string]: EmittedStyle } = {};
-    for (const rule of rules) {
-      createStyle[rule.key] = rule.style;
-    }
     lines.push(
       `const ${stylesLocalName} = stylex.create(` +
-        `${printExpr(j, styleToObjectAst(j, createStyle))});`,
+        `${printExpr(j, createObjectAst(j, rules))});`,
     );
-    // Usage stubs so no-unused stays quiet (real usage is in the JSX).
+    // Usage stubs so no-unused stays quiet (real usage is in the JSX). A
+    // function-form (dynamic) rule is called with placeholder args.
     for (const rule of rules) {
-      lines.push(`stylex.props(${stylesLocalName}.${rule.key});`);
+      const call =
+        rule.params.length > 0
+          ? `(${rule.params.map(() => '0').join(', ')})`
+          : '';
+      lines.push(`stylex.props(${stylesLocalName}.${rule.key}${call});`);
     }
   }
 
