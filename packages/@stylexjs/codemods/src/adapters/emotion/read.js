@@ -291,13 +291,15 @@ export function readSite(
       }
 
       // Non-static value → convert as a dynamic (props-driven) value when it is
-      // a clean pass-through expression under no condition (slice 1): lifted to
-      // a StyleX function-form `create` parameter, the expression moved verbatim
-      // to the call site (M8). It is OMITTED from the mirror — its runtime value
-      // is unknowable, so the semantic-diff gate verifies only the wiring, not
-      // the value (a trusted transformation, ADR-0002). Conditional dynamic
-      // values and non-pass-through expressions are flagged for a later slice.
-      if (conditions.length > 0 || !DYNAMIC_VALUE_TYPES.has(valueNode.type)) {
+      // a clean pass-through expression: lifted to a StyleX function-form
+      // `create` parameter, the expression moved verbatim to the call site (M8).
+      // It is OMITTED from the mirror — its runtime value is unknowable, so the
+      // semantic-diff gate verifies only the wiring, not the value (a trusted
+      // transformation, ADR-0002). Conditions are supported (M8b): the value
+      // nests under them like any other atom, and a referee conflict among
+      // conditions still refuses. Non-pass-through expressions (array / spread /
+      // computed) are still flagged.
+      if (!DYNAMIC_VALUE_TYPES.has(valueNode.type)) {
         return `dynamic value (props-driven) on '${key}'`;
       }
       const param = uniqueParam(toIdentifier(key), usedParams);
