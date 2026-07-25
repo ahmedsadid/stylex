@@ -36,9 +36,11 @@ export type Condition =
 /**
  * The value of an atom. `static` is the base variant; `first-that-works` is
  * a fallback array; `reference` is an identifier reference (e.g.
- * `animationName` pointing at a `stylex.keyframes` variable). A `dynamic`
- * variant (props-driven, -> StyleX function-form create) is the planned
- * v1.1 addition.
+ * `animationName` pointing at a `stylex.keyframes` variable); `dynamic` is a
+ * props-driven value (v1.1) that emits as a StyleX function-form `create`
+ * parameter — `param` is the parameter identifier the emitter uses in the
+ * function body; the source expression it stands for is held by the adapter
+ * (AST-free core) and passed at the call site.
  */
 export type Value =
   | { +kind: 'static', +value: string | number | null }
@@ -46,7 +48,8 @@ export type Value =
       +kind: 'first-that-works',
       +values: $ReadOnlyArray<string | number>,
     }
-  | { +kind: 'reference', +name: string };
+  | { +kind: 'reference', +name: string }
+  | { +kind: 'dynamic', +param: string };
 
 /**
  * The unit of the IR: one property, under zero or more conditions,

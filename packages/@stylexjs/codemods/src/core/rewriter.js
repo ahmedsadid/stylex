@@ -21,7 +21,7 @@
  */
 
 import jscodeshift from 'jscodeshift';
-import type { EmittedStyle, EmittedValue } from './emit';
+import type { EmittedRule, EmittedStyle, EmittedValue } from './emit';
 
 // 'flow' also covers plain JS + JSX; 'tsx' also covers plain TS.
 export type ParserChoice = 'flow' | 'tsx';
@@ -95,9 +95,38 @@ function valueAst(j: $FlowFixMe, value: EmittedValue): $FlowFixMe {
     if (typeof value.$$ref === 'string') {
       return j.identifier(value.$$ref);
     }
+    // A dynamic sentinel renders as the bare parameter identifier used inside
+    // the create function body (e.g. `color: color`).
+    if (typeof value.$$dyn === 'string') {
+      return j.identifier(value.$$dyn);
+    }
     return objectAst(j, value);
   }
   return j.literal(value);
+}
+
+/**
+ * Builds the `stylex.create({...})` argument object from emitted rules,
+ * wrapping any dynamic rule as a function-form entry `key: (…params) => ({…})`
+ * (the object body is parenthesized so it is a return value, not a block).
+ */
+export function createObjectAst(
+  j: $FlowFixMe,
+  rules: $ReadOnlyArray<EmittedRule>,
+): $FlowFixMe {
+  return j.objectExpression(
+    rules.map((rule) => {
+      const body = objectAst(j, rule.style);
+      const value =
+        rule.params.length === 0
+          ? body
+          : j.arrowFunctionExpression(
+              rule.params.map((p) => j.identifier(p)),
+              body,
+            );
+      return j.property('init', keyAst(j, rule.key), value);
+    }),
+  );
 }
 
 function objectAst(

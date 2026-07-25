@@ -14,9 +14,11 @@
  * output).
  */
 
+import jscodeshift from 'jscodeshift';
 import type { Atom, FileIR } from '../src/core/ir';
 import { buildFileIR } from '../src/core/buildIR';
 import { emitFileIR, sanitizeKey, EmitError } from '../src/core/emit';
+import { createObjectAst } from '../src/core/rewriter';
 
 function irOf(
   entries: Array<[string, Array<[string, string | number]>]>,
@@ -37,7 +39,9 @@ function irOf(
 describe('emitFileIR', () => {
   test('one rule becomes one create entry plus its binding', () => {
     const result = emitFileIR(irOf([['badge', [['color', 'red']]]]));
-    expect(result.rules).toEqual([{ key: 'badge', style: { color: 'red' } }]);
+    expect(result.rules).toEqual([
+      { key: 'badge', style: { color: 'red' }, params: [] },
+    ]);
     expect(result.bindings).toEqual(['badge']);
   });
 
@@ -230,7 +234,9 @@ describe('buildFileIR', () => {
         },
       ]),
     );
-    expect(rules).toEqual([{ key: 'badge', style: { color: 'red' } }]);
+    expect(rules).toEqual([
+      { key: 'badge', style: { color: 'red' }, params: [] },
+    ]);
     expect(bindings).toEqual(['badge']);
   });
 });
@@ -297,5 +303,136 @@ describe('emitFileIR — references and keyframes', () => {
         ],
       },
     ]);
+  });
+});
+
+describe('emitFileIR — dynamic (function-form) values', () => {
+  test('a dynamic value emits a $$dyn sentinel and collects the param', () => {
+    const ir: FileIR = {
+      rules: [
+        {
+          name: 'box',
+          atoms: [
+            {
+              property: 'color',
+              conditions: [],
+              value: { kind: 'dynamic', param: 'color' },
+            },
+          ],
+        },
+      ],
+      keyframes: [],
+    };
+    const [rule] = emitFileIR(ir).rules;
+    expect(rule.style).toEqual({ color: { $$dyn: 'color' } });
+    expect(rule.params).toEqual(['color']);
+  });
+
+  test('mixes static and dynamic; only dynamic props become params', () => {
+    const ir: FileIR = {
+      rules: [
+        {
+          name: 'box',
+          atoms: [
+            {
+              property: 'padding',
+              conditions: [],
+              value: { kind: 'static', value: 8 },
+            },
+            {
+              property: 'color',
+              conditions: [],
+              value: { kind: 'dynamic', param: 'color' },
+            },
+          ],
+        },
+      ],
+      keyframes: [],
+    };
+    const [rule] = emitFileIR(ir).rules;
+    expect(rule.style).toEqual({ color: { $$dyn: 'color' }, padding: 8 });
+    expect(rule.params).toEqual(['color']);
+  });
+
+  test('multiple dynamic params, ordered alphabetically by property', () => {
+    const ir: FileIR = {
+      rules: [
+        {
+          name: 'box',
+          atoms: [
+            {
+              property: 'color',
+              conditions: [],
+              value: { kind: 'dynamic', param: 'color' },
+            },
+            {
+              property: 'backgroundColor',
+              conditions: [],
+              value: { kind: 'dynamic', param: 'backgroundColor' },
+            },
+          ],
+        },
+      ],
+      keyframes: [],
+    };
+    expect(emitFileIR(ir).rules[0].params).toEqual([
+      'backgroundColor',
+      'color',
+    ]);
+  });
+
+  test('renders as a function-form entry with a parenthesized object body', () => {
+    const j = jscodeshift.withParser('flow');
+    const ir: FileIR = {
+      rules: [
+        {
+          name: 'box',
+          atoms: [
+            {
+              property: 'padding',
+              conditions: [],
+              value: { kind: 'static', value: 8 },
+            },
+            {
+              property: 'color',
+              conditions: [],
+              value: { kind: 'dynamic', param: 'color' },
+            },
+          ],
+        },
+      ],
+      keyframes: [],
+    };
+    const obj = createObjectAst(j, emitFileIR(ir).rules);
+    const src = j(j.expressionStatement(obj)).toSource({ quote: 'single' });
+    // The object body MUST be parenthesized (`=> ({...})`), not a block.
+    expect(src).toMatch(/=>\s*\(\s*\{/);
+    expect(src).toContain('color: color');
+    expect(src).toContain('padding: 8');
+  });
+
+  test('a rule with no dynamic values still renders as a plain object', () => {
+    const j = jscodeshift.withParser('flow');
+    const obj = createObjectAst(
+      j,
+      emitFileIR({
+        rules: [
+          {
+            name: 'badge',
+            atoms: [
+              {
+                property: 'color',
+                conditions: [],
+                value: { kind: 'static', value: 'red' },
+              },
+            ],
+          },
+        ],
+        keyframes: [],
+      }).rules,
+    );
+    const src = j(j.expressionStatement(obj)).toSource({ quote: 'single' });
+    expect(src).not.toContain('=>');
+    expect(src).toContain('badge: {');
   });
 });

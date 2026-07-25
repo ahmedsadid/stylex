@@ -38,9 +38,13 @@ export type EmittedValue =
   | null
   | $ReadOnlyArray<string | number>
   | EmittedRef
+  | EmittedDyn
   | EmittedConditions;
 /** Sentinel for a bare-identifier reference; `$$ref` is the identifier. */
 export type EmittedRef = { +$$ref: string };
+/** Sentinel for a dynamic (function-form) value; `$$dyn` is the parameter
+ * identifier used in the create function body. */
+export type EmittedDyn = { +$$dyn: string };
 export type EmittedConditions = { +[condition: string]: EmittedValue };
 
 /** A `stylex.create` entry as plain data: property -> value. */
@@ -49,6 +53,11 @@ export type EmittedStyle = { +[property: string]: EmittedValue };
 export type EmittedRule = {
   +key: string,
   +style: EmittedStyle,
+  /** Non-empty when the rule is a dynamic (function-form) create entry
+   * (`key: (…params) => ({…})`): the ordered parameter identifiers. The
+   * adapter passes the matching source expressions as call-site arguments in
+   * this order. */
+  +params: $ReadOnlyArray<string>,
 };
 
 /** An emitted `stylex.keyframes` declaration: a variable name and its frames. */
@@ -101,10 +110,34 @@ function leafValue(value: Value): EmittedValue {
       return value.values;
     case 'reference':
       return { $$ref: value.name };
+    case 'dynamic':
+      return { $$dyn: value.param };
     case 'static':
     default:
       return value.value;
   }
+}
+
+/** The distinct dynamic parameter identifiers a rule uses, in stable
+ * (property-alphabetical) order. The function signature and the adapter's
+ * call-site arguments agree on this order. */
+function collectParams(rule: StyleRule): $ReadOnlyArray<string> {
+  const params: Array<string> = [];
+  const seen = new Set<string>();
+  const dynamic = rule.atoms
+    .filter((a) => a.value.kind === 'dynamic')
+    .slice()
+    .sort((a, b) =>
+      a.property < b.property ? -1 : a.property > b.property ? 1 : 0,
+    );
+  for (const atom of dynamic) {
+    const value = atom.value;
+    if (value.kind === 'dynamic' && !seen.has(value.param)) {
+      seen.add(value.param);
+      params.push(value.param);
+    }
+  }
+  return params;
 }
 
 /**
@@ -246,13 +279,14 @@ export function emitFileIR(ir: FileIR, options?: EmitOptions): EmitResult {
 
   for (const rule of ir.rules) {
     const style = emitStyleObject(rule, hoverGuard);
+    const params = collectParams(rule);
     const base = sanitizeKey(rule.name);
     let key = base;
     for (let n = 2; usedKeys.has(key); n++) {
       key = `${base}${n}`;
     }
     usedKeys.add(key);
-    rules.push({ key, style });
+    rules.push({ key, style, params });
     bindings.push(key);
   }
 
