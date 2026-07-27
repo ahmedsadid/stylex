@@ -9,50 +9,28 @@
 
 /**
  * The fixture harness — the executable spec. Every input/expected pair
- * under `__fixtures__/emotion/` must satisfy four checks:
+ * under `__fixtures__/emotion/` must satisfy two checks:
  *
- *   1. transform(input) matches expected byte-exactly (after Prettier);
- *   2. expected compiles through @stylexjs/babel-plugin;
- *   3. expected passes @stylexjs/eslint-plugin at error, zero messages;
- *   4. the net CSS of input and expected is semantically identical
- *      (Emotion's own serializer vs the babel-plugin metadata, minus the
- *      sanctioned allowlist). Skip-fixtures (expected === input) assert
- *      that the transform really did refuse.
+ *   1. transform(input) matches expected byte-exactly (after Prettier) — the
+ *      regression pin / human-readable answer key.
+ *   2. the converted output passes the shared taste-test `verifyConvertedFile`
+ *      (compile + lint + semantic-diff + keyframe contents) — where
+ *      correctness is *derived* from the input and output, not the answer key.
+ *      Skip-fixtures (expected === input) instead assert the transform refused.
+ *
+ * The same `verifyConvertedFile` runs on real, answer-key-less code in the M9
+ * corpus runner — this is what makes that trustworthy.
  *
  * Set UPDATE_STYLEX_CODEMOD_FIXTURES=1 to regenerate expected files when a
  * change is intentional.
  */
 
 import * as fs from 'fs';
-import { serializeStyles } from '@emotion/serialize';
-import { compileGate } from '../src/core/gates/compile';
-import { lintGate } from '../src/core/gates/lint';
-import {
-  semanticDiffGate,
-  netCssFromSerializedCss,
-  netCssFromStylexMetadata,
-  keyframesFromStylexMetadata,
-  parseFrames,
-} from '../src/core/gates/semanticDiff';
 import { transformEmotionFile } from '../src/adapters/emotion/transform';
+import { verifyConvertedFile } from '../src/testing/verifyConversion';
 import { loadFixtures, formatWithPrettier } from './utils/harness';
 
 const UPDATE = process.env.UPDATE_STYLEX_CODEMOD_FIXTURES === '1';
-
-/** Deterministic JSON with recursively-sorted keys, for set comparison. */
-function canonicalJson(value: mixed): string {
-  if (value == null || typeof value !== 'object') {
-    return JSON.stringify(value) ?? 'null';
-  }
-  if (Array.isArray(value)) {
-    return `[${value.map(canonicalJson).join(',')}]`;
-  }
-  const obj: { +[string]: mixed } = value;
-  return `{${Object.keys(obj)
-    .sort()
-    .map((k) => `${JSON.stringify(k)}:${canonicalJson(obj[k])}`)
-    .join(',')}}`;
-}
 
 const fixtures = loadFixtures('emotion');
 
@@ -83,30 +61,10 @@ describe.each(fixtures.map((f) => [f.name, f]))(
       );
     });
 
-    // Check 2.
-    test('expected compiles through @stylexjs/babel-plugin', () => {
-      const compiled = compileGate(fixture.expected, {
-        filename: fixture.expectedPath,
-      });
-      if (!compiled.ok) {
-        throw new Error(compiled.errors.join('\n'));
-      }
-      expect(compiled.ok).toBe(true);
-    });
-
-    // Check 3.
-    test('expected passes @stylexjs/eslint-plugin at error with zero messages', () => {
-      const linted = lintGate(fixture.expected, {
-        filename: fixture.expectedPath,
-      });
-      if (!linted.ok) {
-        throw new Error(JSON.stringify(linted.messages, null, 2));
-      }
-      expect(linted.ok).toBe(true);
-    });
-
-    // Check 4.
-    test('net CSS of input and expected is semantically identical', () => {
+    // Check 2 — the shared taste-test: compile + lint + semantic-diff + keyframe
+    // contents. No answer key involved (that is check 1); correctness is derived
+    // from the input and output themselves. Skip-fixtures instead assert refusal.
+    test('converted output passes compile + lint + semantic-diff', () => {
       if (result.status !== 'converted') {
         // A skip-fixture: the transform must have refused (loudly, with
         // reasons) and left the file byte-identical.
@@ -116,62 +74,22 @@ describe.each(fixtures.map((f) => [f.name, f]))(
         }
         return;
       }
-      // Before: any pre-existing StyleX in the INPUT (unchanged by a merge,
-      // so it appears on both sides) + Emotion's serializer over each
-      // converted object.
-      // (Fixture-design constraint: sites must not restate the same
-      // property+conditions with different values, or the union is lossy.)
-      const before: { [string]: $FlowFixMe } = {};
-      const inputCompiled = compileGate(fixture.input, {
-        filename: fixture.inputPath,
+      const verdict = verifyConvertedFile({
+        inputSource: fixture.input,
+        inputPath: fixture.inputPath,
+        outputCode: output,
+        outputPath: fixture.expectedPath,
+        sites: result.sites,
+        keyframes: result.keyframes,
       });
-      if (inputCompiled.ok) {
-        const preExisting = netCssFromStylexMetadata(inputCompiled.metadata);
-        for (const coordinate of Object.keys(preExisting)) {
-          before[coordinate] = preExisting[coordinate];
-        }
-      }
-      for (const site of result.sites) {
-        const net = netCssFromSerializedCss(
-          serializeStyles([site.cssObject]).styles,
+      if (verdict.status !== 'ok') {
+        throw new Error(
+          verdict.status === 'failed'
+            ? verdict.failures.join('\n')
+            : `unverifiable: ${verdict.reason}`,
         );
-        for (const coordinate of Object.keys(net)) {
-          if (
-            before[coordinate] != null &&
-            before[coordinate].value !== net[coordinate].value
-          ) {
-            throw new Error(
-              `fixture restates '${coordinate}' with different values across sites`,
-            );
-          }
-          before[coordinate] = net[coordinate];
-        }
       }
-      // After: the real babel-plugin metadata for the converted output.
-      const compiled = compileGate(output, { filename: fixture.expectedPath });
-      if (!compiled.ok) {
-        throw new Error(compiled.errors.join('\n'));
-      }
-      const diff = semanticDiffGate(
-        before,
-        netCssFromStylexMetadata(compiled.metadata),
-      );
-      if (!diff.ok) {
-        throw new Error(JSON.stringify(diff.diffs, null, 2));
-      }
-      expect(diff.ok).toBe(true);
-
-      // Keyframes: the generated animation-name differs, so the frame
-      // CONTENTS are compared directly (Emotion serializer vs StyleX
-      // @keyframes metadata), as an order-independent multiset.
-      const emotionFrames = result.keyframes
-        .map((kf) => parseFrames(serializeStyles([kf.framesObject]).styles))
-        .map(canonicalJson)
-        .sort();
-      const stylexFrames = keyframesFromStylexMetadata(compiled.metadata)
-        .map(canonicalJson)
-        .sort();
-      expect(stylexFrames).toEqual(emotionFrames);
+      expect(verdict.status).toBe('ok');
     });
   },
 );
