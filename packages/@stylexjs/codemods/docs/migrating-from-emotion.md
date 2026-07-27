@@ -34,6 +34,10 @@ The report classifies every file:
 
 - The `css` prop as an object: `<div css={{ … }} />` and
   `<div css={css({ … })} />`, on host (lowercase) elements.
+- Both css-prop runtimes: the modern `/** @jsxImportSource @emotion/react */`
+  pragma and the classic `/** @jsx jsx */` (with `import { jsx } from
+  '@emotion/react'`). Classic-pragma files keep their pragma and `jsx` import —
+  see *Known limitations*.
 - Self-targeting conditions: pseudo-classes (`:hover`, `:focus`),
   pseudo-elements (`::before`), media queries, and their nesting.
 - Multi-value `margin`/`padding` shorthands (`'8px 16px'`), expanded to
@@ -61,6 +65,12 @@ safely needs a human:
 - template-literal styles (`` css`…` ``)
 - dynamic / props-driven values (`css={{ color: props.color }}`)
 - selectors that reach outside the element (`& > li`, descendant/child)
+- `css` on the same element as a `className`, `style`, or `{...spread}`
+  (`<span css={{ … }} {...props} />`) — StyleX can't safely merge with an
+  unknown incoming `className`/`style` (a plain spread would silently drop one
+  or the other)
+- `css` on a custom (uppercase) component (`<Button css={{ … }} />`) — only host
+  elements are converted, since the component may not forward `className`/`style`
 - `!important`
 - cascades where Emotion's source order and StyleX's priority disagree
 - theme tokens (`theme.colors.primary`) — see *Design tokens* below
@@ -100,9 +110,20 @@ mirrors how the styled-components → StyleX migration at Linear was done.)
   cases, but files using TypeScript-specific syntax the Flow-based lint gate
   can't parse (enums, `satisfies`, non-null `!`, etc.) are safely skipped rather
   than converted. JavaScript, JSX, and Flow are the fully-verified path.
+- **Classic-pragma files keep a small residual.** For a file using the classic
+  `/** @jsx jsx */` runtime, the css props convert but the pragma and
+  `import { jsx }` are left in place: removing the classic pragma reverts the
+  file to your project's default JSX runtime (often `React.createElement`,
+  needing a `React` import we can't guarantee is present). Emotion's `jsx`
+  factory handles plain JSX identically, so the file keeps working — remove the
+  pragma and import by hand once you've confirmed your project's default JSX
+  config.
 - **`styled(Component)`**, `@emotion/styled`, `<Global>`, `injectGlobal`,
   `cx`/composition, and `shouldForwardProp` are out of scope for this version
-  (files using them are flagged or refused, never converted incorrectly).
+  (files using them are flagged or refused, never converted incorrectly). In
+  practice most large Emotion codebases lean heavily on `styled` and template
+  literals, so expect a modest automatic-conversion rate on such projects today;
+  broadening that is the focus of upcoming versions.
 - **Cross-file** styles (a `css`/`keyframes` value imported from another file)
   are flagged, not followed.
 - **Per-site keyframe flagging**: an unconvertible `keyframes` currently refuses
