@@ -8,17 +8,28 @@
  */
 
 /**
- * Emotion wiring: how a file opts into the css prop. M1 recognizes the
- * modern `@emotion/react` forms only — the `@jsxImportSource` pragma and a
- * named `css` import. Any other `@emotion/*` surface (styled, class-based
- * `@emotion/css`, Global, keyframes, classic `jsx` pragma) is a blocker:
- * we skip the whole file rather than half-migrate it.
+ * Emotion wiring: how a file opts into the css prop. Recognizes both the
+ * modern `@jsxImportSource @emotion/react` pragma (with a named `css` import)
+ * and the classic `@jsx jsx` runtime (`import { jsx } from '@emotion/react'`).
+ * Any other `@emotion/*` surface (styled, class-based `@emotion/css`, Global,
+ * ThemeProvider) is still a blocker: we skip the whole file rather than
+ * half-migrate it. The classic pragma and `jsx` import are LEFT IN PLACE on
+ * conversion (see `EmotionWiring.hasClassicJsx`).
  */
 
 const PRAGMA_PATTERN = /@jsxImportSource\s+@emotion\/react/;
+// Classic css-prop runtime: `@jsx <factory>`. The required space after `@jsx`
+// keeps it from matching `@jsxImportSource` / `@jsxRuntime`.
+const CLASSIC_JSX_PRAGMA = /@jsx\s+([A-Za-z_$][\w$]*)/;
 
 export type EmotionWiring = {
   +hasPragma: boolean,
+  // Classic `/** @jsx jsx */` + `import { jsx } from '@emotion/react'`. Left in
+  // place on conversion: removing the classic pragma reverts JSX to the
+  // project's default runtime (often `React.createElement`, needing a React
+  // import we can't guarantee is present). Emotion's jsx factory handles plain
+  // JSX identically, so the file keeps working with only a thin residual.
+  +hasClassicJsx: boolean,
   +cssLocalName: string | null,
   +keyframesLocalName: string | null,
   +blockers: Array<string>,
@@ -33,6 +44,7 @@ export function analyzeEmotionWiring(
 ): EmotionWiring {
   let cssLocalName: string | null = null;
   let keyframesLocalName: string | null = null;
+  let jsxLocalName: string | null = null;
   const blockers: Array<string> = [];
 
   root.find(j.ImportDeclaration).forEach((path: $FlowFixMe) => {
@@ -51,6 +63,10 @@ export function analyzeEmotionWiring(
         cssLocalName = specifier.local.name;
       } else if (imported === 'keyframes') {
         keyframesLocalName = specifier.local.name;
+      } else if (imported === 'jsx') {
+        // The classic css-prop runtime factory: captured (not a blocker) and
+        // left in place; the `@jsx` pragma below confirms the file uses it.
+        jsxLocalName = specifier.local.name;
       } else {
         blockers.push(
           `'@emotion/react' import of '${
@@ -61,8 +77,17 @@ export function analyzeEmotionWiring(
     }
   });
 
+  const comments = allCommentValues(j, root);
+  const hasClassicJsx =
+    jsxLocalName != null &&
+    comments.some((value) => {
+      const match = CLASSIC_JSX_PRAGMA.exec(value);
+      return match != null && match[1] === jsxLocalName;
+    });
+
   return {
-    hasPragma: PRAGMA_PATTERN.test(findPragmaText(j, root) ?? ''),
+    hasPragma: comments.some((value) => PRAGMA_PATTERN.test(value)),
+    hasClassicJsx,
     cssLocalName,
     keyframesLocalName,
     blockers,
@@ -77,15 +102,15 @@ function allCommentSlots(j: $FlowFixMe, root: $FlowFixMe): Array<$FlowFixMe> {
   return [program, ...program.body];
 }
 
-function findPragmaText(j: $FlowFixMe, root: $FlowFixMe): string | null {
+/** Every comment value attached to the program or a top-level statement. */
+function allCommentValues(j: $FlowFixMe, root: $FlowFixMe): Array<string> {
+  const values: Array<string> = [];
   for (const slot of allCommentSlots(j, root)) {
     for (const comment of slot.comments ?? []) {
-      if (PRAGMA_PATTERN.test(comment.value)) {
-        return comment.value;
-      }
+      values.push(comment.value);
     }
   }
-  return null;
+  return values;
 }
 
 /**

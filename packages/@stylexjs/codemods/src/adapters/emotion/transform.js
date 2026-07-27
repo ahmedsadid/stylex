@@ -88,6 +88,7 @@ export function transformEmotionFile(
   const wiring = analyzeEmotionWiring(j, root);
   if (
     !wiring.hasPragma &&
+    !wiring.hasClassicJsx &&
     wiring.cssLocalName == null &&
     wiring.keyframesLocalName == null
   ) {
