@@ -32,11 +32,13 @@ export const REASONS: {
   +dynamicValue: string,
   +componentElement: string,
   +propConflict: string,
+  +styledComponent: string,
 } = {
   templateLiteral: 'template-literal styles',
   dynamicValue: 'dynamic value (props-driven)',
   componentElement: 'css on a component element',
   propConflict: 'css mixed with className/style/spread',
+  styledComponent: 'styled() component',
 };
 
 /** The block-comment body for a flagged site (note the surrounding spaces). */

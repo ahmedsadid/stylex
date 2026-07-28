@@ -50,6 +50,7 @@ import { detectSites, detectKeyframes, detectExistingRegistry } from './detect';
 import { readSite, readKeyframes } from './read';
 import type { PlainStyleObject } from './read';
 import { rewriteSite } from './rewriteSites';
+import { flagStyledUsages } from './styled';
 
 export type TransformResult =
   | {
@@ -119,6 +120,13 @@ export function transformEmotionFile(
     return { status: 'skipped', reasons: wholeFileBlockers };
   }
 
+  // M11a: flag each `styled()` definition in place, so a file that uses styled
+  // is no longer refused for it — its convertible css props still migrate.
+  const styledFlags: Array<string> =
+    wiring.styledLocalName != null
+      ? flagStyledUsages(j, root, wiring.styledLocalName)
+      : [];
+
   // --- Per-site classification: each css site either converts or is flagged
   // with a `// TODO(stylex-migration): …` marker (bail loudly, in place). ---
   const flags: Array<{ +attrPath: $FlowFixMe, +reason: string }> = [];
@@ -174,10 +182,11 @@ export function transformEmotionFile(
   });
 
   if (convertRules.length === 0 && kfDetection.sites.length === 0) {
-    if (flags.length === 0) {
+    if (flags.length === 0 && styledFlags.length === 0) {
       return { status: 'unchanged' };
     }
     // Nothing convertible, but sites to flag: inject TODOs and keep Emotion.
+    // (styled() defs were already flagged above.)
     for (const flag of flags) {
       injectTodo(j, flag.attrPath, flag.reason);
     }
@@ -186,7 +195,7 @@ export function transformEmotionFile(
       code: printSource({ j, root }),
       sites: [],
       keyframes: [],
-      flags: flags.map((f) => f.reason),
+      flags: [...flags.map((f) => f.reason), ...styledFlags],
     };
   }
 
@@ -275,7 +284,7 @@ export function transformEmotionFile(
       }
       return { framesObject: kf.framesObject };
     }),
-    flags: flags.map((f) => f.reason),
+    flags: [...flags.map((f) => f.reason), ...styledFlags],
   };
 }
 

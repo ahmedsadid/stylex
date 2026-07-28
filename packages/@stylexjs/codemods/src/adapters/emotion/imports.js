@@ -32,6 +32,10 @@ export type EmotionWiring = {
   +hasClassicJsx: boolean,
   +cssLocalName: string | null,
   +keyframesLocalName: string | null,
+  // Local name of the default `@emotion/styled` import, if any. NOT a
+  // whole-file blocker (M11a): its `styled()` definitions are flagged per-site
+  // so co-located css props still convert.
+  +styledLocalName: string | null,
   +blockers: Array<string>,
 };
 
@@ -45,11 +49,24 @@ export function analyzeEmotionWiring(
   let cssLocalName: string | null = null;
   let keyframesLocalName: string | null = null;
   let jsxLocalName: string | null = null;
+  let styledLocalName: string | null = null;
   const blockers: Array<string> = [];
 
   root.find(j.ImportDeclaration).forEach((path: $FlowFixMe) => {
     const source = String(path.node.source.value);
     if (!source.startsWith('@emotion/')) {
+      return;
+    }
+    if (source === '@emotion/styled') {
+      // M11a: NOT a whole-file blocker. Capture the default import so the
+      // `styled()` definitions can be flagged per-site while the file's css
+      // props still convert.
+      const def = (path.node.specifiers ?? []).find(
+        (s: $FlowFixMe) => s.type === 'ImportDefaultSpecifier',
+      );
+      if (def != null) {
+        styledLocalName = def.local.name;
+      }
       return;
     }
     if (source !== '@emotion/react') {
@@ -90,6 +107,7 @@ export function analyzeEmotionWiring(
     hasClassicJsx,
     cssLocalName,
     keyframesLocalName,
+    styledLocalName,
     blockers,
   };
 }
