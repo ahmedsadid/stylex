@@ -44,6 +44,53 @@ export type Detection = {
 };
 
 /**
+ * Resolves `css={x}` to a module-level `const x = css({...})` or
+ * `const x = css`...`` initializer, returning the style ObjectExpression (or a
+ * synthesized one for the template form), or null. Only resolves when exactly
+ * ONE declarator in the file has that name — so a shadowing local can't be
+ * mistaken for the module const.
+ */
+function resolveCssConst(
+  j: $FlowFixMe,
+  root: $FlowFixMe,
+  name: string,
+  cssLocalName: string,
+): $FlowFixMe | null {
+  const declarators = root.find(j.VariableDeclarator, {
+    id: { type: 'Identifier', name },
+  });
+  if (declarators.size() !== 1) {
+    return null; // absent, or shadowed — don't guess
+  }
+  const declaratorPath = declarators.paths()[0];
+  // module-level only: VariableDeclarator -> VariableDeclaration -> Program
+  if (declaratorPath.parent?.parent?.node?.type !== 'Program') {
+    return null;
+  }
+  const init = declaratorPath.node.init;
+  if (init == null) {
+    return null;
+  }
+  if (
+    init.type === 'CallExpression' &&
+    init.callee.type === 'Identifier' &&
+    init.callee.name === cssLocalName &&
+    init.arguments.length === 1 &&
+    init.arguments[0].type === 'ObjectExpression'
+  ) {
+    return init.arguments[0];
+  }
+  if (
+    init.type === 'TaggedTemplateExpression' &&
+    init.tag.type === 'Identifier' &&
+    init.tag.name === cssLocalName
+  ) {
+    return cssTemplateToObjectAst(j, init.quasi);
+  }
+  return null;
+}
+
+/**
  * Classifies every `css` prop as convertible (a static object) or flagged
  * (with a reason). M5: a flagged site no longer skips the file — it gets a
  * `// TODO(stylex-migration): …` marker while the rest of the file converts.
@@ -120,6 +167,26 @@ export function detectSites(
         expression.tag.name === cssLocalName
       ) {
         const objectNode = cssTemplateToObjectAst(j, expression.quasi);
+        if (objectNode != null) {
+          sites.push({
+            kind: 'convertible',
+            attrPath: path,
+            objectNode,
+            tagName,
+          });
+          return;
+        }
+      }
+      // `css={x}` where `x` is a module-level `const x = css({...})` or
+      // `const x = css`...`` — resolve the referenced style (M10c). The now-
+      // unused const is pruned after the sites are rewritten.
+      if (expression.type === 'Identifier' && cssLocalName != null) {
+        const objectNode = resolveCssConst(
+          j,
+          root,
+          expression.name,
+          cssLocalName,
+        );
         if (objectNode != null) {
           sites.push({
             kind: 'convertible',

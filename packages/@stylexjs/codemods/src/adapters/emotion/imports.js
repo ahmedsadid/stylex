@@ -206,6 +206,76 @@ export function removeCssImport(j: $FlowFixMe, root: $FlowFixMe): void {
 }
 
 /**
+ * Removes a module-level `const X = css({...})` / `const X = css`...`` whose
+ * binding is no longer referenced (its `css={X}` sites were rewritten to
+ * `stylex.props`). Conservative: keeps the const if `X` still appears anywhere
+ * outside its own declaration (e.g. a flagged site, or any non-css use).
+ */
+export function removeUnusedCssConsts(
+  j: $FlowFixMe,
+  root: $FlowFixMe,
+  cssLocalName: string | null,
+): void {
+  if (cssLocalName == null) {
+    return;
+  }
+  root.find(j.VariableDeclaration).forEach((path: $FlowFixMe) => {
+    if (
+      path.parent.node.type !== 'Program' ||
+      path.node.declarations.length !== 1
+    ) {
+      return;
+    }
+    const decl = path.node.declarations[0];
+    if (decl.id.type !== 'Identifier') {
+      return;
+    }
+    const init = decl.init;
+    const isCssInit =
+      init != null &&
+      ((init.type === 'CallExpression' &&
+        init.callee?.type === 'Identifier' &&
+        init.callee.name === cssLocalName) ||
+        (init.type === 'TaggedTemplateExpression' &&
+          init.tag?.type === 'Identifier' &&
+          init.tag.name === cssLocalName));
+    if (!isCssInit) {
+      return;
+    }
+    // Count real value-uses of the binding: exclude its own declaration id, a
+    // member-access property (`styles.box`, since the emitted key may share the
+    // name), and an object key — mirroring `isStillReferenced`.
+    const stillUsed = root
+      .find(j.Identifier, { name: decl.id.name })
+      .filter((p: $FlowFixMe) => {
+        if (p.node === decl.id) {
+          return false;
+        }
+        const parent = p.parent.node;
+        if (
+          parent.type === 'MemberExpression' &&
+          parent.property === p.node &&
+          !parent.computed
+        ) {
+          return false;
+        }
+        if (
+          (parent.type === 'Property' || parent.type === 'ObjectProperty') &&
+          parent.key === p.node &&
+          !parent.computed
+        ) {
+          return false;
+        }
+        return true;
+      })
+      .size();
+    if (stillUsed === 0) {
+      j(path).remove();
+    }
+  });
+}
+
+/**
  * Inserts `import * as stylex from '@stylexjs/stylex';` after the last
  * import. Detection of a pre-existing StyleX import is a blocker upstream
  * (registry merge lands in M4), so this never duplicates.

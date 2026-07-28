@@ -43,6 +43,7 @@ import {
   analyzeEmotionWiring,
   removePragma,
   removeCssImport,
+  removeUnusedCssConsts,
   insertStylexImport,
 } from './imports';
 import { detectSites, detectKeyframes, detectExistingRegistry } from './detect';
@@ -242,7 +243,9 @@ export function transformEmotionFile(
     insertStylexImport(j, root);
   }
   // Remove Emotion wiring only where it is no longer referenced: flagged css
-  // props keep the pragma; a still-used `css`/`keyframes` keeps its import.
+  // props keep the pragma; a still-used `css`/`keyframes` keeps its import; a
+  // `const x = css(...)` whose `css={x}` sites all converted is pruned.
+  removeUnusedCssConsts(j, root, wiring.cssLocalName);
   removeCssImport(j, root);
   removePragma(j, root);
 
