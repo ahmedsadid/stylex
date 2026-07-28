@@ -38,12 +38,26 @@
 
 import { chromium } from 'playwright';
 
-/** A document to render: the markup for the compared subtree, plus optional
- * `<style>` CSS (e.g. StyleX's compiled atomic rules) injected into `<head>`. */
+/**
+ * A document to render into `#render-root`, one of two shapes:
+ *   - `html` — static markup measured as-is (M14a);
+ *   - `script` — a bundle that MOUNTS a real component into `#render-root` and
+ *     sets `window.<RENDER_DONE_FLAG> = true` when done (M14b's pipeline builds
+ *     these). Emotion injects its own `<style>`; StyleX passes its compiled CSS
+ *     in `css`.
+ * `css` (optional) is injected into `<head>` for either shape.
+ */
 export type RenderDoc = {
-  +html: string,
+  +html?: string,
+  +script?: string,
   +css?: string,
 };
+
+/** The mount script sets this global when the render has committed. */
+export const RENDER_DONE_FLAG: string = '__STYLEX_RENDER_DONE__';
+
+// A script-mounted render must commit within this budget (bundle eval + React).
+const SCRIPT_TIMEOUT = 15000;
 
 /** One place the two renders disagree. `property` is `'(structure)'` for a
  * shape mismatch (different tag, or a missing/extra node) at `path`. */
@@ -116,7 +130,9 @@ export async function isRenderGateAvailable(): Promise<boolean> {
 const DOC = (doc: RenderDoc): string =>
   '<!doctype html><html><head><meta charset="utf-8">' +
   `<style>${doc.css ?? ''}</style></head>` +
-  `<body><div id="render-root">${doc.html}</div></body></html>`;
+  `<body><div id="render-root">${doc.html ?? ''}</div>` +
+  (doc.script != null ? `<script>${doc.script}</script>` : '') +
+  '</body></html>';
 
 // Runs in the browser: walk #render-root and serialize each element with its
 // full computed style. Defined as a string so Flow/eslint don't parse the
@@ -144,6 +160,12 @@ async function collect(
   doc: RenderDoc,
 ): Promise<Array<StyleNode>> {
   await page.setContent(DOC(doc), { waitUntil: 'load' });
+  // A script-mounted doc renders asynchronously; wait for its commit signal.
+  if (doc.script != null) {
+    await page.waitForFunction(`window.${RENDER_DONE_FLAG} === true`, {
+      timeout: SCRIPT_TIMEOUT,
+    });
+  }
   // COLLECT_FN is a string (so this Node module never parses browser globals);
   // wrap it as an invoked IIFE so `evaluate` returns the call's result, not the
   // function value.
