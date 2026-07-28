@@ -11,10 +11,13 @@
  * Emotion wiring: how a file opts into the css prop. Recognizes both the
  * modern `@jsxImportSource @emotion/react` pragma (with a named `css` import)
  * and the classic `@jsx jsx` runtime (`import { jsx } from '@emotion/react'`).
- * Any other `@emotion/*` surface (styled, class-based `@emotion/css`, Global,
+ * Any other *runtime* `@emotion/*` surface (class-based `@emotion/css`, Global,
  * ThemeProvider) is still a blocker: we skip the whole file rather than
- * half-migrate it. The classic pragma and `jsx` import are LEFT IN PLACE on
- * conversion (see `EmotionWiring.hasClassicJsx`).
+ * half-migrate it. Two exceptions are non-blocking and left in place:
+ * `@emotion/styled` (flagged per-site, M11a) and *type-only* `@emotion/react`
+ * imports (`import type { Theme }`, M12) — pure TS annotations emit no CSS. The
+ * classic pragma and `jsx` import are LEFT IN PLACE on conversion (see
+ * `EmotionWiring.hasClassicJsx`).
  */
 
 const PRAGMA_PATTERN = /@jsxImportSource\s+@emotion\/react/;
@@ -74,6 +77,12 @@ export function analyzeEmotionWiring(
       return;
     }
     for (const specifier of path.node.specifiers ?? []) {
+      // Type-only imports (`import type { Theme }` or an inline `type Theme`
+      // specifier) are pure TypeScript annotations — they emit no runtime CSS,
+      // so they never block conversion (M12). Left in place, untouched.
+      if (path.node.importKind === 'type' || specifier.importKind === 'type') {
+        continue;
+      }
       const imported =
         specifier.type === 'ImportSpecifier' ? specifier.imported.name : null;
       if (imported === 'css') {
