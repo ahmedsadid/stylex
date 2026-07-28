@@ -16,10 +16,12 @@
  * Convertible site forms:
  *   <div css={{ ... }} />          — object literal
  *   <div css={css({ ... })} />     — inline `css()` call around an object
+ *   <div css={css`...`} />         — static template literal (M10a, no ${})
  * on host (lowercase) elements with no `className`/`style`/spread props.
  */
 
 import { REASONS } from '../../core/todos';
+import { cssTextToObjectAst } from './cssText';
 
 export type ConvertibleSite = {
   +kind: 'convertible',
@@ -106,6 +108,29 @@ export function detectSites(
           tagName,
         });
         return;
+      }
+      // `css`…`` — a static template literal (no `${}`) whose CSS text we can
+      // parse into the same object shape (M10a). Interpolations, or anything
+      // the parser can't map, fall through to the flag below.
+      if (
+        expression.type === 'TaggedTemplateExpression' &&
+        expression.tag.type === 'Identifier' &&
+        cssLocalName != null &&
+        expression.tag.name === cssLocalName &&
+        expression.quasi.expressions.length === 0
+      ) {
+        const quasi = expression.quasi.quasis[0];
+        const cssText = quasi?.value?.cooked ?? quasi?.value?.raw ?? '';
+        const objectNode = cssTextToObjectAst(j, cssText);
+        if (objectNode != null) {
+          sites.push({
+            kind: 'convertible',
+            attrPath: path,
+            objectNode,
+            tagName,
+          });
+          return;
+        }
       }
       flag(
         expression.type === 'TaggedTemplateExpression'
