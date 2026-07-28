@@ -16,12 +16,13 @@
  * Convertible site forms:
  *   <div css={{ ... }} />          — object literal
  *   <div css={css({ ... })} />     — inline `css()` call around an object
- *   <div css={css`...`} />         — static template literal (M10a, no ${})
+ *   <div css={css`...`} />         — template literal (M10; interpolations →
+ *                                    dynamic values, else flagged)
  * on host (lowercase) elements with no `className`/`style`/spread props.
  */
 
 import { REASONS } from '../../core/todos';
-import { cssTextToObjectAst } from './cssText';
+import { cssTemplateToObjectAst } from './cssText';
 
 export type ConvertibleSite = {
   +kind: 'convertible',
@@ -109,19 +110,16 @@ export function detectSites(
         });
         return;
       }
-      // `css`…`` — a static template literal (no `${}`) whose CSS text we can
-      // parse into the same object shape (M10a). Interpolations, or anything
-      // the parser can't map, fall through to the flag below.
+      // `css`…`` — lower the template into the same object shape (M10). A
+      // whole-value interpolation becomes a dynamic value; anything the parser
+      // can't map cleanly returns null and falls through to the flag below.
       if (
         expression.type === 'TaggedTemplateExpression' &&
         expression.tag.type === 'Identifier' &&
         cssLocalName != null &&
-        expression.tag.name === cssLocalName &&
-        expression.quasi.expressions.length === 0
+        expression.tag.name === cssLocalName
       ) {
-        const quasi = expression.quasi.quasis[0];
-        const cssText = quasi?.value?.cooked ?? quasi?.value?.raw ?? '';
-        const objectNode = cssTextToObjectAst(j, cssText);
+        const objectNode = cssTemplateToObjectAst(j, expression.quasi);
         if (objectNode != null) {
           sites.push({
             kind: 'convertible',
