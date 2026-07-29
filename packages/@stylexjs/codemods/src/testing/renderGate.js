@@ -129,9 +129,17 @@ export async function isRenderGateAvailable(): Promise<boolean> {
   return true;
 }
 
+// Normalization injected before either side's CSS: disable animations and
+// transitions so a running keyframe/transition can't make computed styles
+// time-dependent (a spin captured mid-rotation would diff against itself).
+// Keyframe *contents* are the semantic-diff gate's job; the render gate compares
+// the static rendered result. Applied equally to both sides.
+const NORMALIZE_CSS =
+  '*,*::before,*::after{animation:none!important;transition:none!important;}';
+
 const DOC = (doc: RenderDoc): string =>
   '<!doctype html><html><head><meta charset="utf-8">' +
-  `<style>${doc.css ?? ''}</style></head>` +
+  `<style>${NORMALIZE_CSS}</style><style>${doc.css ?? ''}</style></head>` +
   `<body><div id="render-root">${doc.html ?? ''}</div>` +
   (doc.script != null ? `<script>${doc.script}</script>` : '') +
   '</body></html>';
@@ -191,6 +199,14 @@ function diffStyles(
 ): void {
   const props = new Set([...Object.keys(a.styles), ...Object.keys(b.styles)]);
   for (const prop of props) {
+    // CSS custom properties (`--x-color`, defineVars tokens) are StyleX's
+    // dynamic-value plumbing; Emotion inlines the value instead, so the var is
+    // stylex-only and would always "diff". The RESOLVED property it feeds
+    // (`color: var(--x-color)`) is compared like any other, so ignoring the var
+    // loses no coverage. Mirrors the semantic-diff gate's allowDynamicVar.
+    if (prop.startsWith('--')) {
+      continue;
+    }
     if (IGNORED_PROPERTIES.has(prop)) {
       continue;
     }

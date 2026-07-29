@@ -148,6 +148,11 @@ export async function stylexRenderDoc(
   options?: RenderBuildOptions,
 ): Promise<RenderDoc> {
   const filename = options?.filename ?? 'after.js';
+  // The codemod LEAVES a classic `@jsx jsx` pragma in place (M9). preset-react's
+  // automatic runtime rejects a file that sets a pragma, so honor it: classic
+  // runtime reads the `@jsx` factory from the file (`jsx`, still imported from
+  // @emotion/react and bundled). Without a pragma, use the automatic runtime.
+  const classicPragma = /@jsx\s+[A-Za-z_$]/.test(source);
   // Strip Flow, transform JSX, and compile StyleX (real plugin) in one pass;
   // the plugin's metadata carries the atomic CSS.
   const compiled = babel.transformSync(source, {
@@ -156,7 +161,10 @@ export async function stylexRenderDoc(
     configFile: false,
     presets: [
       '@babel/preset-flow',
-      ['@babel/preset-react', { runtime: 'automatic' }],
+      [
+        '@babel/preset-react',
+        classicPragma ? { runtime: 'classic' } : { runtime: 'automatic' },
+      ],
     ],
     plugins: [[styleXPlugin, {}]],
   });
