@@ -83,10 +83,12 @@ const MAX_DIFFS = 50;
 
 const DEFAULT_VIEWPORT = { width: 1024, height: 768 };
 
-/** A serialized element: tag, its full computed style, and its children. */
+/** A serialized element: tag, its full computed style, its DOM attributes
+ * (minus `class`/`style` — see COLLECT_FN), and its children. */
 type StyleNode = {
   tag: string,
   styles: { [string]: string },
+  attrs: { [string]: string },
   children: Array<StyleNode>,
 };
 
@@ -135,8 +137,12 @@ const DOC = (doc: RenderDoc): string =>
   '</body></html>';
 
 // Runs in the browser: walk #render-root and serialize each element with its
-// full computed style. Defined as a string so Flow/eslint don't parse the
-// browser globals in this Node module.
+// full computed style AND its DOM attributes. `class` and `style` are skipped:
+// they legitimately differ (Emotion's hash vs StyleX's atomic classes; StyleX's
+// inline vars) and their EFFECT is already compared via computed styles — so
+// what remains in `attrs` is exactly the forwarded/filtered props (catching a
+// styled wrapper that leaks a non-DOM prop, which computed styles can't see).
+// Defined as a string so Flow/eslint don't parse the browser globals here.
 const COLLECT_FN = `() => {
   const walk = (el) => {
     const cs = getComputedStyle(el);
@@ -145,9 +151,14 @@ const COLLECT_FN = `() => {
       const prop = cs[i];
       styles[prop] = cs.getPropertyValue(prop);
     }
+    const attrs = {};
+    for (const a of el.attributes) {
+      if (a.name === 'class' || a.name === 'style') continue;
+      attrs[a.name] = a.value;
+    }
     const children = [];
     for (const child of el.children) children.push(walk(child));
-    return { tag: el.tagName.toLowerCase(), styles, children };
+    return { tag: el.tagName.toLowerCase(), styles, attrs, children };
   };
   const root = document.getElementById('render-root');
   const out = [];
@@ -191,6 +202,24 @@ function diffStyles(
   }
 }
 
+// Diffs the forwarded DOM attributes (class/style already excluded upstream).
+// A finding is reported as `@<attr>` so it reads distinctly from a style prop.
+function diffAttrs(
+  path: string,
+  a: StyleNode,
+  b: StyleNode,
+  diffs: Array<StyleDiff>,
+): void {
+  const names = new Set([...Object.keys(a.attrs), ...Object.keys(b.attrs)]);
+  for (const name of names) {
+    const before = a.attrs[name] ?? '(absent)';
+    const after = b.attrs[name] ?? '(absent)';
+    if (before !== after) {
+      diffs.push({ path, property: `@${name}`, before, after });
+    }
+  }
+}
+
 function diffNodes(
   path: string,
   a: Array<StyleNode>,
@@ -224,6 +253,7 @@ function diffNodes(
       continue;
     }
     diffStyles(`${here} ${na.tag}`, na, nb, diffs);
+    diffAttrs(`${here} ${na.tag}`, na, nb, diffs);
     diffNodes(here, na.children, nb.children, diffs);
   }
 }

@@ -33,8 +33,8 @@
 import * as esbuild from 'esbuild';
 import * as babel from '@babel/core';
 import styleXPlugin from '@stylexjs/babel-plugin';
-import { RENDER_DONE_FLAG } from './renderGate';
-import type { RenderDoc } from './renderGate';
+import { RENDER_DONE_FLAG, renderStyleDiff } from './renderGate';
+import type { RenderDoc, RenderVerdict } from './renderGate';
 
 export type RenderBuildOptions = {
   // Props passed to the component (must be JSON-serializable). Default `{}`.
@@ -55,11 +55,11 @@ const SOURCE_MODULE = 'stylex-render-source';
 
 const mountEntry = (props: { +[string]: mixed }): string =>
   `import App from '${SOURCE_MODULE}';\n` +
-  'import * as React from \'react\';\n' +
-  'import { createRoot } from \'react-dom/client\';\n' +
-  'import { flushSync } from \'react-dom\';\n' +
+  "import * as React from 'react';\n" +
+  "import { createRoot } from 'react-dom/client';\n" +
+  "import { flushSync } from 'react-dom';\n" +
   `const props = ${JSON.stringify(props)};\n` +
-  'flushSync(() => createRoot(document.getElementById(\'render-root\'))' +
+  "flushSync(() => createRoot(document.getElementById('render-root'))" +
   '.render(React.createElement(App, props)));\n' +
   `window.${RENDER_DONE_FLAG} = true;\n`;
 
@@ -169,4 +169,40 @@ export async function stylexRenderDoc(
   const css = cssFromMetadata(compiled.metadata);
   const script = await bundle(code, 'js', options?.props ?? {}, {});
   return { script, css };
+}
+
+/** A verdict annotated with the prop-case that produced it, if any. */
+export type VerifyRenderResult =
+  | RenderVerdict
+  | { +status: 'mismatch', +diffs: $ReadOnlyArray<$FlowFixMe>, +props: mixed };
+
+/**
+ * The render gate as a verifier for a whole conversion: render the Emotion
+ * `input` and the StyleX `output` under each prop-case and diff. Returns on the
+ * FIRST case that diverges (annotated with the offending props) so a caller
+ * sees which usage broke; `match` only if every case matches. `unavailable`
+ * (no browser) short-circuits, never throws.
+ *
+ * `cases` is the set of prop objects to exercise (default `[{}]`) — the way to
+ * probe behaviors a single default render can't: `as`, forwarded DOM props, and
+ * non-DOM props a faithful `styled` wrapper must filter.
+ */
+export async function verifyRender(
+  emotionSource: string,
+  stylexSource: string,
+  options?: { +cases?: $ReadOnlyArray<{ +[string]: mixed }> },
+): Promise<VerifyRenderResult> {
+  const cases = options?.cases ?? [{}];
+  for (const props of cases) {
+    const before = await emotionRenderDoc(emotionSource, { props });
+    const after = await stylexRenderDoc(stylexSource, { props });
+    const verdict = await renderStyleDiff(before, after);
+    if (verdict.status === 'unavailable') {
+      return verdict;
+    }
+    if (verdict.status === 'mismatch') {
+      return { status: 'mismatch', diffs: verdict.diffs, props };
+    }
+  }
+  return { status: 'match' };
 }
