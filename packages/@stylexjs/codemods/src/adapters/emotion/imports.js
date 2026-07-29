@@ -308,14 +308,126 @@ export function removeUnusedCssConsts(
  * (registry merge lands in M4), so this never duplicates.
  */
 export function insertStylexImport(j: $FlowFixMe, root: $FlowFixMe): void {
-  const declaration = j.importDeclaration(
-    [j.importNamespaceSpecifier(j.identifier('stylex'))],
-    j.literal('@stylexjs/stylex'),
+  insertImportDecl(
+    j,
+    root,
+    j.importDeclaration(
+      [j.importNamespaceSpecifier(j.identifier('stylex'))],
+      j.literal('@stylexjs/stylex'),
+    ),
   );
+}
+
+/** Inserts an import declaration after the last existing import, else at top. */
+function insertImportDecl(
+  j: $FlowFixMe,
+  root: $FlowFixMe,
+  declaration: $FlowFixMe,
+): void {
   const imports = root.find(j.ImportDeclaration);
   if (imports.size() > 0) {
     j(imports.paths()[imports.size() - 1]).insertAfter(declaration);
   } else {
     root.get().node.program.body.unshift(declaration);
   }
+}
+
+/**
+ * Ensures a usable `React` binding for the emitted `styled` wrapper's
+ * `React.forwardRef` / `React.createElement` (M15a). Adds
+ * `import * as React from 'react'` unless the file already has a default or
+ * namespace React import (a named-only import doesn't expose `React.*`).
+ */
+export function ensureReactImport(j: $FlowFixMe, root: $FlowFixMe): void {
+  let hasReactValue = false;
+  root.find(j.ImportDeclaration).forEach((path: $FlowFixMe) => {
+    if (String(path.node.source.value) !== 'react') {
+      return;
+    }
+    for (const specifier of path.node.specifiers ?? []) {
+      if (
+        specifier.type === 'ImportDefaultSpecifier' ||
+        specifier.type === 'ImportNamespaceSpecifier'
+      ) {
+        hasReactValue = true;
+      }
+    }
+  });
+  if (!hasReactValue) {
+    insertImportDecl(
+      j,
+      root,
+      j.importDeclaration(
+        [j.importNamespaceSpecifier(j.identifier('React'))],
+        j.literal('react'),
+      ),
+    );
+  }
+}
+
+/** Ensures `import <localName> from '<source>'` exists (adds it if missing). */
+export function ensureDefaultImport(
+  j: $FlowFixMe,
+  root: $FlowFixMe,
+  localName: string,
+  source: string,
+): void {
+  let has = false;
+  root.find(j.ImportDeclaration).forEach((path: $FlowFixMe) => {
+    if (String(path.node.source.value) !== source) {
+      return;
+    }
+    for (const specifier of path.node.specifiers ?? []) {
+      if (
+        specifier.type === 'ImportDefaultSpecifier' &&
+        specifier.local.name === localName
+      ) {
+        has = true;
+      }
+    }
+  });
+  if (!has) {
+    insertImportDecl(
+      j,
+      root,
+      j.importDeclaration(
+        [j.importDefaultSpecifier(j.identifier(localName))],
+        j.literal(source),
+      ),
+    );
+  }
+}
+
+/**
+ * Drops the `@emotion/styled` import once every `styled()` def has been
+ * converted (M15a) — i.e. when `styled` is no longer referenced as a value.
+ * Keeps it when any styled def remains flagged.
+ */
+export function removeStyledImportIfUnused(
+  j: $FlowFixMe,
+  root: $FlowFixMe,
+  styledLocalName: string | null,
+): void {
+  if (styledLocalName == null) {
+    return;
+  }
+  const stillUsed =
+    root
+      .find(j.Identifier, { name: styledLocalName })
+      .filter((path: $FlowFixMe) => {
+        const parent = path.parent.node;
+        return (
+          parent.type !== 'ImportDefaultSpecifier' &&
+          parent.type !== 'ImportSpecifier'
+        );
+      })
+      .size() > 0;
+  if (stillUsed) {
+    return;
+  }
+  root.find(j.ImportDeclaration).forEach((path: $FlowFixMe) => {
+    if (String(path.node.source.value) === '@emotion/styled') {
+      j(path).remove();
+    }
+  });
 }

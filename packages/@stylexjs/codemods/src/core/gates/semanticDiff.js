@@ -75,11 +75,15 @@ function normalizeAtRule(rule: string): string {
 function normalizeValue(value: string): string {
   // Comma-whitespace is canonicalized because CSS treats
   // `rgb(10, 20, 30)` and `rgb(10,20,30)` as the same value — and the
-  // StyleX compiler normalizes to the latter.
+  // StyleX compiler normalizes to the latter. Numbers are canonicalized the
+  // way StyleX emits them: a decimal drops its leading zero (`0.5rem` → `.5rem`)
+  // and a zero length drops its unit (`0px` → `0`) — same value either way.
   return value
     .trim()
     .replace(/\s+/g, ' ')
-    .replace(/\s*,\s*/g, ',');
+    .replace(/\s*,\s*/g, ',')
+    .replace(/(^|[\s,(])0+\.(\d)/g, '$1.$2')
+    .replace(/(^|[\s,(])0(px|rem|em)\b/g, '$10');
 }
 
 function normalizeCondition(raw: string): string {
@@ -209,6 +213,32 @@ function expandToPhysical(
         return [[`${fam}-bottom`, value]];
       default:
         break;
+    }
+  }
+  // grid-column / grid-row `A / B` → start/end, the form StyleX compiles them
+  // to (`grid-column: 1 / -1` → grid-column-start:1 + grid-column-end:-1).
+  for (const axis of ['grid-column', 'grid-row']) {
+    if (property === axis) {
+      const parts = value.split('/').map((s) => s.trim());
+      return parts.length === 2
+        ? [
+            [`${axis}-start`, parts[0]],
+            [`${axis}-end`, parts[1]],
+          ]
+        : [[`${axis}-start`, value]];
+    }
+  }
+  // flex `grow shrink basis` → the three longhands (StyleX's valid-shorthands
+  // autofix expands the 3-value form; 1-value `flex:1` stays `flex` and needs
+  // no canonicalization).
+  if (property === 'flex') {
+    const v = splitValueList(value);
+    if (v.length === 3) {
+      return [
+        ['flex-grow', v[0]],
+        ['flex-shrink', v[1]],
+        ['flex-basis', v[2]],
+      ];
     }
   }
   return [[property, value]];

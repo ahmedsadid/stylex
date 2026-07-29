@@ -45,12 +45,17 @@ import {
   removeCssImport,
   removeUnusedCssConsts,
   insertStylexImport,
+  ensureReactImport,
+  ensureDefaultImport,
+  removeStyledImportIfUnused,
 } from './imports';
 import { detectSites, detectKeyframes, detectExistingRegistry } from './detect';
 import { readSite, readKeyframes } from './read';
 import type { PlainStyleObject } from './read';
 import { rewriteSite } from './rewriteSites';
 import { flagStyledUsages } from './styled';
+import { detectStyledDefs } from './styledDefs';
+import { buildStyledWrapper } from './styledWrapper';
 
 export type TransformResult =
   | {
@@ -78,8 +83,12 @@ export function transformEmotionFile(
   filename: string = 'file.js',
   options?: TransformOptions,
 ): TransformResult {
-  // Cheap bail before parsing anything.
-  if (!source.includes('@emotion/react')) {
+  // Cheap bail before parsing anything. `@emotion/styled` files (M11a/M15a)
+  // often don't import `@emotion/react` at all.
+  if (
+    !source.includes('@emotion/react') &&
+    !source.includes('@emotion/styled')
+  ) {
     return { status: 'unchanged' };
   }
 
@@ -92,7 +101,8 @@ export function transformEmotionFile(
     !wiring.hasPragma &&
     !wiring.hasClassicJsx &&
     wiring.cssLocalName == null &&
-    wiring.keyframesLocalName == null
+    wiring.keyframesLocalName == null &&
+    wiring.styledLocalName == null
   ) {
     return { status: 'unchanged' };
   }
@@ -120,17 +130,26 @@ export function transformEmotionFile(
     return { status: 'skipped', reasons: wholeFileBlockers };
   }
 
-  // M11a: flag each `styled()` definition in place, so a file that uses styled
-  // is no longer refused for it — its convertible css props still migrate.
-  const styledFlags: Array<string> =
-    wiring.styledLocalName != null
-      ? flagStyledUsages(j, root, wiring.styledLocalName)
-      : [];
+  // M15a: static host `styled()` defs (`styled.tag` / `styled('tag')` with
+  // static styles) are converted to a StyleX wrapper below. Whatever styled
+  // remains — composition, dynamic, long-tail — is flagged per-site (M11a)
+  // AFTER conversion via `flagRemainingStyled`, so a converted def (now a plain
+  // component that no longer references `styled`) is not flagged.
+  const styledLocalName = wiring.styledLocalName;
+  const styledDefs =
+    styledLocalName != null ? detectStyledDefs(j, root, styledLocalName) : [];
+  const flagRemainingStyled = (): Array<string> =>
+    styledLocalName != null ? flagStyledUsages(j, root, styledLocalName) : [];
 
   // --- Per-site classification: each css site either converts or is flagged
-  // with a `// TODO(stylex-migration): …` marker (bail loudly, in place). ---
+  // with a `// TODO(stylex-migration): …` marker (bail loudly, in place). A
+  // styled def is another convertible candidate (`kind: 'styled'`); its css is
+  // read exactly like a css-prop object via a synthetic site. ---
   const flags: Array<{ +attrPath: $FlowFixMe, +reason: string }> = [];
-  const candidates: Array<{ +site: $FlowFixMe, +read: $FlowFixMe }> = [];
+  const candidates: Array<
+    | { +kind: 'site', +site: $FlowFixMe, +read: $FlowFixMe }
+    | { +kind: 'styled', +styledDef: $FlowFixMe, +read: $FlowFixMe },
+  > = [];
   for (const site of detection.sites) {
     if (site.kind === 'flagged') {
       flags.push({ attrPath: site.attrPath, reason: site.reason });
@@ -141,9 +160,26 @@ export function transformEmotionFile(
     }
     const read = readSite(site, kfDetection.names);
     if (read.ok) {
-      candidates.push({ site, read });
+      candidates.push({ kind: 'site', site, read });
     } else {
       flags.push({ attrPath: site.attrPath, reason: read.blocker });
+    }
+  }
+  for (const styledDef of styledDefs) {
+    // Read the styled css object exactly like a css-prop object. A synthetic
+    // site (no attrPath) makes `nameHint` fall to the component name.
+    const read = readSite(
+      {
+        kind: 'convertible',
+        attrPath: null,
+        objectNode: styledDef.objectNode,
+        tagName: styledDef.componentName.toLowerCase(),
+      },
+      kfDetection.names,
+    );
+    // A non-readable styled def stays as-is and is flagged after conversion.
+    if (read.ok) {
+      candidates.push({ kind: 'styled', styledDef, read });
     }
   }
 
@@ -173,20 +209,27 @@ export function transformEmotionFile(
     const checked = checkRule(rule);
     if (checked.ok) {
       convertRules.push({ rule: checked.rule, candidateIndex: i });
-    } else {
+      return;
+    }
+    const candidate = candidates[i];
+    if (candidate.kind === 'site') {
       flags.push({
-        attrPath: candidates[i].site.attrPath,
+        attrPath: candidate.site.attrPath,
         reason: checked.conflicts[0],
       });
     }
+    // A styled def that fails the referee stays unconverted; it is flagged
+    // per-site after conversion by `flagRemainingStyled`.
   });
 
   if (convertRules.length === 0 && kfDetection.sites.length === 0) {
+    // Nothing convertible here; flag whatever styled remains (all of it, since
+    // no def was converted).
+    const styledFlags = flagRemainingStyled();
     if (flags.length === 0 && styledFlags.length === 0) {
       return { status: 'unchanged' };
     }
-    // Nothing convertible, but sites to flag: inject TODOs and keep Emotion.
-    // (styled() defs were already flagged above.)
+    // Sites to flag: inject TODOs and keep Emotion.
     for (const flag of flags) {
       injectTodo(j, flag.attrPath, flag.reason);
     }
@@ -218,17 +261,27 @@ export function transformEmotionFile(
 
   // Rewrite converted sites; flag the rest in place. For a dynamic rule, pass
   // the captured source expressions as call args, in the emitted param order.
+  let styledConverted = false;
   convertRules.forEach((c, k) => {
-    const { dynamicExprs } = candidates[c.candidateIndex].read;
+    const candidate = candidates[c.candidateIndex];
+    if (candidate.kind === 'styled') {
+      // Replace `const X = styled…` with the render-verified forwardRef wrapper
+      // that reproduces styled's component semantics (M15a).
+      j(candidate.styledDef.path).replaceWith(
+        buildStyledWrapper(j, {
+          componentName: candidate.styledDef.componentName,
+          baseTag: candidate.styledDef.baseTag,
+          stylesLocalName,
+          styleKey: bindings[k],
+        }),
+      );
+      styledConverted = true;
+      return;
+    }
+    const { dynamicExprs } = candidate.read;
     const byParam = new Map(dynamicExprs.map((d) => [d.param, d.node]));
     const args = rules[k].params.map((p) => byParam.get(p));
-    rewriteSite(
-      j,
-      candidates[c.candidateIndex].site,
-      stylesLocalName,
-      bindings[k],
-      args,
-    );
+    rewriteSite(j, candidate.site, stylesLocalName, bindings[k], args);
   });
   rewriteKeyframes(j, kfDetection.sites, fixed.keyframesByName);
   for (const flag of flags) {
@@ -239,18 +292,29 @@ export function transformEmotionFile(
     if (existing != null) {
       existing.objectNode.properties.push(...fixed.createObject.properties);
     } else {
-      insertRegistry(
+      // Anchor above the EARLIEST converted statement in source order — a
+      // styled wrapper may reference `styles.*` before a later css site does.
+      const anchorPath = earliestAnchorPath(
         j,
         root,
-        candidates[convertRules[0].candidateIndex].site,
-        stylesLocalName,
-        fixed.createObject,
+        convertRules.map((c) => candidates[c.candidateIndex]),
       );
+      insertRegistry(j, root, anchorPath, stylesLocalName, fixed.createObject);
     }
   }
   if (existing == null && (rules.length > 0 || keyframes.length > 0)) {
     insertStylexImport(j, root);
   }
+  // M15a: give the emitted wrapper its dependencies, then flag whatever styled
+  // remains — converted defs no longer reference `styled`, so only the
+  // non-convertible ones (composition, dynamic, long-tail) are flagged. A fully
+  // converted file's now-unused `styled` import is dropped.
+  if (styledConverted) {
+    ensureReactImport(j, root);
+    ensureDefaultImport(j, root, 'isPropValid', '@emotion/is-prop-valid');
+  }
+  const styledFlags = flagRemainingStyled();
+  removeStyledImportIfUnused(j, root, styledLocalName);
   // Remove Emotion wiring only where it is no longer referenced: flagged css
   // props keep the pragma; a still-used `css`/`keyframes` keeps its import; a
   // `const x = css(...)` whose `css={x}` sites all converted is pruned.
@@ -475,6 +539,38 @@ function pickStylesName(j: $FlowFixMe, root: $FlowFixMe): string {
   return name;
 }
 
+/** Of the convert candidates, the anchor path whose top-level statement appears
+ * earliest in the program — so the registry lands above its first user (a
+ * styled wrapper can reference `styles.*` before a later css site). */
+function earliestAnchorPath(
+  j: $FlowFixMe,
+  root: $FlowFixMe,
+  candidates: $ReadOnlyArray<$FlowFixMe>,
+): $FlowFixMe {
+  const body = root.get().node.program.body;
+  const topLevel = (anchor: $FlowFixMe): $FlowFixMe => {
+    let p = anchor;
+    while (p.parent != null && p.parent.node.type !== 'Program') {
+      p = p.parent;
+    }
+    return p;
+  };
+  let best = null;
+  let bestIndex = Infinity;
+  for (const candidate of candidates) {
+    const anchor =
+      candidate.kind === 'styled'
+        ? candidate.styledDef.path
+        : candidate.site.attrPath;
+    const index = body.indexOf(topLevel(anchor).node);
+    if (index >= 0 && index < bestIndex) {
+      bestIndex = index;
+      best = anchor;
+    }
+  }
+  return best;
+}
+
 /**
  * Inserts `const <styles> = stylex.create({...})` directly above the
  * top-level statement containing the first converted site (per the
@@ -483,7 +579,7 @@ function pickStylesName(j: $FlowFixMe, root: $FlowFixMe): string {
 function insertRegistry(
   j: $FlowFixMe,
   root: $FlowFixMe,
-  firstSite: $FlowFixMe,
+  anchorPath: $FlowFixMe,
   stylesLocalName: string,
   createObject: $FlowFixMe,
 ): void {
@@ -497,7 +593,7 @@ function insertRegistry(
     ),
   ]);
 
-  let statementPath = firstSite.attrPath;
+  let statementPath = anchorPath;
   while (
     statementPath.parent != null &&
     statementPath.parent.node.type !== 'Program'

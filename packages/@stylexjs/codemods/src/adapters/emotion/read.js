@@ -45,6 +45,69 @@ const SIMPLE_PSEUDO_CLASS = /^:[a-zA-Z][a-zA-Z-]*$/;
 const SIMPLE_PSEUDO_ELEMENT = /^::[a-zA-Z][a-zA-Z-]*$/;
 const AT_RULE = /^@(media|supports|container)\b/;
 
+// Bare shorthands StyleX's compiler silently DROPS (emits zero rules, no error,
+// and valid-styles stays quiet) — verified against @stylexjs/babel-plugin.
+// Converting one would lose the declaration, so the reader refuses it.
+const STYLEX_DROPPED_SHORTHANDS: Set<string> = new Set([
+  'animation',
+  'background',
+  'border',
+]);
+
+// Border edge/family shorthands: StyleX's autofix expands them (e.g.
+// `borderTop: '1px solid red'` → width/style/color), but the tri-value form
+// (width style color, any order, function color values) can't be reliably
+// canonicalized by the semantic-diff gate. Refuse (flag) rather than ship an
+// unverifiable conversion; the fully-longhand forms (borderTopWidth, …) and
+// borderRadius are unaffected.
+const STYLEX_BORDER_SHORTHANDS: Set<string> = new Set([
+  'borderTop',
+  'borderRight',
+  'borderBottom',
+  'borderLeft',
+  'borderInline',
+  'borderBlock',
+  'borderInlineStart',
+  'borderInlineEnd',
+  'borderBlockStart',
+  'borderBlockEnd',
+  'borderWidth',
+  'borderStyle',
+  'borderColor',
+]);
+
+// Box shorthands whose MULTI-value form StyleX's autofix splits per-side. Its
+// splitter is not paren-aware, so a value with a function (`calc(a - b) calc(c
+// - d)`) is mis-split — the reader refuses that case (single-value function
+// values like `calc(a - b)` are fine).
+const BOX_SHORTHANDS: Set<string> = new Set([
+  'margin',
+  'padding',
+  'inset',
+  'marginInline',
+  'marginBlock',
+  'paddingInline',
+  'paddingBlock',
+  'insetInline',
+  'insetBlock',
+  'gap',
+]);
+
+/** Whether a value has >1 top-level token AND a function call — the case
+ * StyleX's non-paren-aware shorthand splitter gets wrong. */
+function isMultiValueWithFunction(raw: string): boolean {
+  if (!raw.includes('(')) {
+    return false;
+  }
+  let stripped = raw;
+  let prev = '';
+  while (stripped !== prev) {
+    prev = stripped;
+    stripped = stripped.replace(/\([^()]*\)/g, '');
+  }
+  return /\S\s+\S/.test(stripped.trim());
+}
+
 /** Expression kinds we convert as a dynamic (props-driven) value: each is a
  * single expression evaluated at the call site, so moving it verbatim from the
  * css object into a `create` function argument preserves its meaning. Array
@@ -270,6 +333,25 @@ export function readSite(
       // `animationName: <keyframes var>` — a reference, not a static value.
       // Omitted from the mirror; the keyframes content is diffed separately
       // and the generated animation-name is allowlisted.
+      // StyleX silently drops these bare shorthands (its compiler emits ZERO
+      // rules with no error, and valid-styles does not flag them), so emitting
+      // one would lose the declaration entirely. Refuse — the site/styled is
+      // flagged instead of half-converted. Use longhands.
+      if (STYLEX_DROPPED_SHORTHANDS.has(key)) {
+        return `'${key}' shorthand is dropped by StyleX (use longhands)`;
+      }
+      if (STYLEX_BORDER_SHORTHANDS.has(key)) {
+        return `'${key}' border shorthand is not verifiable yet (use longhands)`;
+      }
+      if (
+        BOX_SHORTHANDS.has(key) &&
+        (valueNode.type === 'Literal' || valueNode.type === 'StringLiteral') &&
+        typeof valueNode.value === 'string' &&
+        isMultiValueWithFunction(valueNode.value)
+      ) {
+        return `'${key}' multi-value shorthand with a function is mis-split by StyleX`;
+      }
+
       if (
         key === 'animationName' &&
         valueNode.type === 'Identifier' &&
