@@ -228,9 +228,12 @@ function expandToPhysical(
         : [[`${axis}-start`, value]];
     }
   }
-  // flex `grow shrink basis` → the three longhands (StyleX's valid-shorthands
-  // autofix expands the 3-value form; 1-value `flex:1` stays `flex` and needs
-  // no canonicalization).
+  // flex → the three longhands, matching StyleX's valid-shorthands autofix:
+  //   `grow shrink basis` (3-value)                → grow / shrink / basis
+  //   `grow shrink` where both are unitless numbers → grow / shrink / basis:0%
+  // A 1-value `flex:1` stays `flex` (no canonicalization), and a 2-value form
+  // whose second token is a LENGTH is the ambiguous grow-vs-basis case, so it is
+  // left alone rather than guessed (a mismatch there is caught, never masked).
   if (property === 'flex') {
     const v = splitValueList(value);
     if (v.length === 3) {
@@ -238,6 +241,14 @@ function expandToPhysical(
         ['flex-grow', v[0]],
         ['flex-shrink', v[1]],
         ['flex-basis', v[2]],
+      ];
+    }
+    const NUMBER = /^-?\d+(\.\d+)?$/;
+    if (v.length === 2 && NUMBER.test(v[0]) && NUMBER.test(v[1])) {
+      return [
+        ['flex-grow', v[0]],
+        ['flex-shrink', v[1]],
+        ['flex-basis', '0%'],
       ];
     }
   }
