@@ -34,6 +34,7 @@ import { compileGate } from '../core/gates/compile';
 import { lintGate } from '../core/gates/lint';
 import {
   semanticDiffGate,
+  canonicalizeNetCss,
   netCssFromSerializedCss,
   netCssFromStylexMetadata,
   keyframesFromStylexMetadata,
@@ -102,17 +103,26 @@ export function verifyConvertedFile(input: VerifyInput): VerifyResult {
   // pre-existing StyleX + Emotion's serializer over each converted site) and
   // the after-CSS from the compiled output, then diff (minus the allowlist).
   try {
+    // Build the before-CSS as a union over each site, keyed by CANONICAL
+    // coordinate. Canonicalizing per-site (not just inside `semanticDiffGate`)
+    // is what lets the union-conflict check see a shorthand and a longhand from
+    // two sites as the SAME coordinate — e.g. one site's `padding` and another's
+    // `padding-right` both land on `padding-right`. Without it the collision
+    // only surfaces after canonicalization, where each side resolves it in a
+    // different order and the gate reports a false "failed".
     const before: { [string]: $FlowFixMe } = {};
     const inputCompiled = compileGate(inputSource, { filename: inputPath });
     if (inputCompiled.ok) {
-      const preExisting = netCssFromStylexMetadata(inputCompiled.metadata);
+      const preExisting = canonicalizeNetCss(
+        netCssFromStylexMetadata(inputCompiled.metadata),
+      );
       for (const coordinate of Object.keys(preExisting)) {
         before[coordinate] = preExisting[coordinate];
       }
     }
     for (const site of sites) {
-      const net = netCssFromSerializedCss(
-        serializeStyles([site.cssObject]).styles,
+      const net = canonicalizeNetCss(
+        netCssFromSerializedCss(serializeStyles([site.cssObject]).styles),
       );
       for (const coordinate of Object.keys(net)) {
         if (
@@ -121,7 +131,7 @@ export function verifyConvertedFile(input: VerifyInput): VerifyResult {
         ) {
           return {
             status: 'unverifiable',
-            reason: `two sites set '${coordinate}' to different values; the union gate can't verify these per-site`,
+            reason: `two sites set '${net[coordinate].property}' to different values; the union gate can't verify these per-site`,
           };
         }
         before[coordinate] = net[coordinate];

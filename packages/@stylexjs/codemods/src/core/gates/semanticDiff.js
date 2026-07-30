@@ -245,8 +245,10 @@ function expandToPhysical(
 }
 
 /** Rewrites every box shorthand/logical property in a NetCss into physical
- * per-side longhands so both sides of a diff share one vocabulary. */
-function canonicalizeNetCss(net: NetCss): NetCss {
+ * per-side longhands so both sides of a diff share one vocabulary. Idempotent
+ * (already-longhand coordinates pass through), so callers may pre-canonicalize
+ * before `semanticDiffGate` re-canonicalizes. */
+export function canonicalizeNetCss(net: NetCss): NetCss {
   const out: { [string]: NetDeclaration } = {};
   for (const coord of Object.keys(net)) {
     const decl = net[coord];
