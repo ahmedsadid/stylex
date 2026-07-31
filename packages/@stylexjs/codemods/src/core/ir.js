@@ -49,7 +49,12 @@ export type Value =
       +values: $ReadOnlyArray<string | number>,
     }
   | { +kind: 'reference', +name: string }
-  | { +kind: 'dynamic', +param: string };
+  | { +kind: 'dynamic', +param: string }
+  // A design-token reference — `<object>.<property>` on a `defineVars` import
+  // (e.g. `vars.spaceMd`), emitted verbatim into `create`. Its value is
+  // external (M13, ADR-0001/0005), so it is a TRUSTED substitution omitted from
+  // the semantic-diff, verified structurally + by the render gate.
+  | { +kind: 'token', +object: string, +property: string };
 
 /**
  * The unit of the IR: one property, under zero or more conditions,

@@ -39,12 +39,16 @@ export type EmittedValue =
   | $ReadOnlyArray<string | number>
   | EmittedRef
   | EmittedDyn
+  | EmittedToken
   | EmittedConditions;
 /** Sentinel for a bare-identifier reference; `$$ref` is the identifier. */
 export type EmittedRef = { +$$ref: string };
 /** Sentinel for a dynamic (function-form) value; `$$dyn` is the parameter
  * identifier used in the create function body. */
 export type EmittedDyn = { +$$dyn: string };
+/** Sentinel for a design-token reference `<object>.<property>` (e.g.
+ * `vars.spaceMd`), rendered as a member expression (M13). */
+export type EmittedToken = { +$$token: { +object: string, +property: string } };
 export type EmittedConditions = { +[condition: string]: EmittedValue };
 
 /** A `stylex.create` entry as plain data: property -> value. */
@@ -112,6 +116,8 @@ function leafValue(value: Value): EmittedValue {
       return { $$ref: value.name };
     case 'dynamic':
       return { $$dyn: value.param };
+    case 'token':
+      return { $$token: { object: value.object, property: value.property } };
     case 'static':
     default:
       return value.value;

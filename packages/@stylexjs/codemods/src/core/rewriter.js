@@ -100,6 +100,15 @@ function valueAst(j: $FlowFixMe, value: EmittedValue): $FlowFixMe {
     if (typeof value.$$dyn === 'string') {
       return j.identifier(value.$$dyn);
     }
+    // A token sentinel renders as a member expression on a defineVars import
+    // (e.g. `padding: vars.spaceMd`).
+    const token: $FlowFixMe = (value as $FlowFixMe).$$token;
+    if (token != null) {
+      return j.memberExpression(
+        j.identifier(token.object),
+        j.identifier(token.property),
+      );
+    }
     return objectAst(j, value);
   }
   return j.literal(value);
