@@ -79,3 +79,67 @@ test('a fully-convertible file reports no flags', () => {
     expect(result.flags).toEqual([]);
   }
 });
+
+// --- Per-candidate scopedFix isolation ---------------------------------------
+// A rule StyleX's valid-styles rejects (`zIndex: '10'`, a numeric string) used
+// to refuse the WHOLE file via the batched scopedFix. Isolation drops just that
+// rule and flags its candidate, so the file's other sites still convert.
+
+test('a StyleX-invalid site is isolated: the good site converts, the bad flags', () => {
+  const input =
+    HEADER +
+    'export default function C() {\n' +
+    '  return (\n' +
+    '    <div>\n' +
+    "      <span css={{ color: 'red', padding: 8 }}>ok</span>\n" +
+    "      <span css={{ zIndex: '10' }}>bad</span>\n" +
+    '    </div>\n' +
+    '  );\n' +
+    '}\n';
+  const result = transformEmotionFile(input, 'in.js');
+  expect(result.status).toBe('converted');
+  if (result.status !== 'converted') {
+    return;
+  }
+  // Good site converted; its create key is present and its css site rewritten.
+  expect(result.code).toContain('stylex.create');
+  expect(result.code).toContain("color: 'red'");
+  // Bad site kept its Emotion css and got a concrete TODO reason.
+  expect(result.code).toContain("css={{ zIndex: '10' }}");
+  expect(result.code).toMatch(/TODO\(stylex-migration\).*zIndex/);
+  expect(result.flags.length).toBe(1);
+  // Only the surviving site is reported for verification (the dropped rule is
+  // not in the create, so verify never looks for a missing key).
+  expect(result.sites.length).toBe(1);
+  // The create block itself has only the good rule (the flagged zIndex stays in
+  // its retained Emotion css, but is not emitted into `stylex.create`).
+  const createBlock = result.code.slice(
+    result.code.indexOf('stylex.create'),
+    result.code.indexOf('export default'),
+  );
+  expect(createBlock).not.toContain('zIndex');
+});
+
+test('a lone StyleX-invalid site is flagged per-site, not whole-file refused', () => {
+  // A valid-styles residual is a per-site issue, so even the only site flags in
+  // place (converted + TODO) rather than refusing the whole file — the same
+  // in-file, loud treatment a mixed file gets.
+  const input =
+    HEADER +
+    'export default function C() {\n' +
+    "  return <span css={{ zIndex: '10' }}>x</span>;\n" +
+    '}\n';
+  const result = transformEmotionFile(input, 'in.js');
+  expect(result.status).toBe('converted');
+  if (result.status !== 'converted') {
+    return;
+  }
+  expect(result.flags.length).toBe(1);
+  expect(result.sites).toEqual([]);
+  // Nothing convertible survived, so no dangling empty registry or stylex import.
+  expect(result.code).not.toContain('stylex.create');
+  expect(result.code).not.toContain("from '@stylexjs/stylex'");
+  // The Emotion css stays with a concrete TODO.
+  expect(result.code).toContain("css={{ zIndex: '10' }}");
+  expect(result.code).toMatch(/TODO\(stylex-migration\).*zIndex/);
+});

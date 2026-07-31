@@ -325,11 +325,29 @@ export function transformEmotionFile(
     return { status: 'skipped', reasons: fixed.residualErrors };
   }
 
+  // Per-candidate isolation (scopedFix): a rule that failed valid-styles alone
+  // was dropped from the create — flag its candidate in place instead of
+  // refusing the whole file, so the file's other conversions still land.
+  const failedKeys = fixed.failedKeys;
+
   // Rewrite converted sites; flag the rest in place. For a dynamic rule, pass
   // the captured source expressions as call args, in the emitted param order.
   let styledConverted = false;
+  const convertedCandidates: Array<$FlowFixMe> = [];
   convertRules.forEach((c, k) => {
     const candidate = candidates[c.candidateIndex];
+    if (failedKeys.has(rules[k].key)) {
+      // Dropped by isolation. A site is flagged in place; a styled def stays
+      // unconverted (still references `styled`) so `flagRemainingStyled` flags
+      // it — but surface the concrete valid-styles reason on it too.
+      const reason =
+        failedKeys.get(rules[k].key) ?? 'not convertible by StyleX';
+      if (candidate.kind === 'site') {
+        flags.push({ attrPath: candidate.site.attrPath, reason });
+      }
+      return;
+    }
+    convertedCandidates.push(candidate);
     if (candidate.kind === 'styled') {
       // Replace `const X = styled…` with the render-verified forwardRef wrapper
       // (M15a). For a dynamic styled (M15b) pass the prop-driven expressions as
@@ -360,21 +378,20 @@ export function transformEmotionFile(
     injectTodo(j, flag.attrPath, flag.reason);
   }
 
-  if (rules.length > 0 && fixed.createObject != null) {
+  const createObject = fixed.createObject;
+  const hasCreate = createObject != null && createObject.properties.length > 0;
+  if (createObject != null && hasCreate) {
     if (existing != null) {
-      existing.objectNode.properties.push(...fixed.createObject.properties);
+      existing.objectNode.properties.push(...createObject.properties);
     } else {
       // Anchor above the EARLIEST converted statement in source order — a
       // styled wrapper may reference `styles.*` before a later css site does.
-      const anchorPath = earliestAnchorPath(
-        j,
-        root,
-        convertRules.map((c) => candidates[c.candidateIndex]),
-      );
-      insertRegistry(j, root, anchorPath, stylesLocalName, fixed.createObject);
+      // Only surviving (converted) candidates count; a dropped one isn't a use.
+      const anchorPath = earliestAnchorPath(j, root, convertedCandidates);
+      insertRegistry(j, root, anchorPath, stylesLocalName, createObject);
     }
   }
-  if (existing == null && (rules.length > 0 || keyframes.length > 0)) {
+  if (existing == null && (hasCreate || keyframes.length > 0)) {
     insertStylexImport(j, root);
   }
   // M15a: give the emitted wrapper its dependencies, then flag whatever styled
@@ -422,10 +439,15 @@ export function transformEmotionFile(
   return {
     status: 'converted',
     code,
-    sites: convertRules.map((c, k) => ({
-      key: bindings[k],
-      cssObject: candidates[c.candidateIndex].read.cssObject,
-    })),
+    // Only surviving rules (isolation drops the rest from the create), so the
+    // per-site verify never looks for a create key that isn't in the output.
+    sites: convertRules
+      .map((c, k) => ({ c, k }))
+      .filter(({ k }) => !failedKeys.has(rules[k].key))
+      .map(({ c, k }) => ({
+        key: bindings[k],
+        cssObject: candidates[c.candidateIndex].read.cssObject,
+      })),
     keyframes: kfReads.map((kf) => {
       if (!kf.ok) {
         throw new Error('unreachable: keyframes blockers checked above');
@@ -498,6 +520,15 @@ const STYLEX_IMPORT = "import * as stylex from '@stylexjs/stylex';";
  * (keyframes + create + usage stubs), run StyleX's eslint autofixes on it,
  * and extract the FIXED object expressions. The user's file is never linted,
  * so their pre-existing stylex code cannot be reordered.
+ *
+ * Per-candidate isolation: if the full batch still has residual errors after
+ * autofix, we diagnose per-rule (each rule alone) and DROP just the offending
+ * rule(s) — reported in `failedKeys` (rule key → the first residual message) so
+ * the caller flags those candidates in place — rather than refusing the whole
+ * file. A residual error that only appears with all rules together (a genuine
+ * cross-rule interaction, none fails alone) can't be isolated: `failedKeys`
+ * stays empty and `residualErrors` is returned for the caller to whole-file
+ * refuse, preserving the pre-isolation contract.
  */
 function scopedFix(
   j: $FlowFixMe,
@@ -512,70 +543,117 @@ function scopedFix(
   createObject: $FlowFixMe | null,
   keyframesByName: Map<string, $FlowFixMe>,
   residualErrors: $ReadOnlyArray<string>,
+  failedKeys: Map<string, string>,
 } {
-  const lines: Array<string> = [STYLEX_IMPORT];
-  if (themeVarsImport != null) {
-    lines.push(themeVarsImport);
-  }
-  for (const kf of keyframes) {
-    const framesObject: { [string]: EmittedStyle } = {};
-    for (const frame of kf.frames) {
-      framesObject[frame.selector] = frame.style;
+  // Autofix a standalone module built from `ruleSubset` (+ all keyframes) and
+  // read back the fixed create object + keyframes.
+  const fixSubset = (
+    ruleSubset: $ReadOnlyArray<EmittedRule>,
+  ): {
+    createObject: $FlowFixMe | null,
+    keyframesByName: Map<string, $FlowFixMe>,
+    residualErrors: $ReadOnlyArray<string>,
+  } => {
+    const lines: Array<string> = [STYLEX_IMPORT];
+    if (themeVarsImport != null) {
+      lines.push(themeVarsImport);
     }
-    lines.push(
-      `const ${kf.name} = stylex.keyframes(` +
-        `${printExpr(j, styleToObjectAst(j, framesObject))});`,
-    );
-  }
-  if (rules.length > 0) {
-    lines.push(
-      `const ${stylesLocalName} = stylex.create(` +
-        `${printExpr(j, createObjectAst(j, rules))});`,
-    );
-    // Usage stubs so no-unused stays quiet (real usage is in the JSX). A
-    // function-form (dynamic) rule is called with placeholder args.
-    for (const rule of rules) {
-      const call =
-        rule.params.length > 0
-          ? `(${rule.params.map(() => '0').join(', ')})`
-          : '';
-      lines.push(`stylex.props(${stylesLocalName}.${rule.key}${call});`);
+    for (const kf of keyframes) {
+      const framesObject: { [string]: EmittedStyle } = {};
+      for (const frame of kf.frames) {
+        framesObject[frame.selector] = frame.style;
+      }
+      lines.push(
+        `const ${kf.name} = stylex.keyframes(` +
+          `${printExpr(j, styleToObjectAst(j, framesObject))});`,
+      );
     }
-  }
-
-  const { code, residualErrors } = postprocess(lines.join('\n'), filename, {
-    excludeRules: ['no-unused'],
-  });
-
-  const parsed = j(code);
-  let createObject: $FlowFixMe | null = null;
-  const keyframesByName: Map<string, $FlowFixMe> = new Map();
-  parsed.find(j.CallExpression).forEach((path: $FlowFixMe) => {
-    const callee = path.node.callee;
-    if (
-      callee.type !== 'MemberExpression' ||
-      callee.object.type !== 'Identifier' ||
-      callee.object.name !== 'stylex'
-    ) {
-      return;
-    }
-    if (callee.property.name === 'create') {
-      createObject = unparenthesize(path.node.arguments[0]);
-    } else if (callee.property.name === 'keyframes') {
-      const declarator = path.parent.node;
-      if (
-        declarator.type === 'VariableDeclarator' &&
-        declarator.id.type === 'Identifier'
-      ) {
-        keyframesByName.set(
-          declarator.id.name,
-          unparenthesize(path.node.arguments[0]),
-        );
+    if (ruleSubset.length > 0) {
+      lines.push(
+        `const ${stylesLocalName} = stylex.create(` +
+          `${printExpr(j, createObjectAst(j, ruleSubset))});`,
+      );
+      // Usage stubs so no-unused stays quiet (real usage is in the JSX). A
+      // function-form (dynamic) rule is called with placeholder args.
+      for (const rule of ruleSubset) {
+        const call =
+          rule.params.length > 0
+            ? `(${rule.params.map(() => '0').join(', ')})`
+            : '';
+        lines.push(`stylex.props(${stylesLocalName}.${rule.key}${call});`);
       }
     }
-  });
 
-  return { createObject, keyframesByName, residualErrors };
+    const { code, residualErrors } = postprocess(lines.join('\n'), filename, {
+      excludeRules: ['no-unused'],
+    });
+
+    const parsed = j(code);
+    let createObject: $FlowFixMe | null = null;
+    const keyframesByName: Map<string, $FlowFixMe> = new Map();
+    parsed.find(j.CallExpression).forEach((path: $FlowFixMe) => {
+      const callee = path.node.callee;
+      if (
+        callee.type !== 'MemberExpression' ||
+        callee.object.type !== 'Identifier' ||
+        callee.object.name !== 'stylex'
+      ) {
+        return;
+      }
+      if (callee.property.name === 'create') {
+        createObject = unparenthesize(path.node.arguments[0]);
+      } else if (callee.property.name === 'keyframes') {
+        const declarator = path.parent.node;
+        if (
+          declarator.type === 'VariableDeclarator' &&
+          declarator.id.type === 'Identifier'
+        ) {
+          keyframesByName.set(
+            declarator.id.name,
+            unparenthesize(path.node.arguments[0]),
+          );
+        }
+      }
+    });
+    return { createObject, keyframesByName, residualErrors };
+  };
+
+  const full = fixSubset(rules);
+  const failedKeys: Map<string, string> = new Map();
+  if (full.residualErrors.length === 0) {
+    return { ...full, failedKeys };
+  }
+
+  // Diagnose per-rule: a rule whose own mini-module still errors is the culprit.
+  // (A residual that isn't attributable to any single rule — a keyframe issue,
+  // reached with `rules` empty, or a cross-rule interaction — leaves
+  // `failedKeys` empty below and falls through to whole-file refusal.)
+  for (const rule of rules) {
+    const solo = fixSubset([rule]);
+    if (solo.residualErrors.length > 0) {
+      failedKeys.set(rule.key, firstLine(solo.residualErrors[0]));
+    }
+  }
+  if (failedKeys.size === 0) {
+    // No single rule fails alone → a cross-rule interaction we can't isolate.
+    return { ...full, failedKeys };
+  }
+
+  // Re-fix with only the survivors; if they now pass, convert them and flag the
+  // dropped ones. If the survivors STILL error (a residual among them we can't
+  // pin to one rule), fall back to whole-file refusal.
+  const survivors = rules.filter((r) => !failedKeys.has(r.key));
+  const kept = fixSubset(survivors);
+  if (kept.residualErrors.length > 0) {
+    return { ...full, failedKeys: new Map() };
+  }
+  return { ...kept, failedKeys };
+}
+
+/** The first line of a (possibly multi-line) eslint message — a concise TODO
+ * reason; the valid-styles messages append a long allowed-values list. */
+function firstLine(message: string): string {
+  return message.split('\n')[0];
 }
 
 /** Prints a single expression node to source (via a throwaway wrapper). An
