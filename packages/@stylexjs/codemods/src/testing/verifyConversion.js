@@ -53,6 +53,11 @@ export type VerifyInput = {
     +framesObject: { +[selector: string]: { +[string]: mixed } },
     ...
   }>,
+  // M13: `defineVars` token names the output references. When non-empty the
+  // output can't be statically verified — it imports a `defineVars` module this
+  // single-file gate can't resolve, and the token values are external (trusted,
+  // ADR-0005) — so the whole file is `unverifiable`, not `failed`.
+  +themeTokens?: $ReadOnlyArray<string>,
 };
 
 export type VerifyResult =
@@ -79,6 +84,17 @@ export function verifyConvertedFile(input: VerifyInput): VerifyResult {
   const { inputSource, inputPath, outputCode, outputPath, sites, keyframes } =
     input;
   const failures: Array<string> = [];
+
+  // M13: a theme-token conversion references an external `defineVars` module
+  // (ADR-0005). The compile gate can't resolve it in isolation and the token
+  // values are external, so the file is trusted/unverifiable, never failed —
+  // correctness rests on the human-authored `defineVars` + the render gate.
+  if (input.themeTokens != null && input.themeTokens.length > 0) {
+    return {
+      status: 'unverifiable',
+      reason: `references ${input.themeTokens.length} external defineVars token(s); trusted, not statically verifiable (ADR-0005)`,
+    };
+  }
 
   // Does it run? — the output must compile (also yields the after-CSS metadata).
   const compiled = compileGate(outputCode, { filename: outputPath });

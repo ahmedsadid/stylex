@@ -14,9 +14,11 @@
  */
 
 import * as fs from 'fs';
+import * as path from 'path';
 // $FlowFixMe[cannot-resolve-module] - fast-glob has no flow libdef here
 import fastGlob from 'fast-glob';
 import { transformEmotionFile } from '../adapters/emotion/transform';
+import { buildSkeleton } from '../adapters/emotion/themeTokens';
 import type { CodemodConfig } from '../config/loadConfig';
 
 export type FileOutcome = {
@@ -37,9 +39,14 @@ export type RunSummary = {
   +totalFlags: number,
 };
 
+/** M13: the aggregated name-only `defineVars` skeleton for the theme tokens the
+ * run referenced (values are the migration team's to fill in). */
+export type ThemeSkeleton = { +path: string, +content: string };
+
 export type RunReport = {
   +dryRun: boolean,
   +results: $ReadOnlyArray<FileOutcome>,
+  +themeSkeleton: ThemeSkeleton | null,
   +summary: RunSummary,
 };
 
@@ -59,6 +66,7 @@ export function runCodemod(options: RunOptions): RunReport {
     ignore: ['**/node_modules/**'],
   });
 
+  const collectedTokens: Set<string> = new Set();
   const results: Array<FileOutcome> = files.map((file) => {
     let source: string;
     try {
@@ -73,6 +81,9 @@ export function runCodemod(options: RunOptions): RunReport {
       return errorOutcome(file, error);
     }
     if (result.status === 'converted') {
+      for (const token of result.themeTokens) {
+        collectedTokens.add(token);
+      }
       let wrote = false;
       if (write) {
         try {
@@ -102,7 +113,35 @@ export function runCodemod(options: RunOptions): RunReport {
     return { file, status: 'unchanged', flags: [], reasons: [], wrote: false };
   });
 
-  return { dryRun: !write, results, summary: summarize(results) };
+  // M13: aggregate the referenced theme tokens into one name-only `defineVars`
+  // skeleton. Written (in write mode) only if the target doesn't already exist,
+  // so a human-authored vars module is never clobbered.
+  let themeSkeleton: ThemeSkeleton | null = null;
+  const themeConfig = options.config.themeTokens;
+  if (themeConfig != null && collectedTokens.size > 0) {
+    const target = path.resolve(
+      cwd,
+      /\.[jt]sx?$/.test(themeConfig.varsImport)
+        ? themeConfig.varsImport
+        : `${themeConfig.varsImport}.js`,
+    );
+    const content = buildSkeleton(themeConfig.varsName, [...collectedTokens]);
+    themeSkeleton = { path: target, content };
+    if (write && !fs.existsSync(target)) {
+      try {
+        fs.writeFileSync(target, content);
+      } catch {
+        // Non-fatal: the skeleton is a convenience; the report still carries it.
+      }
+    }
+  }
+
+  return {
+    dryRun: !write,
+    results,
+    themeSkeleton,
+    summary: summarize(results),
+  };
 }
 
 function errorOutcome(file: string, error: mixed): FileOutcome {

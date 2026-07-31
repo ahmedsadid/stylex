@@ -67,6 +67,7 @@ describe('loadConfig', () => {
     expect(validateConfig({ hoverGuard: false }, 'x')).toEqual({
       hoverGuard: false,
       logicalProperties: true,
+      themeTokens: null,
     });
   });
 
@@ -78,6 +79,18 @@ describe('loadConfig', () => {
     expect(() => validateConfig({ hoverGuard: 'yes' }, 'x')).toThrow(
       /must be a boolean/,
     );
+  });
+
+  test('themeTokens: a valid object is accepted, a malformed one throws', () => {
+    expect(
+      validateConfig(
+        { themeTokens: { varsImport: './app.stylex', varsName: 'vars' } },
+        'x',
+      ).themeTokens,
+    ).toEqual({ varsImport: './app.stylex', varsName: 'vars' });
+    expect(() =>
+      validateConfig({ themeTokens: { varsImport: './x' } }, 'x'),
+    ).toThrow(/varsImport.*varsName|varsName/);
   });
 });
 
@@ -133,11 +146,42 @@ describe('runCodemod (dry run is the default)', () => {
     runCodemod({
       patterns: ['a.jsx'],
       cwd: dir,
-      config: { hoverGuard: true, logicalProperties: false },
+      config: { hoverGuard: true, logicalProperties: false, themeTokens: null },
       write: true,
     });
     const after = fs.readFileSync(path.join(dir, 'a.jsx'), 'utf8');
     expect(after).toContain('marginLeft'); // NOT converted to marginInlineStart
+  });
+
+  test('themeTokens: converts theme reads and writes the vars skeleton', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'stylex-theme-'));
+    fs.writeFileSync(
+      path.join(dir, 'a.jsx'),
+      '/** @jsxImportSource @emotion/react */\n' +
+        "import { useTheme } from '@emotion/react';\n" +
+        'export default function A() {\n' +
+        '  const theme = useTheme();\n' +
+        '  return <div css={{ padding: theme.space.md }}>A</div>;\n' +
+        '}\n',
+    );
+    const report = runCodemod({
+      patterns: ['a.jsx'],
+      cwd: dir,
+      config: {
+        hoverGuard: true,
+        logicalProperties: true,
+        themeTokens: { varsImport: './app.stylex', varsName: 'vars' },
+      },
+      write: true,
+    });
+    expect(fs.readFileSync(path.join(dir, 'a.jsx'), 'utf8')).toContain(
+      'vars.spaceMd',
+    );
+    // The skeleton is reported and written (name-only) next to the run.
+    expect(report.themeSkeleton).not.toBeNull();
+    const skeletonPath = path.join(dir, 'app.stylex.js');
+    expect(fs.existsSync(skeletonPath)).toBe(true);
+    expect(fs.readFileSync(skeletonPath, 'utf8')).toContain('spaceMd:');
   });
 });
 

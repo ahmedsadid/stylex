@@ -81,6 +81,7 @@ describe.each(fixtures.map((f) => [f.name, f]))(
         outputPath: fixture.expectedPath,
         sites: result.sites,
         keyframes: result.keyframes,
+        themeTokens: result.themeTokens,
       });
       if (verdict.status !== 'ok') {
         throw new Error(

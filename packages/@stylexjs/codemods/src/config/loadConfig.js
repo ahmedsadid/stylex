@@ -25,11 +25,16 @@ import * as path from 'path';
 export type CodemodConfig = {
   +hoverGuard: boolean,
   +logicalProperties: boolean,
+  // M13: theme → defineVars token conversion. `null` (default) leaves `useTheme`
+  // as a whole-file blocker; set it to map `theme.<path>` reads to
+  // `<varsName>.<token>` from `varsImport`.
+  +themeTokens: { +varsImport: string, +varsName: string } | null,
 };
 
 export const DEFAULT_CONFIG: CodemodConfig = {
   hoverGuard: true,
   logicalProperties: true,
+  themeTokens: null,
 };
 
 const DEFAULT_CONFIG_FILENAME = 'stylex-codemod.config.js';
@@ -82,21 +87,49 @@ export function validateConfig(raw: mixed, source: string): CodemodConfig {
   if (object == null || typeof object !== 'object') {
     throw new ConfigError(`${source}: config must export an object`);
   }
-  const merged: { [string]: boolean } = { ...DEFAULT_CONFIG };
+  const merged: { [string]: boolean } = {
+    hoverGuard: DEFAULT_CONFIG.hoverGuard,
+    logicalProperties: DEFAULT_CONFIG.logicalProperties,
+  };
+  let themeTokens = DEFAULT_CONFIG.themeTokens;
   for (const key of Object.keys(object)) {
-    if (!BOOLEAN_KEYS.includes(key)) {
+    if (BOOLEAN_KEYS.includes(key)) {
+      const value = object[key];
+      if (typeof value !== 'boolean') {
+        throw new ConfigError(`${source}: option '${key}' must be a boolean`);
+      }
+      merged[key] = value;
+    } else if (key === 'themeTokens') {
+      themeTokens = validateThemeTokens(object[key], source);
+    } else {
       throw new ConfigError(
-        `${source}: unknown option '${key}' (expected: ${BOOLEAN_KEYS.join(', ')})`,
+        `${source}: unknown option '${key}' (expected: ${[...BOOLEAN_KEYS, 'themeTokens'].join(', ')})`,
       );
     }
-    const value = object[key];
-    if (typeof value !== 'boolean') {
-      throw new ConfigError(`${source}: option '${key}' must be a boolean`);
-    }
-    merged[key] = value;
   }
   return {
     hoverGuard: merged.hoverGuard,
     logicalProperties: merged.logicalProperties,
+    themeTokens,
   };
+}
+
+function validateThemeTokens(
+  value: mixed,
+  source: string,
+): { +varsImport: string, +varsName: string } | null {
+  if (value == null) {
+    return null;
+  }
+  if (typeof value !== 'object') {
+    throw new ConfigError(`${source}: 'themeTokens' must be an object or null`);
+  }
+  const varsImport = value.varsImport;
+  const varsName = value.varsName;
+  if (typeof varsImport !== 'string' || typeof varsName !== 'string') {
+    throw new ConfigError(
+      `${source}: 'themeTokens' needs string 'varsImport' and 'varsName'`,
+    );
+  }
+  return { varsImport, varsName };
 }

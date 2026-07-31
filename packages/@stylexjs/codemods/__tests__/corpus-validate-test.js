@@ -33,6 +33,17 @@ import { verifyConvertedFile } from '../src/testing/verifyConversion';
 const GLOB = process.env.CORPUS_GLOB ?? null;
 const LABEL = process.env.CORPUS_LABEL ?? 'corpus';
 const REPORT_PATH = process.env.CORPUS_REPORT ?? null;
+// M13: set CORPUS_THEME_VARS=<varsName>:<varsImport> to convert theme reads.
+const THEME_TOKENS = (() => {
+  const raw = process.env.CORPUS_THEME_VARS;
+  if (raw == null || !raw.includes(':')) {
+    return null;
+  }
+  const [varsName, ...rest] = raw.split(':');
+  return { varsName, varsImport: rest.join(':') };
+})();
+const XFORM_OPTIONS =
+  THEME_TOKENS != null ? { themeTokens: THEME_TOKENS } : undefined;
 
 /** Buckets specifics (quoted names, parentheticals) so reasons group. */
 function normalizeReason(reason: string): string {
@@ -103,7 +114,7 @@ describe('M9 corpus validation', () => {
 
       let result: TransformResult | null = null;
       try {
-        result = transformEmotionFile(source, file);
+        result = transformEmotionFile(source, file, XFORM_OPTIONS);
       } catch (error) {
         stats.crashed++;
         crashes.push({
@@ -127,7 +138,7 @@ describe('M9 corpus validation', () => {
 
       // status === 'converted'
       stats.emotionFiles++;
-      const { flags, sites, keyframes, code } = result;
+      const { flags, sites, keyframes, code, themeTokens } = result;
       stats.todos += flags.length;
       for (const reason of flags) {
         bump(flagHist, normalizeReason(reason));
@@ -151,6 +162,7 @@ describe('M9 corpus validation', () => {
             outputPath: file,
             sites,
             keyframes,
+            themeTokens,
           });
         } catch (error) {
           stats.crashed++;

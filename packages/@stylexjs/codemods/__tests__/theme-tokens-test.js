@@ -16,6 +16,8 @@
  */
 
 import { transformEmotionFile } from '../src/adapters/emotion/transform';
+import { verifyConvertedFile } from '../src/testing/verifyConversion';
+import { buildSkeleton } from '../src/adapters/emotion/themeTokens';
 
 const CONFIG = {
   themeTokens: { varsImport: './app.stylex', varsName: 'vars' },
@@ -93,4 +95,44 @@ test('a non-theme dynamic value still converts alongside a theme token', () => {
     expect(r.code).toContain('vars.spaceMd');
     expect(r.code).toMatch(/color => \(/);
   }
+});
+
+test('a token conversion verifies as UNVERIFIABLE, never failed (ADR-0005)', () => {
+  const src = wrap(
+    'export default function Box() {\n' +
+      '  const theme = useTheme();\n' +
+      '  return <div css={{ padding: theme.space.md }}>hi</div>;\n' +
+      '}\n',
+  );
+  const r = transformEmotionFile(src, 'f.js', CONFIG);
+  expect(r.status).toBe('converted');
+  if (r.status !== 'converted') {
+    return;
+  }
+  const verdict = verifyConvertedFile({
+    inputSource: src,
+    inputPath: 'f.js',
+    outputCode: r.code,
+    outputPath: 'f.js',
+    sites: r.sites,
+    keyframes: r.keyframes,
+    themeTokens: r.themeTokens,
+  });
+  // The output imports an external defineVars module the single-file gate can't
+  // resolve, and the value is external — trusted, so unverifiable (not failed).
+  expect(verdict.status).toBe('unverifiable');
+});
+
+test('the skeleton lists the tokens (name-only, TODO values, compilable)', () => {
+  const skeleton = buildSkeleton('vars', [
+    'tokensContentPrimary',
+    'spaceMd',
+    'spaceMd',
+  ]);
+  expect(skeleton).toContain('stylex.defineVars(');
+  expect(skeleton).toContain('spaceMd:');
+  expect(skeleton).toContain('tokensContentPrimary:');
+  expect(skeleton).toContain('TODO');
+  // deduped; never invents a value.
+  expect(skeleton.match(/spaceMd:/g)?.length).toBe(1);
 });
