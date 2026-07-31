@@ -52,6 +52,7 @@ const FIXTURES: { [string]: { +[string]: mixed } } = {
   'styled-static-template': {},
   'styled-static-object': {},
   'styled-dynamic-template': { color: 'rgb(10, 20, 30)' },
+  'styled-dynamic-destructured': { color: 'rgb(10, 20, 30)' },
   'dynamic-value': { color: 'rgb(10, 20, 30)' },
   'dynamic-two-params': { bg: 'rgb(1, 2, 3)', fg: 'rgb(200, 100, 50)' },
   'dynamic-ternary': { active: true },

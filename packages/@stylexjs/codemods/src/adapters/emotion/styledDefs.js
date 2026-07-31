@@ -121,23 +121,27 @@ function printExpr(j: $FlowFixMe, node: $FlowFixMe): string {
     .replace(/;\s*$/, '');
 }
 
-// `${(p) => <expr>}` → the expression with `p` renamed to `props`, or null when
-// the interpolation isn't a simple prop-arrow we can convert (block body,
-// destructured/multiple params, `<p>.theme` access, or not an arrow at all).
-// Works by print+reparse (a clean clone) then jscodeshift traversal.
+// `${(p) => <expr>}` / `${({size}) => <expr>}` → the expression rewritten so the
+// param's prop reads become the wrapper's `props`, or null when the arrow isn't
+// one we can convert (block body, multiple params, an unusual param pattern, a
+// `.theme` read, or not an arrow at all). Works by print+reparse (a clean clone)
+// then jscodeshift traversal — never hand-walk the cyclic live AST.
 function propArrowToExpr(j: $FlowFixMe, expr: $FlowFixMe): $FlowFixMe | null {
   if (
     expr.type !== 'ArrowFunctionExpression' ||
     expr.params.length !== 1 ||
-    expr.params[0].type !== 'Identifier' ||
     expr.body.type === 'BlockStatement'
   ) {
     return null;
   }
-  const param = expr.params[0].name;
+  const param = expr.params[0];
+  if (param.type !== 'Identifier' && param.type !== 'ObjectPattern') {
+    return null;
+  }
   const reparsed = j(`(${printExpr(j, expr.body)});`);
-  // Refuse `<param>.theme` — an Emotion ThemeProvider value, not a StyleX prop.
-  // Converting it would reference a non-existent `props.theme` (defer to M13).
+
+  // Refuse any `.theme` read — an Emotion ThemeProvider value, not a StyleX
+  // prop; converting it would reference a non-existent `props.theme` (M13).
   const readsTheme =
     reparsed
       .find(j.MemberExpression)
@@ -145,22 +149,51 @@ function propArrowToExpr(j: $FlowFixMe, expr: $FlowFixMe): $FlowFixMe | null {
         (path: $FlowFixMe) =>
           !path.node.computed &&
           path.node.property.type === 'Identifier' &&
-          path.node.property.name === 'theme' &&
-          path.node.object.type === 'Identifier' &&
-          path.node.object.name === param,
+          path.node.property.name === 'theme',
       )
       .size() > 0;
   if (readsTheme) {
     return null;
   }
-  reparsed
-    .find(j.Identifier, { name: param })
-    .filter(
-      (path: $FlowFixMe) => !isNameOnlyPosition(path.parent.node, path.node),
-    )
-    .forEach((path: $FlowFixMe) => {
-      path.node.name = 'props';
-    });
+
+  if (param.type === 'Identifier') {
+    // `(p) => …p…` → rename `p` to `props`.
+    reparsed
+      .find(j.Identifier, { name: param.name })
+      .filter(
+        (path: $FlowFixMe) => !isNameOnlyPosition(path.parent.node, path.node),
+      )
+      .forEach((path: $FlowFixMe) => {
+        path.node.name = 'props';
+      });
+  } else {
+    // `({size, color: c}) => …` → each local name → `props.<propName>`. Refuse
+    // anything but plain shorthand/renamed properties (rest, defaults, nesting,
+    // computed keys) — those aren't simple prop reads.
+    const bindings: Array<[string, string]> = [];
+    for (const prop of param.properties) {
+      if (
+        (prop.type !== 'Property' && prop.type !== 'ObjectProperty') ||
+        prop.computed ||
+        prop.key.type !== 'Identifier' ||
+        prop.value.type !== 'Identifier'
+      ) {
+        return null;
+      }
+      bindings.push([prop.value.name, prop.key.name]);
+    }
+    for (const [localName, propName] of bindings) {
+      reparsed
+        .find(j.Identifier, { name: localName })
+        .filter(
+          (path: $FlowFixMe) =>
+            !isNameOnlyPosition(path.parent.node, path.node),
+        )
+        .replaceWith(() =>
+          j.memberExpression(j.identifier('props'), j.identifier(propName)),
+        );
+    }
+  }
   return reparsed.find(j.ExpressionStatement).paths()[0].node.expression;
 }
 
@@ -204,7 +237,10 @@ function convertibleCss(
     const objectNode = cssTemplateToObjectAst(j, quasi);
     return objectNode == null ? null : { baseTag, objectNode };
   }
-  // styled.tag({…}) / styled('tag')({…})  (static object only)
+  // styled.tag({…}) / styled('tag')({…})  (static object only). Object-form
+  // *dynamics* stay flagged: Emotion's object form doesn't apply per-value
+  // functions the way template interpolation does (render-gate confirmed), so
+  // converting them would change behavior.
   if (init.type === 'CallExpression') {
     const baseTag = hostTagOf(j, init.callee, styled);
     const arg = init.arguments[0];
