@@ -64,6 +64,7 @@ const FIXTURES: { [string]: { +[string]: mixed } } = {
   },
   'template-interp-partial': { gap: 12 },
   'styled-partial-interp': { size: 24 },
+  'css-merge-style': {},
 };
 
 // react-select internal/RequiredInput.tsx (MIT), TS types stripped to Flow;

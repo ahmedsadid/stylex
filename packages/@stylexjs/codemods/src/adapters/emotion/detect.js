@@ -24,11 +24,21 @@
 import { REASONS } from '../../core/todos';
 import { cssTemplateToObjectAst } from './cssText';
 
+/** A css site that also carries an explicit `className` and/or `style` sibling
+ * (but NO spread — spread ordering isn't statically verifiable). The rewriter
+ * removes those attributes and merges them with `stylex.props(...)`. */
+export type MergeInfo = {
+  +classNameValue: $FlowFixMe | null, // expression for existing className, or null
+  +styleValue: $FlowFixMe | null, // expression for existing style, or null
+  +removeAttrs: $ReadOnlyArray<$FlowFixMe>, // JSXAttribute nodes to drop
+};
+
 export type ConvertibleSite = {
   +kind: 'convertible',
   +attrPath: $FlowFixMe, // JSXAttribute path
   +objectNode: $FlowFixMe, // the style ObjectExpression
   +tagName: string,
+  +merge?: MergeInfo | null,
 };
 export type FlaggedSite = {
   +kind: 'flagged',
@@ -90,6 +100,20 @@ function resolveCssConst(
   return null;
 }
 
+/** The value expression of a JSX attribute (`className={x}` → `x`,
+ * `className="a"` → the string literal), or null when absent/empty. */
+function attrValueExpr(attr: $FlowFixMe): $FlowFixMe | null {
+  if (attr == null || attr.value == null) {
+    return null;
+  }
+  if (attr.value.type === 'JSXExpressionContainer') {
+    return attr.value.expression?.type === 'JSXEmptyExpression'
+      ? null
+      : attr.value.expression;
+  }
+  return attr.value; // StringLiteral / Literal
+}
+
 /**
  * Classifies every `css` prop as convertible (a static object) or flagged
  * (with a reason). M5: a flagged site no longer skips the file — it gets a
@@ -116,16 +140,52 @@ export function detectSites(
         flag(REASONS.componentElement);
         return;
       }
-      const conflicting = (opening.attributes ?? []).find(
-        (attr: $FlowFixMe) =>
-          attr.type === 'JSXSpreadAttribute' ||
-          attr.name?.name === 'className' ||
-          attr.name?.name === 'style',
-      );
-      if (conflicting != null) {
+      const attrs = opening.attributes ?? [];
+      // A spread mixed with css can't be merged safely — its position decides
+      // whether it overrides `className`/`style`, and that's not statically
+      // verifiable. Flag it. An explicit `className`/`style` (no spread) IS
+      // mergeable: the rewriter drops those attributes and folds them into
+      // `stylex.props(...)`.
+      if (attrs.some((a: $FlowFixMe) => a.type === 'JSXSpreadAttribute')) {
         flag(REASONS.propConflict);
         return;
       }
+      const classNameAttr = attrs.find(
+        (a: $FlowFixMe) =>
+          a.type === 'JSXAttribute' && a.name?.name === 'className',
+      );
+      const styleAttr = attrs.find(
+        (a: $FlowFixMe) =>
+          a.type === 'JSXAttribute' && a.name?.name === 'style',
+      );
+      const classNameValue = attrValueExpr(classNameAttr);
+      const styleValue = attrValueExpr(styleAttr);
+      // A valueless `className`/`style` (`<div className … />`) is malformed for
+      // our purposes — flag rather than guess.
+      if (
+        (classNameAttr != null && classNameValue == null) ||
+        (styleAttr != null && styleValue == null)
+      ) {
+        flag(REASONS.propConflict);
+        return;
+      }
+      const merge: MergeInfo | null =
+        classNameAttr != null || styleAttr != null
+          ? {
+              classNameValue,
+              styleValue,
+              removeAttrs: [classNameAttr, styleAttr].filter(Boolean),
+            }
+          : null;
+      const convertible = (objectNode: $FlowFixMe) =>
+        sites.push({
+          kind: 'convertible',
+          attrPath: path,
+          objectNode,
+          tagName,
+          merge,
+        });
+
       const container = path.node.value;
       if (container?.type !== 'JSXExpressionContainer') {
         flag('css prop is not an expression');
@@ -133,12 +193,7 @@ export function detectSites(
       }
       const expression = container.expression;
       if (expression.type === 'ObjectExpression') {
-        sites.push({
-          kind: 'convertible',
-          attrPath: path,
-          objectNode: expression,
-          tagName,
-        });
+        convertible(expression);
         return;
       }
       if (
@@ -149,12 +204,7 @@ export function detectSites(
         expression.arguments.length === 1 &&
         expression.arguments[0].type === 'ObjectExpression'
       ) {
-        sites.push({
-          kind: 'convertible',
-          attrPath: path,
-          objectNode: expression.arguments[0],
-          tagName,
-        });
+        convertible(expression.arguments[0]);
         return;
       }
       // `css`…`` — lower the template into the same object shape (M10). A
@@ -168,12 +218,7 @@ export function detectSites(
       ) {
         const objectNode = cssTemplateToObjectAst(j, expression.quasi);
         if (objectNode != null) {
-          sites.push({
-            kind: 'convertible',
-            attrPath: path,
-            objectNode,
-            tagName,
-          });
+          convertible(objectNode);
           return;
         }
       }
@@ -188,12 +233,7 @@ export function detectSites(
           cssLocalName,
         );
         if (objectNode != null) {
-          sites.push({
-            kind: 'convertible',
-            attrPath: path,
-            objectNode,
-            tagName,
-          });
+          convertible(objectNode);
           return;
         }
       }
