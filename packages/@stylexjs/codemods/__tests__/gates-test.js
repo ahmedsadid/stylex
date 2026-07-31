@@ -69,6 +69,32 @@ describe('lint gate', () => {
       expect(ruleIds).toContain('@stylexjs/no-unused');
     }
   });
+
+  test('IGNORES a user eslint-disable for a rule the gate does not define', () => {
+    // The gate only defines `@stylexjs/*` rules; a directive for another rule
+    // reports "Definition for rule … was not found", which must not refuse.
+    const source =
+      "import * as stylex from '@stylexjs/stylex';\n" +
+      '// eslint-disable-next-line react-hooks/exhaustive-deps\n' +
+      "const styles = stylex.create({ box: { color: 'red' } });\n" +
+      'stylex.props(styles.box);\n';
+    expect(lintGate(source)).toEqual({ ok: true });
+  });
+
+  test('a real stylex violation is still caught alongside a foreign directive', () => {
+    const source =
+      "import * as stylex from '@stylexjs/stylex';\n" +
+      '// eslint-disable-next-line react-hooks/exhaustive-deps\n' +
+      "const styles = stylex.create({ box: { zIndex: '10' } });\n" +
+      'stylex.props(styles.box);\n';
+    const result = lintGate(source);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.messages.map((m) => m.ruleId)).toContain(
+        '@stylexjs/valid-styles',
+      );
+    }
+  });
 });
 
 describe('semantic-diff gate', () => {

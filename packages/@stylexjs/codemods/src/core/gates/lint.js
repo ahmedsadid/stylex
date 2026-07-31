@@ -17,7 +17,7 @@
 import { Linter } from 'eslint';
 // The plugin has named exports only (no default) — import `rules` directly.
 import { rules as stylexRules } from '@stylexjs/eslint-plugin';
-import { lintParserFor } from '../lintParser';
+import { lintParserFor, isGateRelevantMessage } from '../lintParser';
 
 export type LintMessage = {
   +ruleId: string | null,
@@ -53,11 +53,11 @@ export function lintGate(
   // in the user's untouched code), else the Flow parser. See `lintParser`.
   const { name, parser, parserOptions } = lintParserFor(filename);
   linter.defineParser(name, parser);
-  const messages = linter.verify(
-    source,
-    { parser: name, parserOptions, rules },
-    { filename },
-  );
+  const messages = linter
+    .verify(source, { parser: name, parserOptions, rules }, { filename })
+    // Only stylex violations + fatal parse errors matter; drop noise from the
+    // user's own eslint directives for rules this gate doesn't define.
+    .filter(isGateRelevantMessage);
   if (messages.length === 0) {
     return { ok: true };
   }

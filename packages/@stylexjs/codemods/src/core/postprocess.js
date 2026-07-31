@@ -31,7 +31,7 @@
 
 import { Linter } from 'eslint';
 import { rules as stylexRules } from '@stylexjs/eslint-plugin';
-import { lintParserFor } from './lintParser';
+import { lintParserFor, isGateRelevantMessage } from './lintParser';
 
 export type PostprocessResult = {
   +code: string,
@@ -72,7 +72,11 @@ export function postprocess(
     rules: config,
   };
   const fixed = linter.verifyAndFix(code, verifyConfig, { filename });
-  const residual = linter.verify(fixed.output, verifyConfig, { filename });
+  const residual = linter
+    .verify(fixed.output, verifyConfig, { filename })
+    // Only stylex violations + fatal parse errors are real residuals; ignore
+    // noise from user eslint directives for rules this gate doesn't define.
+    .filter(isGateRelevantMessage);
 
   return {
     code: fixed.output,

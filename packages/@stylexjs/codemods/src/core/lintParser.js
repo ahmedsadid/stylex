@@ -67,3 +67,19 @@ export function lintParserFor(filename: string): LintParserChoice {
     parserOptions: { ecmaVersion: 'latest', sourceType: 'module' },
   };
 }
+
+/**
+ * Whether a lint message is something the gate should judge. The gate defines
+ * ONLY `@stylexjs/*` rules, so the only messages that matter are (1) a real
+ * stylex rule violation, or (2) a fatal parse error (our output is broken).
+ * Everything else is noise from the user's own code — most importantly a
+ * `// eslint-disable react-hooks/…` directive for a rule the gate doesn't
+ * define, which ESLint reports as "Definition for rule '…' was not found" and
+ * which used to falsely refuse otherwise-clean conversions.
+ */
+export function isGateRelevantMessage(m: $FlowFixMe): boolean {
+  if (m.fatal === true) {
+    return true;
+  }
+  return m.ruleId != null && String(m.ruleId).startsWith('@stylexjs/');
+}
