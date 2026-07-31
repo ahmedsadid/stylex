@@ -62,6 +62,8 @@ const FIXTURES: { [string]: { +[string]: mixed } } = {
     color: 'rgb(9, 8, 7)',
     hover: 'rgb(1, 1, 1)',
   },
+  'template-interp-partial': { gap: 12 },
+  'styled-partial-interp': { size: 24 },
 };
 
 // react-select internal/RequiredInput.tsx (MIT), TS types stripped to Flow;

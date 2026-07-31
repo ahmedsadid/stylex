@@ -16,12 +16,14 @@
  *
  * Interpolations (M10b): each `${expr}` is replaced by a unique placeholder
  * before parsing. When a placeholder is the WHOLE value of a declaration, the
- * original expression node is placed as that property's value — and the
- * reader's own dynamic-value path (M8) takes it from there (a prop/variable
- * becomes a function-form param; a literal stays static). Any interpolation
- * that is NOT a whole declaration value (embedded in a value like `${x}px`, or
- * in a selector / property name / on its own) makes us bail loudly: return
- * `null`, and the caller flags the site rather than guessing.
+ * original expression node is placed as that property's value. When one is
+ * EMBEDDED in a value (`${x}px`, `calc(${a} + ${b})`), the value is rebuilt as
+ * a template literal splicing the original expression nodes back in. Either way
+ * the reader's dynamic-value path (M8) takes it from there — the expression is
+ * lifted to a function-form `create` param and moved to the call site verbatim,
+ * preserving Emotion's exact runtime value. A placeholder in a selector /
+ * property name / at-rule / on its own still bails loudly (return `null`, the
+ * caller flags the site) — those aren't values we can lift.
  *
  * Also bails on `!important`, an unknown node, or a parse error.
  */
@@ -64,6 +66,37 @@ function reconstruct(quasis: $ReadOnlyArray<$FlowFixMe>): string {
   return text;
 }
 
+/** Rebuilds a declaration value that embeds interpolation placeholders (`${x}px`
+ * → the value string `__STYLEX_INTERP_0__px`) into a template literal that
+ * splices the original expression nodes back in (`` `${expr0}px` ``). Each
+ * placeholder's index is recorded in `consumed`. The result is a single
+ * expression the reader lifts as one dynamic value. */
+function valueToTemplateAst(
+  j: $FlowFixMe,
+  value: string,
+  expressions: $ReadOnlyArray<$FlowFixMe>,
+  consumed: Set<number>,
+): $FlowFixMe {
+  const quasiStrs: Array<string> = [];
+  const exprs: Array<$FlowFixMe> = [];
+  const re = /__STYLEX_INTERP_(\d+)__/g;
+  let last = 0;
+  let m: $FlowFixMe = re.exec(value);
+  while (m != null) {
+    quasiStrs.push(value.slice(last, m.index));
+    const index = Number(m[1]);
+    consumed.add(index);
+    exprs.push(expressions[index]);
+    last = m.index + m[0].length;
+    m = re.exec(value);
+  }
+  quasiStrs.push(value.slice(last));
+  const quasis = quasiStrs.map((s, i) =>
+    j.templateElement({ raw: s, cooked: s }, i === quasiStrs.length - 1),
+  );
+  return j.templateLiteral(quasis, exprs);
+}
+
 /** Builds an ObjectExpression from a list of postcss nodes, or null if any
  * node can't be safely represented. Whole-value placeholders resolve back to
  * their original expression node (recorded in `consumed`). */
@@ -93,9 +126,12 @@ function nodesToObject(
         consumed.add(index);
         valueAst = expressions[index];
       } else if (PLACEHOLDER_ANY.test(value)) {
-        // Interpolation embedded in a larger value (`${x}px`, `calc(${x})`) —
-        // deferred.
-        return null;
+        // Interpolation(s) embedded in a larger value (`${x}px`, `calc(${a} +
+        // ${b})`) → rebuild the value as a template literal that splices the
+        // original expression nodes back in; the reader lifts it as a dynamic
+        // value (a template literal is a permitted dynamic type), preserving the
+        // exact runtime string Emotion would produce.
+        valueAst = valueToTemplateAst(j, value, expressions, consumed);
       } else {
         valueAst = j.literal(node.value);
       }
