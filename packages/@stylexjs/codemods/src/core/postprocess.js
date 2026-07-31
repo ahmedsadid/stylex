@@ -30,8 +30,8 @@
  */
 
 import { Linter } from 'eslint';
-import * as hermesEslint from 'hermes-eslint';
 import { rules as stylexRules } from '@stylexjs/eslint-plugin';
+import { lintParserFor } from './lintParser';
 
 export type PostprocessResult = {
   +code: string,
@@ -44,8 +44,6 @@ export type PostprocessOptions = {
   +excludeRules?: $ReadOnlyArray<string>,
 };
 
-const PARSER_NAME = 'hermes-eslint';
-
 export function postprocess(
   code: string,
   filename: string = 'file.js',
@@ -53,7 +51,10 @@ export function postprocess(
 ): PostprocessResult {
   const excluded = new Set(options?.excludeRules ?? []);
   const linter = new Linter();
-  linter.defineParser(PARSER_NAME, hermesEslint);
+  // A TS-aware parser for `.ts`/`.tsx` (a dynamic value lifted from TS user code
+  // can carry TS syntax into the generated module), else the Flow parser.
+  const { name, parser, parserOptions } = lintParserFor(filename);
+  linter.defineParser(name, parser);
   const ruleMap: { +[string]: mixed } = stylexRules;
   const config: { [string]: 'error' } = {};
   for (const ruleName of Object.keys(ruleMap)) {
@@ -66,8 +67,8 @@ export function postprocess(
   }
 
   const verifyConfig = {
-    parser: PARSER_NAME,
-    parserOptions: { ecmaVersion: 'latest', sourceType: 'module' },
+    parser: name,
+    parserOptions,
     rules: config,
   };
   const fixed = linter.verifyAndFix(code, verifyConfig, { filename });

@@ -72,14 +72,27 @@ function normalizeAtRule(rule: string): string {
     .trim();
 }
 
+/** Canonicalizes a time token to seconds (`300ms` → `0.3s`, `0ms` → `0s`), the
+ * form StyleX emits. Only a bare number directly followed by `ms`/`s` at a token
+ * boundary is touched, so unitless numbers (e.g. inside `cubic-bezier(.4,0,…)`)
+ * are left alone. `ms → s` is an exact conversion, so it can never mask a real
+ * duration difference. */
+function normalizeTime(value: string): string {
+  return value.replace(
+    /(?<![\w.-])(\d*\.?\d+)(ms|s)\b/g,
+    (_m, num: string, unit: string) =>
+      `${unit === 'ms' ? Number(num) / 1000 : Number(num)}s`,
+  );
+}
+
 function normalizeValue(value: string): string {
   // Comma-whitespace is canonicalized because CSS treats
   // `rgb(10, 20, 30)` and `rgb(10,20,30)` as the same value — and the
   // StyleX compiler normalizes to the latter. Numbers are canonicalized the
   // way StyleX emits them: a decimal drops its leading zero (`0.5rem` → `.5rem`)
   // and a zero length drops its unit (`0px` → `0`) — same value either way.
-  return value
-    .trim()
+  // Times are canonicalized to seconds (`300ms` → `.3s`), also how StyleX emits.
+  return normalizeTime(value.trim())
     .replace(/\s+/g, ' ')
     .replace(/\s*,\s*/g, ',')
     .replace(/(^|[\s,(])0+\.(\d)/g, '$1.$2')
@@ -170,6 +183,25 @@ function fourSides(
   }
 }
 
+/** [top-left, top-right, bottom-right, bottom-left] from a 1–4 value
+ * `border-radius` shorthand (corner order, not side order), or null. */
+function fourCorners(
+  values: Array<string>,
+): [string, string, string, string] | null {
+  switch (values.length) {
+    case 1:
+      return [values[0], values[0], values[0], values[0]];
+    case 2:
+      return [values[0], values[1], values[0], values[1]];
+    case 3:
+      return [values[0], values[1], values[2], values[1]];
+    case 4:
+      return [values[0], values[1], values[2], values[3]];
+    default:
+      return null;
+  }
+}
+
 /** Expands a (property, value) into one or more physical-longhand pairs.
  * Non-box properties pass through unchanged. */
 function expandToPhysical(
@@ -213,6 +245,22 @@ function expandToPhysical(
         return [[`${fam}-bottom`, value]];
       default:
         break;
+    }
+  }
+  // border-radius `TL TR BR BL` (corner order) → the four physical corner
+  // longhands StyleX expands it to. A pure positional shorthand with no reset
+  // semantics (unlike `border`), so the expansion is an exact bijection — safe
+  // to canonicalize on both sides. The elliptical `/` form (horizontal /
+  // vertical radii) is left alone; it's rare and would surface loudly.
+  if (property === 'border-radius' && !value.includes('/')) {
+    const corners = fourCorners(splitValueList(value));
+    if (corners != null) {
+      return [
+        ['border-top-left-radius', corners[0]],
+        ['border-top-right-radius', corners[1]],
+        ['border-bottom-right-radius', corners[2]],
+        ['border-bottom-left-radius', corners[3]],
+      ];
     }
   }
   // grid-column / grid-row `A / B` → start/end, the form StyleX compiles them

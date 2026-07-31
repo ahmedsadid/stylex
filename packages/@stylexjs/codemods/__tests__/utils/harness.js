@@ -59,8 +59,13 @@ export function loadFixtures(adapter: string): Array<Fixture> {
     .map((entry) => {
       // String(): Flow's Dirent libdef types `name` as string | Buffer.
       const name = String(entry.name);
-      const inputPath = path.join(dir, name, 'input.js');
-      const expectedPath = path.join(dir, name, 'expected.js');
+      // A fixture may use `input.tsx` (so the pipeline picks the TS parser);
+      // its expected output keeps the same extension. Default to `.js`.
+      const ext = fs.existsSync(path.join(dir, name, 'input.tsx'))
+        ? '.tsx'
+        : '.js';
+      const inputPath = path.join(dir, name, `input${ext}`);
+      const expectedPath = path.join(dir, name, `expected${ext}`);
       return {
         name,
         inputPath,

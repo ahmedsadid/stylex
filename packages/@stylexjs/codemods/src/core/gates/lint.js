@@ -15,11 +15,9 @@
  */
 
 import { Linter } from 'eslint';
-// hermes-eslint is ESM-compiled with no default export — the namespace
-// object itself is the parser (`parseForESLint` lives on it).
-import * as hermesEslint from 'hermes-eslint';
 // The plugin has named exports only (no default) — import `rules` directly.
 import { rules as stylexRules } from '@stylexjs/eslint-plugin';
+import { lintParserFor } from '../lintParser';
 
 export type LintMessage = {
   +ruleId: string | null,
@@ -33,11 +31,8 @@ export type LintGateResult =
   | { +ok: true }
   | { +ok: false, +messages: $ReadOnlyArray<LintMessage> };
 
-const PARSER_NAME = 'hermes-eslint';
-
 function buildLinter(): { linter: Linter, rules: { [string]: 'error' } } {
   const linter = new Linter();
-  linter.defineParser(PARSER_NAME, hermesEslint);
   const ruleMap: { +[string]: mixed } = stylexRules;
   const rules: { [string]: 'error' } = {};
   for (const ruleName of Object.keys(ruleMap)) {
@@ -53,17 +48,15 @@ export function lintGate(
   options?: { +filename?: string },
 ): LintGateResult {
   const { linter, rules } = buildLinter();
+  const filename = options?.filename ?? 'stylex-codemod-gate-input.js';
+  // Lint TS files with a TS-aware parser (hermes/Flow throws on TS-only syntax
+  // in the user's untouched code), else the Flow parser. See `lintParser`.
+  const { name, parser, parserOptions } = lintParserFor(filename);
+  linter.defineParser(name, parser);
   const messages = linter.verify(
     source,
-    {
-      parser: PARSER_NAME,
-      parserOptions: {
-        ecmaVersion: 'latest',
-        sourceType: 'module',
-      },
-      rules,
-    },
-    { filename: options?.filename ?? 'stylex-codemod-gate-input.js' },
+    { parser: name, parserOptions, rules },
+    { filename },
   );
   if (messages.length === 0) {
     return { ok: true };

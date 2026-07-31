@@ -176,6 +176,48 @@ describe('semantic-diff gate', () => {
     expect(result.ok).toBe(false);
   });
 
+  test('time units are canonicalized: 300ms == .3s (compound transition)', () => {
+    const result = semanticDiffGate(
+      emotionNetCss({ transition: 'height 300ms cubic-bezier(.4,0,.2,1) 0ms' }),
+      emotionNetCss({ transition: 'height .3s cubic-bezier(.4,0,.2,1) 0s' }),
+    );
+    expect(result.ok).toBe(true);
+  });
+
+  test('time canonicalization still catches a real duration difference', () => {
+    const result = semanticDiffGate(
+      emotionNetCss({ transitionDuration: '300ms' }),
+      emotionNetCss({ transitionDuration: '400ms' }),
+    );
+    expect(result.ok).toBe(false);
+  });
+
+  test('border-radius shorthand and its corner longhands compare equal', () => {
+    const result = semanticDiffGate(
+      emotionNetCss({ borderRadius: '0 3px 3px 0' }),
+      emotionNetCss({
+        borderTopLeftRadius: '0',
+        borderTopRightRadius: '3px',
+        borderBottomRightRadius: '3px',
+        borderBottomLeftRadius: '0',
+      }),
+    );
+    expect(result.ok).toBe(true);
+  });
+
+  test('border-radius canonicalization still catches a real corner difference', () => {
+    const result = semanticDiffGate(
+      emotionNetCss({ borderRadius: '0 3px 3px 0' }),
+      emotionNetCss({
+        borderTopLeftRadius: '0',
+        borderTopRightRadius: '3px',
+        borderBottomRightRadius: '9px',
+        borderBottomLeftRadius: '0',
+      }),
+    );
+    expect(result.ok).toBe(false);
+  });
+
   test('BAILS LOUDLY on selectors that reach outside the element', () => {
     expect(() => emotionNetCss({ '& > span': { color: 'red' } })).toThrow(
       UnsupportedCssError,
