@@ -92,6 +92,41 @@ export function makeThemeResolver(
 }
 
 /**
+ * The styled counterpart (M13b): after M15b renames an interpolation arrow's
+ * param to the wrapper's `props`, a theme read becomes `props.theme.<path>`.
+ * This resolves that to a token, so it's emitted as a static `vars.<token>` in
+ * the create rather than a (non-existent) `props.theme` runtime read.
+ */
+export function makeStyledThemeResolver(
+  varsName: string,
+): (node: $FlowFixMe) => ThemeToken | null {
+  return (node: $FlowFixMe): ThemeToken | null => {
+    const parts: Array<string> = [];
+    let cur: $FlowFixMe = node;
+    while (
+      cur != null &&
+      cur.type === 'MemberExpression' &&
+      !cur.computed &&
+      cur.property.type === 'Identifier'
+    ) {
+      parts.unshift(cur.property.name);
+      cur = cur.object;
+    }
+    // `props.theme.<path>`: root Identifier `props`, first part `theme`, ≥1 more.
+    if (
+      cur == null ||
+      cur.type !== 'Identifier' ||
+      cur.name !== 'props' ||
+      parts[0] !== 'theme' ||
+      parts.length < 2
+    ) {
+      return null;
+    }
+    return { object: varsName, property: tokenName(parts.slice(1)) };
+  };
+}
+
+/**
  * After theme reads convert, drops a now-unused `const <x> = useTheme()` and the
  * `useTheme` import when nothing references them anymore (conservative: keeps
  * either if still referenced — e.g. an unconverted theme read).

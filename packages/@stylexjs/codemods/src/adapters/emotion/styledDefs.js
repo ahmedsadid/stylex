@@ -126,12 +126,38 @@ function printExpr(j: $FlowFixMe, node: $FlowFixMe): string {
     .replace(/;\s*$/, '');
 }
 
+// Whether `node` is exactly `props.theme.<path>` (≥1 segment after `theme`) — a
+// styled theme read the M13b resolver will tokenize; else null.
+function propsThemeChain(node: $FlowFixMe): boolean {
+  const parts: Array<string> = [];
+  let cur: $FlowFixMe = node;
+  while (
+    cur.type === 'MemberExpression' &&
+    !cur.computed &&
+    cur.property.type === 'Identifier'
+  ) {
+    parts.unshift(cur.property.name);
+    cur = cur.object;
+  }
+  return (
+    cur.type === 'Identifier' &&
+    cur.name === 'props' &&
+    parts[0] === 'theme' &&
+    parts.length >= 2
+  );
+}
+
 // `${(p) => <expr>}` / `${({size}) => <expr>}` → the expression rewritten so the
 // param's prop reads become the wrapper's `props`, or null when the arrow isn't
-// one we can convert (block body, multiple params, an unusual param pattern, a
-// `.theme` read, or not an arrow at all). Works by print+reparse (a clean clone)
-// then jscodeshift traversal — never hand-walk the cyclic live AST.
-function propArrowToExpr(j: $FlowFixMe, expr: $FlowFixMe): $FlowFixMe | null {
+// convertible (block body, unusual param, or not an arrow). A theme read becomes
+// `props.theme.<path>` after substitution: kept (for the styled theme resolver
+// to tokenize) only when `allowTheme` AND it is the WHOLE value; a partial or
+// mixed theme read flags — a bare `props.theme` read doesn't exist at runtime.
+function propArrowToExpr(
+  j: $FlowFixMe,
+  expr: $FlowFixMe,
+  allowTheme: boolean,
+): $FlowFixMe | null {
   if (
     expr.type !== 'ArrowFunctionExpression' ||
     expr.params.length !== 1 ||
@@ -144,22 +170,6 @@ function propArrowToExpr(j: $FlowFixMe, expr: $FlowFixMe): $FlowFixMe | null {
     return null;
   }
   const reparsed = j(`(${printExpr(j, expr.body)});`);
-
-  // Refuse any `.theme` read — an Emotion ThemeProvider value, not a StyleX
-  // prop; converting it would reference a non-existent `props.theme` (M13).
-  const readsTheme =
-    reparsed
-      .find(j.MemberExpression)
-      .filter(
-        (path: $FlowFixMe) =>
-          !path.node.computed &&
-          path.node.property.type === 'Identifier' &&
-          path.node.property.name === 'theme',
-      )
-      .size() > 0;
-  if (readsTheme) {
-    return null;
-  }
 
   if (param.type === 'Identifier') {
     // `(p) => …p…` → rename `p` to `props`.
@@ -199,7 +209,29 @@ function propArrowToExpr(j: $FlowFixMe, expr: $FlowFixMe): $FlowFixMe | null {
         );
     }
   }
-  return reparsed.find(j.ExpressionStatement).paths()[0].node.expression;
+  const result = reparsed.find(j.ExpressionStatement).paths()[0]
+    .node.expression;
+
+  // Theme (M13b): a `props.theme.<path>` value is a ThemeProvider read, not a
+  // real prop. Keep it (the styled resolver tokenizes it downstream) only when
+  // themeTokens is configured and it is the WHOLE value; anything else that
+  // touches `props.theme` flags rather than emit a runtime `props.theme` read.
+  if (propsThemeChain(result)) {
+    return allowTheme ? result : null;
+  }
+  const touchesTheme =
+    reparsed
+      .find(j.MemberExpression)
+      .filter(
+        (path: $FlowFixMe) =>
+          !path.node.computed &&
+          path.node.property.type === 'Identifier' &&
+          path.node.property.name === 'theme' &&
+          path.node.object.type === 'Identifier' &&
+          path.node.object.name === 'props',
+      )
+      .size() > 0;
+  return touchesTheme ? null : result;
 }
 
 // Replaces each template interpolation with its props-expression; null if any
@@ -207,10 +239,11 @@ function propArrowToExpr(j: $FlowFixMe, expr: $FlowFixMe): $FlowFixMe | null {
 function substituteInterpolations(
   j: $FlowFixMe,
   quasi: $FlowFixMe,
+  allowTheme: boolean,
 ): $FlowFixMe | null {
   const expressions = [];
   for (const expr of quasi.expressions) {
-    const substituted = propArrowToExpr(j, expr);
+    const substituted = propArrowToExpr(j, expr, allowTheme);
     if (substituted == null) {
       return null;
     }
@@ -224,9 +257,11 @@ function convertibleCss(
   j: $FlowFixMe,
   init: $FlowFixMe,
   styled: string,
+  allowTheme: boolean,
 ): { +baseTag: string, +objectNode: $FlowFixMe } | null {
   // styled.tag`…` / styled('tag')`…`  — static, or with prop-arrow
-  // interpolations (`${p => p.color}`, M15b) substituted to props-expressions.
+  // interpolations (`${p => p.color}`, M15b) substituted to props-expressions
+  // (a `${p => p.theme.x}` theme read is kept for the resolver when allowTheme).
   if (init.type === 'TaggedTemplateExpression') {
     const baseTag = hostTagOf(j, init.tag, styled);
     if (baseTag == null) {
@@ -235,7 +270,7 @@ function convertibleCss(
     const quasi =
       init.quasi.expressions.length === 0
         ? init.quasi
-        : substituteInterpolations(j, init.quasi);
+        : substituteInterpolations(j, init.quasi, allowTheme);
     if (quasi == null) {
       return null;
     }
@@ -257,11 +292,14 @@ function convertibleCss(
   return null;
 }
 
-/** All convertible static host styled defs in the file. */
+/** All convertible host styled defs in the file. `allowTheme` (themeTokens
+ * configured, M13b) keeps a `${p => p.theme.x}` interpolation for the resolver
+ * to tokenize instead of flagging it. */
 export function detectStyledDefs(
   j: $FlowFixMe,
   root: $FlowFixMe,
   styledLocalName: string,
+  allowTheme: boolean,
 ): Array<StyledDef> {
   const defs: Array<StyledDef> = [];
   root.find(j.VariableDeclaration).forEach((path: $FlowFixMe) => {
@@ -284,7 +322,7 @@ export function detectStyledDefs(
     ) {
       return;
     }
-    const css = convertibleCss(j, decl.init, styledLocalName);
+    const css = convertibleCss(j, decl.init, styledLocalName, allowTheme);
     if (css == null) {
       return;
     }

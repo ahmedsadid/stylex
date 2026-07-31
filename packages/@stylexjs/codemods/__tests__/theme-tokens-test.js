@@ -123,6 +123,91 @@ test('a token conversion verifies as UNVERIFIABLE, never failed (ADR-0005)', () 
   expect(verdict.status).toBe('unverifiable');
 });
 
+// --- M13b: styled `${p => p.theme.<path>}` interpolations ---------------------
+
+const styledSrc = (body: string): string =>
+  "import styled from '@emotion/styled';\n" + body;
+
+test('a styled theme interpolation converts to a static vars token', () => {
+  const src = styledSrc(
+    'const Box = styled.div`\n' +
+      '  color: ${(props) => props.theme.primary};\n' +
+      '  padding: ${(p) => p.theme.space.md};\n' +
+      '`;\n' +
+      'export default function App() {\n' +
+      '  return <Box>hi</Box>;\n' +
+      '}\n',
+  );
+  const r = transformEmotionFile(src, 'f.js', CONFIG);
+  expect(r.status).toBe('converted');
+  if (r.status !== 'converted') {
+    return;
+  }
+  expect(r.code).toContain("import { vars } from './app.stylex'");
+  // Static token in the create — NOT a `props.theme` runtime read, which
+  // doesn't exist at the wrapper (theme is styled's own context).
+  expect(r.code).toContain('color: vars.primary');
+  expect(r.code).toContain('padding: vars.spaceMd');
+  expect(r.code).not.toContain('props.theme');
+  expect(r.themeTokens.slice().sort()).toEqual(['primary', 'spaceMd']);
+});
+
+test('without config, a styled theme interpolation still flags (per-site)', () => {
+  const src = styledSrc(
+    'const Box = styled.div`\n' +
+      '  color: ${(props) => props.theme.primary};\n' +
+      '`;\n' +
+      'export default function App() {\n' +
+      '  return <Box>hi</Box>;\n' +
+      '}\n',
+  );
+  const r = transformEmotionFile(src, 'f.js');
+  // No themeTokens → the styled def is not convertible; nothing tokenizes.
+  if (r.status === 'converted') {
+    expect(r.code).not.toContain('vars.primary');
+    expect(r.themeTokens).toEqual([]);
+  }
+});
+
+test('a styled prop and a styled theme read convert side by side', () => {
+  const src = styledSrc(
+    'const Box = styled.div`\n' +
+      '  color: ${(props) => props.color};\n' +
+      '  padding: ${(p) => p.theme.space.md};\n' +
+      '`;\n' +
+      'export default function App(props) {\n' +
+      '  return <Box {...props}>hi</Box>;\n' +
+      '}\n',
+  );
+  const r = transformEmotionFile(src, 'f.js', CONFIG);
+  expect(r.status).toBe('converted');
+  if (r.status !== 'converted') {
+    return;
+  }
+  // theme → static token; the real prop stays the M8 dynamic function form.
+  expect(r.code).toContain('padding: vars.spaceMd');
+  expect(r.code).toMatch(/color => \(/);
+  expect(r.themeTokens).toEqual(['spaceMd']);
+});
+
+test('a mixed styled theme read (not the whole value) still flags with config', () => {
+  const src = styledSrc(
+    'const Box = styled.div`\n' +
+      '  color: ${(p) => (p.active ? p.theme.primary : p.theme.muted)};\n' +
+      '`;\n' +
+      'export default function App() {\n' +
+      '  return <Box>hi</Box>;\n' +
+      '}\n',
+  );
+  const r = transformEmotionFile(src, 'f.js', CONFIG);
+  // A ternary over `p.theme.*` isn't a whole-value theme read; it must not emit
+  // a runtime `props.theme` access. The styled def stays flagged, not converted.
+  if (r.status === 'converted') {
+    expect(r.code).not.toContain('props.theme');
+    expect(r.themeTokens).toEqual([]);
+  }
+});
+
 test('the skeleton lists the tokens (name-only, TODO values, compilable)', () => {
   const skeleton = buildSkeleton('vars', [
     'tokensContentPrimary',

@@ -60,6 +60,7 @@ import { buildStyledWrapper } from './styledWrapper';
 import {
   detectThemeBindings,
   makeThemeResolver,
+  makeStyledThemeResolver,
   dropUnusedThemeBindings,
 } from './themeTokens';
 
@@ -126,24 +127,34 @@ export function transformEmotionFile(
   // stays a whole-file blocker (theme is unconvertible without a mapping).
   const themeTokens = options?.themeTokens ?? null;
   const usedTokens: Set<string> = new Set();
+  // Wrap a resolver so every resolved token name is recorded for the skeleton.
+  const collecting =
+    (resolve: (node: $FlowFixMe) => $FlowFixMe) => (node: $FlowFixMe) => {
+      const t = resolve(node);
+      if (t != null) {
+        usedTokens.add(t.property);
+      }
+      return t;
+    };
   let themeResolver: ((node: $FlowFixMe) => $FlowFixMe) | null = null;
   if (wiring.useThemeLocalName != null) {
     if (themeTokens != null) {
       const bindings = detectThemeBindings(j, root, wiring.useThemeLocalName);
-      const resolve = makeThemeResolver(bindings, themeTokens.varsName);
-      themeResolver = (node: $FlowFixMe) => {
-        const t = resolve(node);
-        if (t != null) {
-          usedTokens.add(t.property);
-        }
-        return t;
-      };
+      themeResolver = collecting(
+        makeThemeResolver(bindings, themeTokens.varsName),
+      );
     } else {
       wiring.blockers.push(
-        '\'@emotion/react\' import of \'useTheme\' is not convertible yet',
+        "'@emotion/react' import of 'useTheme' is not convertible yet",
       );
     }
   }
+  // M13b: styled `${p => p.theme.<path>}` reads resolve to tokens too — no
+  // `useTheme` import needed (the theme is styled's own context).
+  const styledThemeResolver: ((node: $FlowFixMe) => $FlowFixMe) | null =
+    themeTokens != null
+      ? collecting(makeStyledThemeResolver(themeTokens.varsName))
+      : null;
 
   // Keyframes first, so css sites can reference them by name.
   const kfDetection = detectKeyframes(j, root, wiring.keyframesLocalName);
@@ -175,7 +186,9 @@ export function transformEmotionFile(
   // component that no longer references `styled`) is not flagged.
   const styledLocalName = wiring.styledLocalName;
   const styledDefs =
-    styledLocalName != null ? detectStyledDefs(j, root, styledLocalName) : [];
+    styledLocalName != null
+      ? detectStyledDefs(j, root, styledLocalName, themeTokens != null)
+      : [];
   const flagRemainingStyled = (): Array<string> =>
     styledLocalName != null ? flagStyledUsages(j, root, styledLocalName) : [];
 
@@ -214,6 +227,9 @@ export function transformEmotionFile(
         tagName: styledDef.componentName.toLowerCase(),
       },
       kfDetection.names,
+      // M13b: a `${p => p.theme.x}` interpolation became `props.theme.x` in the
+      // substituted object; tokenize those to `vars.<token>` (static in create).
+      styledThemeResolver ?? undefined,
     );
     // A non-readable styled def stays as-is and is flagged after conversion.
     if (read.ok) {
@@ -370,11 +386,16 @@ export function transformEmotionFile(
     ensureDefaultImport(j, root, 'isPropValid', '@emotion/is-prop-valid');
   }
   // M13: bring in the defineVars import for converted theme tokens and drop the
-  // now-unused `useTheme` binding/import.
+  // now-unused `useTheme` binding/import. The import is added whenever a token
+  // was emitted — a styled-only file (M13b) tokenizes `props.theme.x` with NO
+  // `useTheme` import, so gating the import on one would leave `vars` undefined.
+  // Only the binding/import drop is `useTheme`-specific.
   const useThemeName = wiring.useThemeLocalName;
-  if (usedTokens.size > 0 && themeTokens != null && useThemeName != null) {
+  if (usedTokens.size > 0 && themeTokens != null) {
     ensureNamedImport(j, root, themeTokens.varsName, themeTokens.varsImport);
-    dropUnusedThemeBindings(j, root, useThemeName);
+    if (useThemeName != null) {
+      dropUnusedThemeBindings(j, root, useThemeName);
+    }
   }
   const styledFlags = flagRemainingStyled();
   removeStyledImportIfUnused(j, root, styledLocalName);
