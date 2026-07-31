@@ -33,6 +33,10 @@ export type WrapperSpec = {
   +baseTag: string,
   +stylesLocalName: string,
   +styleKey: string,
+  // Printed prop-driven expressions for a dynamic styled (M15b), in the emitted
+  // param order — e.g. `['props.color']` → `stylex.props(styles.key(props.color))`.
+  // Empty/absent for a static styled → `stylex.props(styles.key)`.
+  +args?: $ReadOnlyArray<string>,
 };
 
 /**
@@ -43,22 +47,26 @@ export function buildStyledWrapper(
   j: $FlowFixMe,
   spec: WrapperSpec,
 ): $FlowFixMe {
-  const { componentName, baseTag, stylesLocalName, styleKey } = spec;
+  const { componentName, baseTag, stylesLocalName, styleKey, args } = spec;
+  const styleRef =
+    args != null && args.length > 0
+      ? `${stylesLocalName}.${styleKey}(${args.join(', ')})`
+      : `${stylesLocalName}.${styleKey}`;
   const src =
     `const ${componentName} = React.forwardRef(function ${componentName}(props, ref) {\n` +
     `  const { as: As = ${JSON.stringify(baseTag)}, className, style, ...rest } = props;\n` +
-    `  const sx = stylex.props(${stylesLocalName}.${styleKey});\n` +
-    '  const shouldFilter = typeof As === \'string\';\n' +
+    `  const sx = stylex.props(${styleRef});\n` +
+    "  const shouldFilter = typeof As === 'string';\n" +
     '  const forwarded = {};\n' +
     '  for (const key in rest) {\n' +
-    '    if (key === \'children\' || !shouldFilter || isPropValid(key)) {\n' +
+    "    if (key === 'children' || !shouldFilter || isPropValid(key)) {\n" +
     '      forwarded[key] = rest[key];\n' +
     '    }\n' +
     '  }\n' +
     '  return React.createElement(As, {\n' +
     '    ref,\n' +
     '    ...forwarded,\n' +
-    '    className: [sx.className, className].filter(Boolean).join(\' \'),\n' +
+    "    className: [sx.className, className].filter(Boolean).join(' '),\n" +
     '    style: { ...sx.style, ...style },\n' +
     '  });\n' +
     '});';

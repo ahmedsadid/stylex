@@ -266,13 +266,19 @@ export function transformEmotionFile(
     const candidate = candidates[c.candidateIndex];
     if (candidate.kind === 'styled') {
       // Replace `const X = styled…` with the render-verified forwardRef wrapper
-      // that reproduces styled's component semantics (M15a).
+      // (M15a). For a dynamic styled (M15b) pass the prop-driven expressions as
+      // create-call args, in the emitted param order — the wrapper calls
+      // `styles.key(props.color, …)`.
+      const { dynamicExprs } = candidate.read;
+      const byParam = new Map(dynamicExprs.map((d) => [d.param, d.node]));
+      const args = rules[k].params.map((p) => printExpr(j, byParam.get(p)));
       j(candidate.styledDef.path).replaceWith(
         buildStyledWrapper(j, {
           componentName: candidate.styledDef.componentName,
           baseTag: candidate.styledDef.baseTag,
           stylesLocalName,
           styleKey: bindings[k],
+          args,
         }),
       );
       styledConverted = true;

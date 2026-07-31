@@ -88,19 +88,120 @@ function objectHasDynamic(node: $FlowFixMe): boolean {
   return false;
 }
 
-/** The css object for a convertible static host styled def, or null. */
+// Positions where an identifier is a name, not a value reference — so a param
+// rename must skip them (`p.theme` → the `theme` member name stays; `{p: 1}`
+// key stays).
+function isNameOnlyPosition(parent: $FlowFixMe, node: $FlowFixMe): boolean {
+  if (parent == null) {
+    return false;
+  }
+  if (
+    parent.type === 'MemberExpression' &&
+    parent.property === node &&
+    !parent.computed
+  ) {
+    return true;
+  }
+  if (
+    (parent.type === 'Property' || parent.type === 'ObjectProperty') &&
+    parent.key === node &&
+    !parent.computed
+  ) {
+    return true;
+  }
+  return false;
+}
+
+/** Prints an expression node to source (throwaway wrapper), so we can reparse
+ * it into a clean, cycle-free clone rather than hand-walking the live AST
+ * (recast nodes have cyclic back-references that overflow a naive recursion). */
+function printExpr(j: $FlowFixMe, node: $FlowFixMe): string {
+  return j(j.expressionStatement(node))
+    .toSource({ quote: 'single' })
+    .replace(/;\s*$/, '');
+}
+
+// `${(p) => <expr>}` → the expression with `p` renamed to `props`, or null when
+// the interpolation isn't a simple prop-arrow we can convert (block body,
+// destructured/multiple params, `<p>.theme` access, or not an arrow at all).
+// Works by print+reparse (a clean clone) then jscodeshift traversal.
+function propArrowToExpr(j: $FlowFixMe, expr: $FlowFixMe): $FlowFixMe | null {
+  if (
+    expr.type !== 'ArrowFunctionExpression' ||
+    expr.params.length !== 1 ||
+    expr.params[0].type !== 'Identifier' ||
+    expr.body.type === 'BlockStatement'
+  ) {
+    return null;
+  }
+  const param = expr.params[0].name;
+  const reparsed = j(`(${printExpr(j, expr.body)});`);
+  // Refuse `<param>.theme` — an Emotion ThemeProvider value, not a StyleX prop.
+  // Converting it would reference a non-existent `props.theme` (defer to M13).
+  const readsTheme =
+    reparsed
+      .find(j.MemberExpression)
+      .filter(
+        (path: $FlowFixMe) =>
+          !path.node.computed &&
+          path.node.property.type === 'Identifier' &&
+          path.node.property.name === 'theme' &&
+          path.node.object.type === 'Identifier' &&
+          path.node.object.name === param,
+      )
+      .size() > 0;
+  if (readsTheme) {
+    return null;
+  }
+  reparsed
+    .find(j.Identifier, { name: param })
+    .filter(
+      (path: $FlowFixMe) => !isNameOnlyPosition(path.parent.node, path.node),
+    )
+    .forEach((path: $FlowFixMe) => {
+      path.node.name = 'props';
+    });
+  return reparsed.find(j.ExpressionStatement).paths()[0].node.expression;
+}
+
+// Replaces each template interpolation with its props-expression; null if any
+// interpolation isn't a convertible prop-arrow.
+function substituteInterpolations(
+  j: $FlowFixMe,
+  quasi: $FlowFixMe,
+): $FlowFixMe | null {
+  const expressions = [];
+  for (const expr of quasi.expressions) {
+    const substituted = propArrowToExpr(j, expr);
+    if (substituted == null) {
+      return null;
+    }
+    expressions.push(substituted);
+  }
+  return { ...quasi, expressions };
+}
+
+/** The css object for a convertible host styled def, or null. */
 function convertibleCss(
   j: $FlowFixMe,
   init: $FlowFixMe,
   styled: string,
 ): { +baseTag: string, +objectNode: $FlowFixMe } | null {
-  // styled.tag`…` / styled('tag')`…`  (static template only)
+  // styled.tag`…` / styled('tag')`…`  — static, or with prop-arrow
+  // interpolations (`${p => p.color}`, M15b) substituted to props-expressions.
   if (init.type === 'TaggedTemplateExpression') {
     const baseTag = hostTagOf(j, init.tag, styled);
-    if (baseTag == null || init.quasi.expressions.length > 0) {
+    if (baseTag == null) {
       return null;
     }
-    const objectNode = cssTemplateToObjectAst(j, init.quasi);
+    const quasi =
+      init.quasi.expressions.length === 0
+        ? init.quasi
+        : substituteInterpolations(j, init.quasi);
+    if (quasi == null) {
+      return null;
+    }
+    const objectNode = cssTemplateToObjectAst(j, quasi);
     return objectNode == null ? null : { baseTag, objectNode };
   }
   // styled.tag({…}) / styled('tag')({…})  (static object only)
