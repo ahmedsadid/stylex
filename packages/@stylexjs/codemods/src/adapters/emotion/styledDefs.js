@@ -8,16 +8,21 @@
  */
 
 /**
- * Detects module-level `styled()` definitions and classifies the ones M15a can
- * convert: a STATIC HOST target — `styled.tag` / `styled('tag')` with either a
- * static `` `…` `` template (no interpolation) or an object literal with no
- * dynamic (function) values. Everything else — `styled(Component)` composition,
- * prop/theme interpolation, `.attrs` / `.withComponent` / `shouldForwardProp` —
- * is left for its own later slice and keeps M11a's per-site flag.
+ * Detects module-level `styled()` definitions and classifies the convertible
+ * ones — a HOST target `styled.tag` / `styled('tag')` whose styles are:
+ *   - a static template or object (M15a), or
+ *   - a template with prop-arrow interpolations `${p => p.color}` /
+ *     `${({size}) => size}` (M15b), rewritten so the arrow's prop reads become
+ *     the wrapper's `props`.
+ * Everything else keeps M11a's per-site flag and its own later slice:
+ * `styled(Component)` composition, `.theme` reads (→ M13), object-form dynamics
+ * (Emotion doesn't apply per-value functions like a template does), partial
+ * interpolations (`${x}px`), `.attrs` / `.withComponent` / `shouldForwardProp`.
  *
  * A convertible def yields the css `objectNode` (the template lowered via the
  * M10 text→object path, or the object arg as-is) so the rest of the pipeline
- * reads it exactly like a css-prop object.
+ * reads it exactly like a css-prop object; a prop-arrow value becomes an M8
+ * dynamic value.
  */
 
 import { cssTemplateToObjectAst } from './cssText';
