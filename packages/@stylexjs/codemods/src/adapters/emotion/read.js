@@ -267,6 +267,11 @@ function findShorthandOverlap(properties: Array<string>): string | null {
 export function readSite(
   site: StyleSite,
   keyframesNames?: $ReadOnlySet<string>,
+  // M13: resolves a `theme.<path>` member expression to a `defineVars` token
+  // reference `{ object, property }`, else null. Absent → no theme handling.
+  themeResolver?: (
+    node: $FlowFixMe,
+  ) => { +object: string, +property: string } | null,
 ): ReadSite {
   const knownKeyframes = keyframesNames ?? new Set<string>();
   const declarations: Array<Declaration> = [];
@@ -369,6 +374,24 @@ export function readSite(
       if (value != null) {
         declarations.push({ property: key, value, conditions });
         mirror[key] = plainOf(value);
+        continue;
+      }
+
+      // M13: a `theme.<path>` read → a `defineVars` token reference, emitted
+      // verbatim (`padding: vars.spaceMd`). Its value is external (a trusted
+      // substitution, ADR-0005), so it is OMITTED from the mirror — the
+      // semantic-diff verifies the rest, not the token.
+      const token = themeResolver != null ? themeResolver(valueNode) : null;
+      if (token != null) {
+        declarations.push({
+          property: key,
+          value: {
+            kind: 'token',
+            object: token.object,
+            property: token.property,
+          },
+          conditions,
+        });
         continue;
       }
 

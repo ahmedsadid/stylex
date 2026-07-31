@@ -39,6 +39,11 @@ export type EmotionWiring = {
   // whole-file blocker (M11a): its `styled()` definitions are flagged per-site
   // so co-located css props still convert.
   +styledLocalName: string | null,
+  // Local name of `useTheme` from `@emotion/react`, if any. Captured (not a
+  // whole-file blocker here) so M13 can convert `theme.<path>` reads to
+  // `defineVars` tokens when `themeTokens` is configured; without that config
+  // the transform re-adds the blocker (theme is unconvertible without a map).
+  +useThemeLocalName: string | null,
   +blockers: Array<string>,
 };
 
@@ -53,6 +58,7 @@ export function analyzeEmotionWiring(
   let keyframesLocalName: string | null = null;
   let jsxLocalName: string | null = null;
   let styledLocalName: string | null = null;
+  let useThemeLocalName: string | null = null;
   const blockers: Array<string> = [];
 
   root.find(j.ImportDeclaration).forEach((path: $FlowFixMe) => {
@@ -93,6 +99,10 @@ export function analyzeEmotionWiring(
         // The classic css-prop runtime factory: captured (not a blocker) and
         // left in place; the `@jsx` pragma below confirms the file uses it.
         jsxLocalName = specifier.local.name;
+      } else if (imported === 'useTheme') {
+        // Captured for M13; the transform decides (convert with `themeTokens`,
+        // else re-add the blocker).
+        useThemeLocalName = specifier.local.name;
       } else {
         blockers.push(
           `'@emotion/react' import of '${
@@ -117,6 +127,7 @@ export function analyzeEmotionWiring(
     cssLocalName,
     keyframesLocalName,
     styledLocalName,
+    useThemeLocalName,
     blockers,
   };
 }
@@ -360,6 +371,39 @@ export function ensureReactImport(j: $FlowFixMe, root: $FlowFixMe): void {
       j.importDeclaration(
         [j.importNamespaceSpecifier(j.identifier('React'))],
         j.literal('react'),
+      ),
+    );
+  }
+}
+
+/** Ensures `import { <name> } from '<source>'` exists (adds it if missing). */
+export function ensureNamedImport(
+  j: $FlowFixMe,
+  root: $FlowFixMe,
+  name: string,
+  source: string,
+): void {
+  let has = false;
+  root.find(j.ImportDeclaration).forEach((path: $FlowFixMe) => {
+    if (String(path.node.source.value) !== source) {
+      return;
+    }
+    for (const specifier of path.node.specifiers ?? []) {
+      if (
+        specifier.type === 'ImportSpecifier' &&
+        specifier.imported.name === name
+      ) {
+        has = true;
+      }
+    }
+  });
+  if (!has) {
+    insertImportDecl(
+      j,
+      root,
+      j.importDeclaration(
+        [j.importSpecifier(j.identifier(name))],
+        j.literal(source),
       ),
     );
   }

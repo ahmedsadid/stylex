@@ -47,6 +47,7 @@ import {
   insertStylexImport,
   ensureReactImport,
   ensureDefaultImport,
+  ensureNamedImport,
   removeStyledImportIfUnused,
 } from './imports';
 import { detectSites, detectKeyframes, detectExistingRegistry } from './detect';
@@ -56,6 +57,11 @@ import { rewriteSite } from './rewriteSites';
 import { flagStyledUsages } from './styled';
 import { detectStyledDefs } from './styledDefs';
 import { buildStyledWrapper } from './styledWrapper';
+import {
+  detectThemeBindings,
+  makeThemeResolver,
+  dropUnusedThemeBindings,
+} from './themeTokens';
 
 export type TransformResult =
   | {
@@ -67,6 +73,9 @@ export type TransformResult =
       }>,
       /** Reasons for each site left in place with a TODO marker (M5). */
       +flags: $ReadOnlyArray<string>,
+      /** M13: `defineVars` token names this file referenced (trusted; the
+       * caller aggregates them into the skeleton `*.stylex` module). */
+      +themeTokens: $ReadOnlyArray<string>,
     }
   | { +status: 'skipped', +reasons: $ReadOnlyArray<string> }
   | { +status: 'unchanged' };
@@ -76,6 +85,9 @@ export type TransformOptions = {
   +hoverGuard?: boolean,
   /** Map inline-axis physical properties to logical (default true). */
   +logicalProperties?: boolean,
+  /** M13: when set, `theme.<path>` reads convert to `<varsName>.<token>` from
+   * `varsImport`. Absent → `useTheme` stays a whole-file blocker. */
+  +themeTokens?: { +varsImport: string, +varsName: string } | null,
 };
 
 export function transformEmotionFile(
@@ -102,9 +114,35 @@ export function transformEmotionFile(
     !wiring.hasClassicJsx &&
     wiring.cssLocalName == null &&
     wiring.keyframesLocalName == null &&
-    wiring.styledLocalName == null
+    wiring.styledLocalName == null &&
+    wiring.useThemeLocalName == null
   ) {
     return { status: 'unchanged' };
+  }
+
+  // M13: with `themeTokens` configured, `theme.<path>` reads (from
+  // `const theme = useTheme()`) convert to `defineVars` token references; the
+  // used token names are recorded for the skeleton. Without config, `useTheme`
+  // stays a whole-file blocker (theme is unconvertible without a mapping).
+  const themeTokens = options?.themeTokens ?? null;
+  const usedTokens: Set<string> = new Set();
+  let themeResolver: ((node: $FlowFixMe) => $FlowFixMe) | null = null;
+  if (wiring.useThemeLocalName != null) {
+    if (themeTokens != null) {
+      const bindings = detectThemeBindings(j, root, wiring.useThemeLocalName);
+      const resolve = makeThemeResolver(bindings, themeTokens.varsName);
+      themeResolver = (node: $FlowFixMe) => {
+        const t = resolve(node);
+        if (t != null) {
+          usedTokens.add(t.property);
+        }
+        return t;
+      };
+    } else {
+      wiring.blockers.push(
+        '\'@emotion/react\' import of \'useTheme\' is not convertible yet',
+      );
+    }
   }
 
   // Keyframes first, so css sites can reference them by name.
@@ -158,7 +196,7 @@ export function transformEmotionFile(
     if (siteAlreadyFlagged(j, site.attrPath)) {
       continue; // re-run guard: leave a previously-flagged site alone
     }
-    const read = readSite(site, kfDetection.names);
+    const read = readSite(site, kfDetection.names, themeResolver ?? undefined);
     if (read.ok) {
       candidates.push({ kind: 'site', site, read });
     } else {
@@ -239,6 +277,7 @@ export function transformEmotionFile(
       sites: [],
       keyframes: [],
       flags: [...flags.map((f) => f.reason), ...styledFlags],
+      themeTokens: [...usedTokens],
     };
   }
 
@@ -254,7 +293,18 @@ export function transformEmotionFile(
   // L10 Scoped postprocess (see scopedFix): fixes ONLY our emitted stylex.
   const stylesLocalName =
     existing != null ? existing.varName : pickStylesName(j, root);
-  const fixed = scopedFix(j, rules, keyframes, stylesLocalName, filename);
+  const themeVarsImport =
+    usedTokens.size > 0 && themeTokens != null
+      ? `import { ${themeTokens.varsName} } from '${themeTokens.varsImport}';`
+      : null;
+  const fixed = scopedFix(
+    j,
+    rules,
+    keyframes,
+    stylesLocalName,
+    filename,
+    themeVarsImport,
+  );
   if (fixed.residualErrors.length > 0) {
     return { status: 'skipped', reasons: fixed.residualErrors };
   }
@@ -319,6 +369,13 @@ export function transformEmotionFile(
     ensureReactImport(j, root);
     ensureDefaultImport(j, root, 'isPropValid', '@emotion/is-prop-valid');
   }
+  // M13: bring in the defineVars import for converted theme tokens and drop the
+  // now-unused `useTheme` binding/import.
+  const useThemeName = wiring.useThemeLocalName;
+  if (usedTokens.size > 0 && themeTokens != null && useThemeName != null) {
+    ensureNamedImport(j, root, themeTokens.varsName, themeTokens.varsImport);
+    dropUnusedThemeBindings(j, root, useThemeName);
+  }
   const styledFlags = flagRemainingStyled();
   removeStyledImportIfUnused(j, root, styledLocalName);
   // Remove Emotion wiring only where it is no longer referenced: flagged css
@@ -355,6 +412,7 @@ export function transformEmotionFile(
       return { framesObject: kf.framesObject };
     }),
     flags: [...flags.map((f) => f.reason), ...styledFlags],
+    themeTokens: [...usedTokens],
   };
 }
 
@@ -426,12 +484,18 @@ function scopedFix(
   keyframes: $ReadOnlyArray<EmittedKeyframes>,
   stylesLocalName: string,
   filename: string,
+  // M13: the `defineVars` import line, so a token value (`color: vars.x`)
+  // resolves — strict properties like `color` reject an undefined `vars`.
+  themeVarsImport: string | null,
 ): {
   createObject: $FlowFixMe | null,
   keyframesByName: Map<string, $FlowFixMe>,
   residualErrors: $ReadOnlyArray<string>,
 } {
   const lines: Array<string> = [STYLEX_IMPORT];
+  if (themeVarsImport != null) {
+    lines.push(themeVarsImport);
+  }
   for (const kf of keyframes) {
     const framesObject: { [string]: EmittedStyle } = {};
     for (const frame of kf.frames) {
