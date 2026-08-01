@@ -22,6 +22,13 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
+/** Render-check sample props for files whose path contains `include`. The first
+ * matching rule's `cases` are rendered; unmatched files render under `[{}]`. */
+export type RenderCaseRule = {
+  +include: string, // substring matched against the file path
+  +cases: $ReadOnlyArray<{ +[string]: mixed }>,
+};
+
 export type CodemodConfig = {
   +hoverGuard: boolean,
   +logicalProperties: boolean,
@@ -29,12 +36,15 @@ export type CodemodConfig = {
   // as a whole-file blocker; set it to map `theme.<path>` reads to
   // `<varsName>.<token>` from `varsImport`.
   +themeTokens: { +varsImport: string, +varsName: string } | null,
+  // Confidence workflow: sample props to render each file under (`--render-check`).
+  +renderCases: $ReadOnlyArray<RenderCaseRule>,
 };
 
 export const DEFAULT_CONFIG: CodemodConfig = {
   hoverGuard: true,
   logicalProperties: true,
   themeTokens: null,
+  renderCases: [],
 };
 
 const DEFAULT_CONFIG_FILENAME = 'stylex-codemod.config.js';
@@ -92,6 +102,7 @@ export function validateConfig(raw: mixed, source: string): CodemodConfig {
     logicalProperties: DEFAULT_CONFIG.logicalProperties,
   };
   let themeTokens = DEFAULT_CONFIG.themeTokens;
+  let renderCases = DEFAULT_CONFIG.renderCases;
   for (const key of Object.keys(object)) {
     if (BOOLEAN_KEYS.includes(key)) {
       const value = object[key];
@@ -101,9 +112,11 @@ export function validateConfig(raw: mixed, source: string): CodemodConfig {
       merged[key] = value;
     } else if (key === 'themeTokens') {
       themeTokens = validateThemeTokens(object[key], source);
+    } else if (key === 'renderCases') {
+      renderCases = validateRenderCases(object[key], source);
     } else {
       throw new ConfigError(
-        `${source}: unknown option '${key}' (expected: ${[...BOOLEAN_KEYS, 'themeTokens'].join(', ')})`,
+        `${source}: unknown option '${key}' (expected: ${[...BOOLEAN_KEYS, 'themeTokens', 'renderCases'].join(', ')})`,
       );
     }
   }
@@ -111,6 +124,55 @@ export function validateConfig(raw: mixed, source: string): CodemodConfig {
     hoverGuard: merged.hoverGuard,
     logicalProperties: merged.logicalProperties,
     themeTokens,
+    renderCases,
+  };
+}
+
+function validateRenderCases(
+  value: mixed,
+  source: string,
+): $ReadOnlyArray<RenderCaseRule> {
+  if (value == null) {
+    return [];
+  }
+  if (!Array.isArray(value)) {
+    throw new ConfigError(`${source}: 'renderCases' must be an array`);
+  }
+  return value.map((entry: mixed, i: number): RenderCaseRule => {
+    if (entry == null || typeof entry !== 'object') {
+      throw new ConfigError(`${source}: renderCases[${i}] must be an object`);
+    }
+    const include = entry.include;
+    const cases = entry.cases;
+    if (typeof include !== 'string') {
+      throw new ConfigError(
+        `${source}: renderCases[${i}].include must be a string`,
+      );
+    }
+    if (
+      !Array.isArray(cases) ||
+      cases.some((c) => c == null || typeof c !== 'object')
+    ) {
+      throw new ConfigError(
+        `${source}: renderCases[${i}].cases must be an array of prop objects`,
+      );
+    }
+    // Runtime-checked above; widen the element type for Flow.
+    return { include, cases: cases as $FlowFixMe };
+  });
+}
+
+/** The transform-relevant subset of the config (the CLI's config also carries
+ * `renderCases`, which the transform doesn't accept). */
+export function pickTransformOptions(config: CodemodConfig): {
+  +hoverGuard: boolean,
+  +logicalProperties: boolean,
+  +themeTokens: { +varsImport: string, +varsName: string } | null,
+} {
+  return {
+    hoverGuard: config.hoverGuard,
+    logicalProperties: config.logicalProperties,
+    themeTokens: config.themeTokens,
   };
 }
 

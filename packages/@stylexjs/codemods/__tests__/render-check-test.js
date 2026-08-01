@@ -15,7 +15,12 @@
  * browser — plus the batch tally / report formatting.
  */
 
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
 import { transformEmotionFile } from '../src/adapters/emotion/transform';
+import { runRenderCheck } from '../src/cli/renderCheckRun';
+import { DEFAULT_CONFIG } from '../src/config/loadConfig';
 import {
   renderCheckFile,
   renderCheckBatch,
@@ -90,6 +95,30 @@ test('no browser → the whole batch short-circuits to unavailable', async () =>
     }
   }
 }, 30000);
+
+test('runRenderCheck drives the gate over a real dir (clean conversions only)', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'stylex-rc-'));
+  // A clean conversion (checked) and a partial one (has a flagged site → skipped
+  // from the render check, since its output still carries Emotion css).
+  fs.writeFileSync(path.join(dir, 'clean.jsx'), emotionInput);
+  fs.writeFileSync(
+    path.join(dir, 'partial.jsx'),
+    '/** @jsxImportSource @emotion/react */\n' +
+      'export default function P() {\n' +
+      "  return <div css={{ color: 'red', '& span': { color: 'blue' } }}>x</div>;\n" +
+      '}\n',
+  );
+  const report = await runRenderCheck({
+    patterns: ['*.jsx'],
+    cwd: dir,
+    config: DEFAULT_CONFIG,
+  });
+  // Exactly one file is render-checked (the clean one); the partial is excluded.
+  expect(report.results.length).toBe(1);
+  expect(report.results[0].path).toMatch(/clean\.jsx$/);
+  // Its verdict is match (browser present) or unavailable (none) — never a crash.
+  expect(['match', 'unavailable']).toContain(report.results[0].status);
+}, 60000);
 
 test('the report formatter summarizes counts and lists what to review', () => {
   const report: RenderCheckReport = {

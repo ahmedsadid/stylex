@@ -19,6 +19,7 @@ import * as path from 'path';
 import fastGlob from 'fast-glob';
 import { transformEmotionFile } from '../adapters/emotion/transform';
 import { buildSkeleton } from '../adapters/emotion/themeTokens';
+import { pickTransformOptions } from '../config/loadConfig';
 import type { CodemodConfig } from '../config/loadConfig';
 
 export type FileOutcome = {
@@ -76,7 +77,11 @@ export function runCodemod(options: RunOptions): RunReport {
     }
     let result;
     try {
-      result = transformEmotionFile(source, file, options.config);
+      result = transformEmotionFile(
+        source,
+        file,
+        pickTransformOptions(options.config),
+      );
     } catch (error) {
       return errorOutcome(file, error);
     }

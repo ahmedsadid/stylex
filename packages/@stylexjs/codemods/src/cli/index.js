@@ -9,10 +9,14 @@
  */
 
 /**
- * L0 CLI — `stylex-codemod emotion "<glob>" [--write] [--config <path>]`.
+ * L0 CLI — `stylex-codemod emotion "<glob>" [--write] [--config <path>]
+ * [--render-check]`.
  *
  * DRY RUN IS THE DEFAULT: with no `--write`, nothing is written; you get a
  * convert / refuse / TODO report to preview. `--write` applies the changes.
+ * `--render-check` renders the clean conversions in a real browser and diffs
+ * computed styles — the confidence pass for the trusted (dynamic/theme)
+ * conversions the static gate can't fully verify.
  */
 
 import yargs from 'yargs';
@@ -21,8 +25,10 @@ import { hideBin } from 'yargs/helpers';
 import { loadConfig } from '../config/loadConfig';
 import { runCodemod } from './run';
 import { formatReport } from './report';
+import { runRenderCheck } from './renderCheckRun';
+import { formatRenderCheckReport } from '../testing/renderCheck';
 
-export function main(argv: $ReadOnlyArray<string>): number {
+export async function main(argv: $ReadOnlyArray<string>): Promise<number> {
   const args = yargs([...argv])
     .scriptName('stylex-codemod')
     .usage('$0 <adapter> <glob..> [options]')
@@ -39,6 +45,13 @@ export function main(argv: $ReadOnlyArray<string>): number {
     .option('config', {
       type: 'string',
       describe: 'Path to a stylex-codemod.config.js',
+    })
+    .option('render-check', {
+      type: 'boolean',
+      default: false,
+      describe:
+        'Render clean conversions in a real browser and diff computed styles ' +
+        '(confidence pass; needs Chrome)',
     })
     .option('verbose', {
       type: 'boolean',
@@ -62,10 +75,19 @@ export function main(argv: $ReadOnlyArray<string>): number {
   process.stdout.write(
     `${formatReport(report, { verbose: Boolean(args.verbose) })}\n`,
   );
-  return report.summary.errors > 0 ? 1 : 0;
+
+  let renderMismatches = 0;
+  if (args['render-check'] === true) {
+    process.stdout.write('\nRunning render check…\n');
+    const renderReport = await runRenderCheck({ patterns, config });
+    process.stdout.write(`${formatRenderCheckReport(renderReport)}\n`);
+    renderMismatches = renderReport.mismatched;
+  }
+
+  return report.summary.errors > 0 || renderMismatches > 0 ? 1 : 0;
 }
 
 // $FlowFixMe[cannot-resolve-module] - require.main is a runtime guard
 if (require.main === module) {
-  process.exit(main(hideBin(process.argv)));
+  main(hideBin(process.argv)).then((code) => process.exit(code));
 }

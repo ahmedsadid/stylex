@@ -68,6 +68,7 @@ describe('loadConfig', () => {
       hoverGuard: false,
       logicalProperties: true,
       themeTokens: null,
+      renderCases: [],
     });
   });
 
@@ -91,6 +92,21 @@ describe('loadConfig', () => {
     expect(() =>
       validateConfig({ themeTokens: { varsImport: './x' } }, 'x'),
     ).toThrow(/varsImport.*varsName|varsName/);
+  });
+
+  test('renderCases: a valid array is accepted, a malformed one throws', () => {
+    expect(
+      validateConfig(
+        { renderCases: [{ include: 'Button', cases: [{ size: 'lg' }, {}] }] },
+        'x',
+      ).renderCases,
+    ).toEqual([{ include: 'Button', cases: [{ size: 'lg' }, {}] }]);
+    expect(() =>
+      validateConfig({ renderCases: [{ include: 42, cases: [] }] }, 'x'),
+    ).toThrow(/include must be a string/);
+    expect(() =>
+      validateConfig({ renderCases: [{ include: 'x', cases: [1] }] }, 'x'),
+    ).toThrow(/cases must be an array of prop objects/);
   });
 });
 
@@ -146,7 +162,12 @@ describe('runCodemod (dry run is the default)', () => {
     runCodemod({
       patterns: ['a.jsx'],
       cwd: dir,
-      config: { hoverGuard: true, logicalProperties: false, themeTokens: null },
+      config: {
+        hoverGuard: true,
+        logicalProperties: false,
+        themeTokens: null,
+        renderCases: [],
+      },
       write: true,
     });
     const after = fs.readFileSync(path.join(dir, 'a.jsx'), 'utf8');
@@ -171,6 +192,7 @@ describe('runCodemod (dry run is the default)', () => {
         hoverGuard: true,
         logicalProperties: true,
         themeTokens: { varsImport: './app.stylex', varsName: 'vars' },
+        renderCases: [],
       },
       write: true,
     });
