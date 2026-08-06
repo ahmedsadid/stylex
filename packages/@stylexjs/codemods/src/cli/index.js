@@ -62,6 +62,12 @@ export async function main(argv: $ReadOnlyArray<string>): Promise<number> {
       type: 'string',
       describe: '(--render-check) path to your authored defineVars module',
     })
+    .option('ignore', {
+      type: 'array',
+      describe:
+        'Extra glob(s) to exclude (on top of node_modules), e.g. ' +
+        "--ignore '**/*.test.*' '**/*.stories.*'",
+    })
     .option('diff', {
       type: 'boolean',
       default: false,
@@ -113,11 +119,13 @@ export async function main(argv: $ReadOnlyArray<string>): Promise<number> {
     return 2;
   }
   const diff = Boolean(args.diff);
+  const ignore = (args.ignore ?? []).map(String);
   const report = runCodemod({
     patterns,
     config,
     write: Boolean(args.write),
     diff,
+    ignore,
   });
   process.stdout.write(
     `${formatReport(report, { verbose: Boolean(args.verbose), diff })}\n`,
@@ -126,7 +134,7 @@ export async function main(argv: $ReadOnlyArray<string>): Promise<number> {
   let renderMismatches = 0;
   if (args['render-check'] === true) {
     process.stdout.write('\nRunning render check…\n');
-    const renderReport = await runRenderCheck({ patterns, config });
+    const renderReport = await runRenderCheck({ patterns, config, ignore });
     process.stdout.write(`${formatRenderCheckReport(renderReport)}\n`);
     renderMismatches = renderReport.mismatched;
   }

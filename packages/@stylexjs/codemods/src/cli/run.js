@@ -59,6 +59,7 @@ export type RunOptions = {
   +cwd?: string,
   +write?: boolean,
   +diff?: boolean, // attach a unified diff to each converted outcome
+  +ignore?: $ReadOnlyArray<string>, // extra exclude globs (on top of node_modules)
 };
 
 export function runCodemod(options: RunOptions): RunReport {
@@ -68,7 +69,7 @@ export function runCodemod(options: RunOptions): RunReport {
   const files: Array<string> = fastGlob.sync(options.patterns.slice(), {
     cwd,
     absolute: true,
-    ignore: ['**/node_modules/**'],
+    ignore: ['**/node_modules/**', ...(options.ignore ?? [])],
   });
 
   const collectedTokens: Set<string> = new Set();

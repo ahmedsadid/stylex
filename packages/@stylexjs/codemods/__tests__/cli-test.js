@@ -168,6 +168,26 @@ describe('runCodemod (dry run is the default)', () => {
     expect(report.results.every((r) => r.wrote === false)).toBe(true);
   });
 
+  test('--ignore excludes extra globs on top of node_modules', () => {
+    const dir = makeProject();
+    fs.writeFileSync(path.join(dir, 'convert.test.jsx'), CONVERTIBLE);
+    const all = runCodemod({
+      patterns: ['*.jsx'],
+      cwd: dir,
+      config: DEFAULT_CONFIG,
+    });
+    const filtered = runCodemod({
+      patterns: ['*.jsx'],
+      cwd: dir,
+      config: DEFAULT_CONFIG,
+      ignore: ['**/*.test.*'],
+    });
+    expect(filtered.summary.files).toBe(all.summary.files - 1);
+    expect(filtered.results.every((r) => !r.file.endsWith('.test.jsx'))).toBe(
+      true,
+    );
+  });
+
   test('--diff attaches a unified diff to each conversion and renders it', () => {
     const dir = makeProject();
     const report = runCodemod({

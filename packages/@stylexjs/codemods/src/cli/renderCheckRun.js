@@ -68,6 +68,7 @@ export type RenderCheckRunOptions = {
   +patterns: $ReadOnlyArray<string>,
   +config: CodemodConfig,
   +cwd?: string,
+  +ignore?: $ReadOnlyArray<string>,
   +onProgress?: (result: RenderCheckResult) => void,
 };
 
@@ -94,7 +95,7 @@ export async function runRenderCheck(
   const files: Array<string> = fastGlob.sync(options.patterns.slice(), {
     cwd,
     absolute: true,
-    ignore: ['**/node_modules/**'],
+    ignore: ['**/node_modules/**', ...(options.ignore ?? [])],
   });
 
   const themeContext = loadThemeContext(options.config, cwd);
