@@ -225,4 +225,44 @@ describe('formatReport', () => {
     // unchanged file hidden unless verbose
     expect(text).not.toMatch(/plain\.jsx/);
   });
+
+  test('ranks the top flag/refusal reasons, bucketing specifics', () => {
+    const outcome = (over) => ({
+      file: 'f',
+      status: 'converted',
+      flags: [],
+      reasons: [],
+      wrote: false,
+      ...over,
+    });
+    const report = {
+      dryRun: true,
+      themeSkeleton: null,
+      results: [
+        // Two partials flagged for the same reason (different quoted names) →
+        // should bucket to one "styled(…) component" entry with count 2.
+        outcome({ flags: ["styled('Button') component"] }),
+        outcome({ flags: ["styled('Card') component"] }),
+        outcome({ flags: ['css on a component element'] }),
+        outcome({
+          status: 'skipped',
+          reasons: ["import from 'x' is not convertible yet"],
+        }),
+      ],
+      summary: {
+        files: 4,
+        converted: 0,
+        partiallyConverted: 3,
+        skipped: 1,
+        unchanged: 0,
+        errors: 0,
+        totalFlags: 3,
+      },
+    };
+    const text = formatReport(report);
+    expect(text).toContain('Top reasons sites were flagged');
+    expect(text).toMatch(/2 {2}styled\(…\) component/); // bucketed count
+    expect(text).toContain('Top reasons files were refused');
+    expect(text).toMatch(/import from '…' is not convertible yet/);
+  });
 });
