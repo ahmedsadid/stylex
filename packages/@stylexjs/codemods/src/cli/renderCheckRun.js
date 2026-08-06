@@ -23,6 +23,7 @@ import * as path from 'path';
 import fastGlob from 'fast-glob';
 import { transformEmotionFile } from '../adapters/emotion/transform';
 import { pickTransformOptions } from '../config/loadConfig';
+import { deriveRenderCases } from './deriveRenderCases';
 import { renderCheckBatch } from '../testing/renderCheck';
 import type {
   RenderCheckReport,
@@ -70,8 +71,9 @@ export type RenderCheckRunOptions = {
   +onProgress?: (result: RenderCheckResult) => void,
 };
 
-/** The sample props to render `file` under: the first `renderCases` rule whose
- * `include` is a substring of the path, else undefined (renders under `[{}]`). */
+/** The sample props to render `file` under: an explicit `renderCases` rule wins
+ * (first whose `include` is a substring of the path); else props derived from a
+ * co-located Storybook file; else undefined (renders under `[{}]`). */
 function renderCasesFor(
   config: CodemodConfig,
   file: string,
@@ -81,7 +83,8 @@ function renderCasesFor(
       return rule.cases;
     }
   }
-  return undefined;
+  const derived = deriveRenderCases(file);
+  return derived.length > 0 ? derived : undefined;
 }
 
 export async function runRenderCheck(
