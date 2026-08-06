@@ -216,14 +216,17 @@ export async function verifyRender(
     // `.tsx` source renders instead of skipping. Both sides share it (a `.tsx`
     // input converts to a `.tsx` output).
     +filename?: string,
+    // A shared browser to reuse across a batch (else one is launched per diff).
+    +browser?: $FlowFixMe | null,
   },
 ): Promise<VerifyRenderResult> {
   const cases = options?.cases ?? [{}];
   const filename = options?.filename;
+  const browser = options?.browser;
   for (const props of cases) {
     const before = await emotionRenderDoc(emotionSource, { props, filename });
     const after = await stylexRenderDoc(stylexSource, { props, filename });
-    const verdict = await renderStyleDiff(before, after);
+    const verdict = await renderStyleDiff(before, after, { browser });
     if (verdict.status === 'unavailable') {
       return verdict;
     }

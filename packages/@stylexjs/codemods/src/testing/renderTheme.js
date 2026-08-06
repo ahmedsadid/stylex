@@ -253,7 +253,10 @@ export type ThemeRenderInputs = {
  */
 export async function verifyThemeRender(
   inputs: ThemeRenderInputs,
-  options?: { +cases?: $ReadOnlyArray<{ +[string]: mixed }> },
+  options?: {
+    +cases?: $ReadOnlyArray<{ +[string]: mixed }>,
+    +browser?: $FlowFixMe | null, // shared browser to reuse across a batch
+  },
 ): Promise<ThemeRenderVerdict> {
   if (isSkeletonVars(inputs.varsModuleSource)) {
     return {
@@ -288,7 +291,9 @@ export async function verifyThemeRender(
         props,
         componentExt,
       );
-      const verdict = await renderStyleDiff(before, after);
+      const verdict = await renderStyleDiff(before, after, {
+        browser: options?.browser,
+      });
       if (verdict.status === 'unavailable') {
         return verdict;
       }

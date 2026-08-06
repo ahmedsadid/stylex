@@ -29,7 +29,7 @@
  */
 
 import { verifyRender } from './renderPipeline';
-import { isRenderGateAvailable } from './renderGate';
+import { launchRenderBrowser } from './renderGate';
 import { verifyThemeRender } from './renderTheme';
 import type { StyleDiff } from './renderGate';
 
@@ -87,8 +87,10 @@ export type RenderCheckReport = {
  */
 export async function renderCheckFile(
   item: RenderCheckItem,
+  options?: { +browser?: $FlowFixMe | null },
 ): Promise<RenderCheckResult> {
   const { path } = item;
+  const browser = options?.browser;
   try {
     if (item.theme != null) {
       const tv = await verifyThemeRender(
@@ -101,7 +103,7 @@ export async function renderCheckFile(
           componentFilename: item.path, // .tsx/.jsx → dialect
           themeFilename: item.theme.themeFilename,
         },
-        { cases: item.cases },
+        { cases: item.cases, browser },
       );
       if (tv.status === 'placeholder') {
         return { path, status: 'placeholder', reason: tv.reason };
@@ -117,6 +119,7 @@ export async function renderCheckFile(
     const verdict = await verifyRender(item.inputSource, item.outputCode, {
       cases: item.cases,
       filename: item.path, // extension → Flow vs TS type-stripping
+      browser,
     });
     if (verdict.status === 'match') {
       return { path, status: 'match' };
@@ -142,32 +145,42 @@ export async function renderCheckFile(
 }
 
 /**
- * Render-check a batch of converted files. Probes for a browser ONCE; if none is
- * available the whole batch is `unavailable` (no per-file launch attempts).
- * `onProgress` is called with each result as it completes.
+ * Render-check a batch of converted files. Launches ONE browser for the whole
+ * batch (a new page per diff), not one per file — the difference between seconds
+ * and minutes on a large migration. No browser → the whole batch is
+ * `unavailable`. `onProgress` is called with each result as it completes.
  */
 export async function renderCheckBatch(
   items: $ReadOnlyArray<RenderCheckItem>,
   options?: { +onProgress?: (result: RenderCheckResult) => void },
 ): Promise<RenderCheckReport> {
-  if (items.length > 0 && !(await isRenderGateAvailable())) {
-    const results = items.map((item): RenderCheckResult => ({
-      path: item.path,
-      status: 'unavailable',
-      reason: 'no Chrome could be launched (render check needs a browser)',
-    }));
-    return tally(results);
+  if (items.length === 0) {
+    return tally([]);
+  }
+  const browser = await launchRenderBrowser();
+  if (browser == null) {
+    return tally(
+      items.map((item): RenderCheckResult => ({
+        path: item.path,
+        status: 'unavailable',
+        reason: 'no Chrome could be launched (render check needs a browser)',
+      })),
+    );
   }
 
-  const results: Array<RenderCheckResult> = [];
-  for (const item of items) {
-    const result = await renderCheckFile(item);
-    if (options?.onProgress != null) {
-      options.onProgress(result);
+  try {
+    const results: Array<RenderCheckResult> = [];
+    for (const item of items) {
+      const result = await renderCheckFile(item, { browser });
+      if (options?.onProgress != null) {
+        options.onProgress(result);
+      }
+      results.push(result);
     }
-    results.push(result);
+    return tally(results);
+  } finally {
+    await browser.close();
   }
-  return tally(results);
 }
 
 function tally(results: $ReadOnlyArray<RenderCheckResult>): RenderCheckReport {

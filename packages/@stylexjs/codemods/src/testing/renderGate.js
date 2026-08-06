@@ -103,7 +103,10 @@ function launchOptions(): $ReadOnlyArray<LaunchOpt> {
   return attempts;
 }
 
-async function launchBrowser(): Promise<$FlowFixMe | null> {
+/** Launches a headless Chromium (or null if none resolves). The caller OWNS it —
+ * pass it to `renderStyleDiff({ browser })` to reuse one browser across a whole
+ * batch (a big win over launching one per diff), then close it. */
+export async function launchRenderBrowser(): Promise<$FlowFixMe | null> {
   // Escape hatch: force the gate off (e.g. to keep a CI job browser-free even
   // where Chrome happens to be installed).
   if (process.env.STYLEX_CODEMOD_RENDER_GATE === '0') {
@@ -121,7 +124,7 @@ async function launchBrowser(): Promise<$FlowFixMe | null> {
 
 /** Whether a real Chromium can be launched here (so tests can skip cleanly). */
 export async function isRenderGateAvailable(): Promise<boolean> {
-  const browser = await launchBrowser();
+  const browser = await launchRenderBrowser();
   if (browser == null) {
     return false;
   }
@@ -281,8 +284,11 @@ function diffNodes(
 export async function renderStyleDiff(
   before: RenderDoc,
   after: RenderDoc,
+  options?: { +browser?: $FlowFixMe | null },
 ): Promise<RenderVerdict> {
-  const browser = await launchBrowser();
+  // Reuse a caller-provided browser (batch mode) or launch a throwaway one.
+  const shared = options?.browser ?? null;
+  const browser = shared ?? (await launchRenderBrowser());
   if (browser == null) {
     return {
       status: 'unavailable',
@@ -291,8 +297,8 @@ export async function renderStyleDiff(
         'executable path, or install Google Chrome)',
     };
   }
+  const page = await browser.newPage({ viewport: DEFAULT_VIEWPORT });
   try {
-    const page = await browser.newPage({ viewport: DEFAULT_VIEWPORT });
     const beforeTree = await collect(page, before);
     const afterTree = await collect(page, after);
     const diffs: Array<StyleDiff> = [];
@@ -301,6 +307,9 @@ export async function renderStyleDiff(
       ? { status: 'match' }
       : { status: 'mismatch', diffs };
   } finally {
-    await browser.close();
+    await page.close();
+    if (shared == null) {
+      await browser.close(); // only close a browser we launched
+    }
   }
 }
