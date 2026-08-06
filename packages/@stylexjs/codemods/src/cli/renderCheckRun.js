@@ -69,7 +69,11 @@ export type RenderCheckRunOptions = {
   +config: CodemodConfig,
   +cwd?: string,
   +ignore?: $ReadOnlyArray<string>,
-  +onProgress?: (result: RenderCheckResult) => void,
+  +onProgress?: (
+    result: RenderCheckResult,
+    done: number,
+    total: number,
+  ) => void,
 };
 
 /** The sample props to render `file` under: an explicit `renderCases` rule wins

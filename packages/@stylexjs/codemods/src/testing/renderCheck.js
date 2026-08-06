@@ -152,7 +152,13 @@ export async function renderCheckFile(
  */
 export async function renderCheckBatch(
   items: $ReadOnlyArray<RenderCheckItem>,
-  options?: { +onProgress?: (result: RenderCheckResult) => void },
+  options?: {
+    +onProgress?: (
+      result: RenderCheckResult,
+      done: number,
+      total: number,
+    ) => void,
+  },
 ): Promise<RenderCheckReport> {
   if (items.length === 0) {
     return tally([]);
@@ -172,10 +178,10 @@ export async function renderCheckBatch(
     const results: Array<RenderCheckResult> = [];
     for (const item of items) {
       const result = await renderCheckFile(item, { browser });
-      if (options?.onProgress != null) {
-        options.onProgress(result);
-      }
       results.push(result);
+      if (options?.onProgress != null) {
+        options.onProgress(result, results.length, items.length);
+      }
     }
     return tally(results);
   } finally {

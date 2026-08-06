@@ -60,6 +60,7 @@ export type RunOptions = {
   +write?: boolean,
   +diff?: boolean, // attach a unified diff to each converted outcome
   +ignore?: $ReadOnlyArray<string>, // extra exclude globs (on top of node_modules)
+  +onProgress?: (done: number, total: number, file: string) => void,
 };
 
 export function runCodemod(options: RunOptions): RunReport {
@@ -73,7 +74,7 @@ export function runCodemod(options: RunOptions): RunReport {
   });
 
   const collectedTokens: Set<string> = new Set();
-  const results: Array<FileOutcome> = files.map((file) => {
+  const processFile = (file: string): FileOutcome => {
     let source: string;
     try {
       source = fs.readFileSync(file, 'utf8');
@@ -122,6 +123,14 @@ export function runCodemod(options: RunOptions): RunReport {
       };
     }
     return { file, status: 'unchanged', flags: [], reasons: [], wrote: false };
+  };
+
+  const results: Array<FileOutcome> = files.map((file, i) => {
+    const outcome = processFile(file);
+    if (options.onProgress != null) {
+      options.onProgress(i + 1, files.length, file);
+    }
+    return outcome;
   });
 
   // M13: aggregate the referenced theme tokens into one name-only `defineVars`

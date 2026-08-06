@@ -26,6 +26,7 @@ import { loadConfig, applyThemeFlags } from '../config/loadConfig';
 import { runCodemod } from './run';
 import { formatReport } from './report';
 import { runInit } from './init';
+import { makeProgress } from './progress';
 import { runRenderCheck } from './renderCheckRun';
 import { formatRenderCheckReport } from '../testing/renderCheck';
 
@@ -126,22 +127,38 @@ export async function main(argv: $ReadOnlyArray<string>): Promise<number> {
   const diff = Boolean(args.diff);
   const json = Boolean(args.json);
   const ignore = (args.ignore ?? []).map(String);
+
+  // Progress goes to stderr (TTY only), so stdout stays clean for --json.
+  const runProgress = json ? undefined : makeProgress('Transforming');
   const report = runCodemod({
     patterns,
     config,
     write: Boolean(args.write),
     diff,
     ignore,
+    onProgress: runProgress
+      ? (done, total) => runProgress.tick(done, total)
+      : undefined,
   });
+  if (runProgress) {
+    runProgress.done();
+  }
 
-  // Gather both reports before printing so `--json` can emit one document; status
-  // lines go to stderr so stdout stays clean JSON.
+  // Gather both reports before printing so `--json` can emit one document.
   let renderReport = null;
   if (args['render-check'] === true) {
-    if (!json) {
-      process.stderr.write('\nRunning render check…\n');
+    const rcProgress = json ? null : makeProgress('Render check');
+    renderReport = await runRenderCheck({
+      patterns,
+      config,
+      ignore,
+      onProgress: rcProgress
+        ? (_r, done, total) => rcProgress.tick(done, total)
+        : undefined,
+    });
+    if (rcProgress) {
+      rcProgress.done();
     }
-    renderReport = await runRenderCheck({ patterns, config, ignore });
   }
 
   if (json) {

@@ -20,6 +20,7 @@ import {
 import { runCodemod } from '../src/cli/run';
 import { formatReport } from '../src/cli/report';
 import { runInit } from '../src/cli/init';
+import { makeProgress } from '../src/cli/progress';
 import { main } from '../src/cli/index';
 
 const CONVERTIBLE =
@@ -167,6 +168,30 @@ describe('runCodemod (dry run is the default)', () => {
       before,
     );
     expect(report.results.every((r) => r.wrote === false)).toBe(true);
+  });
+
+  test('onProgress fires once per file with (done, total)', () => {
+    const dir = makeProject();
+    const ticks: Array<string> = [];
+    runCodemod({
+      patterns: ['*.jsx'],
+      cwd: dir,
+      config: DEFAULT_CONFIG,
+      onProgress: (done, total) => {
+        ticks.push(`${done}/${total}`);
+      },
+    });
+    expect(ticks).toEqual(['1/4', '2/4', '3/4', '4/4']);
+  });
+
+  test('makeProgress is a safe no-op when stderr is not a TTY', () => {
+    // In the test runner stderr isn't a TTY, so tick/done write nothing + throw
+    // nothing (guarding against progress corrupting piped/CI output).
+    const p = makeProgress('Transforming');
+    expect(() => {
+      p.tick(1, 10);
+      p.done();
+    }).not.toThrow();
   });
 
   test('--ignore excludes extra globs on top of node_modules', () => {
