@@ -88,7 +88,19 @@ export function formatReport(
   const verbose = options?.verbose ?? false;
   const lines: Array<string> = [];
 
+  const s0 = report.summary;
+  const hasComplexity =
+    s0.skipped > 0 || s0.partiallyConverted > 0 || s0.errors > 0;
+
   lines.push(report.dryRun ? 'Dry run (no files written):' : 'Applied:');
+  // A one-line legend of the outcome verbs — only when there's something beyond
+  // clean converts to explain, so repeat clean runs stay terse.
+  if (hasComplexity) {
+    lines.push(
+      '  (convert = rewritten · +N TODOs = converted, N sites need a hand · ' +
+        'refuse = left untouched · skip = no Emotion)',
+    );
+  }
   for (const outcome of report.results) {
     if (outcome.status === 'unchanged' && !verbose) {
       continue; // unchanged files are noise unless asked for
@@ -111,6 +123,20 @@ export function formatReport(
   );
   if (s.totalFlags > 0) {
     lines.push(`${s.totalFlags} TODO marker(s) left for manual follow-up.`);
+  }
+
+  // Trust model (invisible otherwise): what's provably equivalent vs trusted.
+  if (s.converted > 0 || s.partiallyConverted > 0) {
+    lines.push('');
+    lines.push(
+      'ℹ Static styles are verified CSS-equivalent. Theme tokens & dynamic ' +
+        '(props-driven)',
+    );
+    lines.push(
+      '  values are TRUSTED (wiring checked, not the value) — run ' +
+        '--render-check to',
+    );
+    lines.push('  confirm them in a real browser.');
   }
 
   // Where the manual work is: the most common TODO (partial-conversion) and

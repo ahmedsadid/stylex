@@ -227,7 +227,7 @@ describe('formatReport', () => {
   });
 
   test('ranks the top flag/refusal reasons, bucketing specifics', () => {
-    const outcome = (over) => ({
+    const outcome = (over: $FlowFixMe) => ({
       file: 'f',
       status: 'converted',
       flags: [],
@@ -264,5 +264,62 @@ describe('formatReport', () => {
     expect(text).toMatch(/2 {2}styled\(…\) component/); // bucketed count
     expect(text).toContain('Top reasons files were refused');
     expect(text).toMatch(/import from '…' is not convertible yet/);
+  });
+
+  test('shows the trust callout after a conversion, and a legend when complex', () => {
+    const base: $FlowFixMe = {
+      dryRun: true,
+      themeSkeleton: null,
+      results: [
+        {
+          file: 'a.jsx',
+          status: 'converted',
+          flags: ['css on a component element'],
+          reasons: [],
+          wrote: false,
+        },
+      ],
+      summary: {
+        files: 1,
+        converted: 0,
+        partiallyConverted: 1,
+        skipped: 0,
+        unchanged: 0,
+        errors: 0,
+        totalFlags: 1,
+      },
+    };
+    const text = formatReport(base);
+    expect(text).toContain('TRUSTED'); // trust model made visible
+    expect(text).toContain('--render-check');
+    expect(text).toMatch(/legend|convert = rewritten/); // legend shown (complex)
+  });
+
+  test('an all-clean run stays terse (no legend, still the trust line)', () => {
+    const report: $FlowFixMe = {
+      dryRun: true,
+      themeSkeleton: null,
+      results: [
+        {
+          file: 'a.jsx',
+          status: 'converted',
+          flags: [],
+          reasons: [],
+          wrote: false,
+        },
+      ],
+      summary: {
+        files: 1,
+        converted: 1,
+        partiallyConverted: 0,
+        skipped: 0,
+        unchanged: 0,
+        errors: 0,
+        totalFlags: 0,
+      },
+    };
+    const text = formatReport(report);
+    expect(text).not.toContain('convert = rewritten'); // no legend needed
+    expect(text).toContain('TRUSTED'); // still explains the trust model
   });
 });
