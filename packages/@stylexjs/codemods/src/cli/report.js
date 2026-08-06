@@ -158,9 +158,57 @@ export function formatReport(
     ),
   );
 
-  if (report.dryRun && (s.converted > 0 || s.partiallyConverted > 0)) {
+  const steps = nextSteps(report, cwd);
+  if (steps.length > 0) {
     lines.push('');
-    lines.push('Re-run with --write to apply.');
+    lines.push('Next steps:');
+    steps.forEach((step, i) => lines.push(`  ${i + 1}. ${step}`));
   }
   return lines.join('\n');
+}
+
+/** Concrete, result-driven next actions — the payoff that lets a first-timer act
+ * without reading the docs. Each is included only when it applies. */
+function nextSteps(report: RunReport, cwd: string): Array<string> {
+  const s = report.summary;
+  const steps: Array<string> = [];
+  const anyText = (re: RegExp): boolean =>
+    report.results.some(
+      (o) =>
+        o.reasons.some((r) => re.test(r)) || o.flags.some((f) => re.test(f)),
+    );
+  const themeBlocked = report.results.some(
+    (o) => o.status === 'skipped' && o.reasons.some((r) => /useTheme/.test(r)),
+  );
+
+  if (themeBlocked) {
+    steps.push(
+      'Theme reads (useTheme) were refused. Add a `themeTokens` config ' +
+        '(varsImport + varsName), or pass `--theme-vars <name>:<import>`, to ' +
+        'convert them, then re-run.',
+    );
+  }
+  if (report.dryRun && (s.converted > 0 || s.partiallyConverted > 0)) {
+    steps.push('Re-run with --write to apply.');
+  }
+  if (report.themeSkeleton != null) {
+    steps.push(
+      'Theme tokens were converted (trusted, not statically verified). Fill in ' +
+        `the real values in ${relativize(report.themeSkeleton.path, cwd)}, ` +
+        'then run with --render-check to confirm they render the same.',
+    );
+  }
+  if (s.totalFlags > 0) {
+    steps.push(
+      `${s.totalFlags} site(s) need a hand — search \`TODO(stylex-migration)\` ` +
+        'in the converted files.',
+    );
+  }
+  if (anyText(/styled\(/)) {
+    steps.push(
+      '`styled(Component)` composition is left for you: its correctness ' +
+        "can't be verified from a single file, so hand-migrate those.",
+    );
+  }
+  return steps;
 }

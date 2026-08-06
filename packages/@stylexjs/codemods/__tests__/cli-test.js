@@ -295,6 +295,73 @@ describe('formatReport', () => {
     expect(text).toMatch(/legend|convert = rewritten/); // legend shown (complex)
   });
 
+  test('emits tailored next-steps for the actual result', () => {
+    const report: $FlowFixMe = {
+      dryRun: true,
+      themeSkeleton: { path: '/p/app.stylex.js', content: '' },
+      results: [
+        {
+          file: 'a.jsx',
+          status: 'converted',
+          flags: ["styled('X') component"],
+          reasons: [],
+          wrote: false,
+        },
+        {
+          file: 'c.tsx',
+          status: 'skipped',
+          flags: [],
+          reasons: ["'@emotion/react' import of 'useTheme' is not convertible"],
+          wrote: false,
+        },
+      ],
+      summary: {
+        files: 2,
+        converted: 0,
+        partiallyConverted: 1,
+        skipped: 1,
+        unchanged: 0,
+        errors: 0,
+        totalFlags: 1,
+      },
+    };
+    const text = formatReport(report, { cwd: '/p' });
+    expect(text).toContain('Next steps:');
+    expect(text).toMatch(/Theme reads \(useTheme\) were refused/); // theme-blocked
+    expect(text).toContain('--theme-vars');
+    expect(text).toContain('Re-run with --write to apply.');
+    expect(text).toMatch(/app\.stylex\.js/); // skeleton path, relativized
+    expect(text).toMatch(/TODO\(stylex-migration\)/); // has-TODOs step
+    expect(text).toContain('composition is left for you'); // styled(Component) step
+  });
+
+  test('a clean-no-theme run has no theme/styled steps', () => {
+    const report: $FlowFixMe = {
+      dryRun: false,
+      themeSkeleton: null,
+      results: [
+        {
+          file: 'a.jsx',
+          status: 'converted',
+          flags: [],
+          reasons: [],
+          wrote: true,
+        },
+      ],
+      summary: {
+        files: 1,
+        converted: 1,
+        partiallyConverted: 0,
+        skipped: 0,
+        unchanged: 0,
+        errors: 0,
+        totalFlags: 0,
+      },
+    };
+    const text = formatReport(report);
+    expect(text).not.toContain('Next steps:'); // nothing actionable → no section
+  });
+
   test('an all-clean run stays terse (no legend, still the trust line)', () => {
     const report: $FlowFixMe = {
       dryRun: true,
