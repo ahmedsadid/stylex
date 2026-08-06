@@ -20,6 +20,7 @@ import {
 import { runCodemod } from '../src/cli/run';
 import { formatReport } from '../src/cli/report';
 import { runInit } from '../src/cli/init';
+import { main } from '../src/cli/index';
 
 const CONVERTIBLE =
   '/** @jsxImportSource @emotion/react */\n' +
@@ -282,6 +283,54 @@ describe('runCodemod (dry run is the default)', () => {
     const skeletonPath = path.join(dir, 'app.stylex.js');
     expect(fs.existsSync(skeletonPath)).toBe(true);
     expect(fs.readFileSync(skeletonPath, 'utf8')).toContain('spaceMd:');
+  });
+});
+
+describe('main (CLI entry)', () => {
+  test('--json emits a parseable structured report on stdout', async () => {
+    const dir = makeProject();
+    const prevCwd = process.cwd();
+    const chunks: Array<string> = [];
+    const out: $FlowFixMe = process.stdout;
+    const origWrite = out.write;
+    out.write = (s: $FlowFixMe): boolean => {
+      chunks.push(String(s));
+      return true;
+    };
+    let code;
+    try {
+      process.chdir(dir);
+      code = await main(['emotion', '*.jsx', '--json']);
+    } finally {
+      out.write = origWrite;
+      process.chdir(prevCwd);
+    }
+    const parsed = JSON.parse(chunks.join(''));
+    expect(parsed.run.summary.files).toBe(4);
+    expect(parsed.render).toBeNull();
+    expect(code).toBe(0);
+  });
+
+  test('a bad --theme-vars exits 2 with a clear message', async () => {
+    const dir = makeProject();
+    const prevCwd = process.cwd();
+    const errStream: $FlowFixMe = process.stderr;
+    const origErr = errStream.write;
+    let err = '';
+    errStream.write = (s: $FlowFixMe): boolean => {
+      err += String(s);
+      return true;
+    };
+    let code;
+    try {
+      process.chdir(dir);
+      code = await main(['emotion', '*.jsx', '--theme-vars', 'bogus']);
+    } finally {
+      errStream.write = origErr;
+      process.chdir(prevCwd);
+    }
+    expect(code).toBe(2);
+    expect(err).toMatch(/<name>:<import>/);
   });
 });
 

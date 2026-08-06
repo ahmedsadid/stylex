@@ -73,6 +73,11 @@ export async function main(argv: $ReadOnlyArray<string>): Promise<number> {
       default: false,
       describe: 'Show the unified diff of each conversion (preview the change)',
     })
+    .option('json', {
+      type: 'boolean',
+      default: false,
+      describe: 'Emit the structured report as JSON (for CI / tooling)',
+    })
     .option('render-check', {
       type: 'boolean',
       default: false,
@@ -119,6 +124,7 @@ export async function main(argv: $ReadOnlyArray<string>): Promise<number> {
     return 2;
   }
   const diff = Boolean(args.diff);
+  const json = Boolean(args.json);
   const ignore = (args.ignore ?? []).map(String);
   const report = runCodemod({
     patterns,
@@ -127,18 +133,31 @@ export async function main(argv: $ReadOnlyArray<string>): Promise<number> {
     diff,
     ignore,
   });
-  process.stdout.write(
-    `${formatReport(report, { verbose: Boolean(args.verbose), diff })}\n`,
-  );
 
-  let renderMismatches = 0;
+  // Gather both reports before printing so `--json` can emit one document; status
+  // lines go to stderr so stdout stays clean JSON.
+  let renderReport = null;
   if (args['render-check'] === true) {
-    process.stdout.write('\nRunning render check…\n');
-    const renderReport = await runRenderCheck({ patterns, config, ignore });
-    process.stdout.write(`${formatRenderCheckReport(renderReport)}\n`);
-    renderMismatches = renderReport.mismatched;
+    if (!json) {
+      process.stderr.write('\nRunning render check…\n');
+    }
+    renderReport = await runRenderCheck({ patterns, config, ignore });
   }
 
+  if (json) {
+    process.stdout.write(
+      `${JSON.stringify({ run: report, render: renderReport }, null, 2)}\n`,
+    );
+  } else {
+    process.stdout.write(
+      `${formatReport(report, { verbose: Boolean(args.verbose), diff })}\n`,
+    );
+    if (renderReport != null) {
+      process.stdout.write(`${formatRenderCheckReport(renderReport)}\n`);
+    }
+  }
+
+  const renderMismatches = renderReport != null ? renderReport.mismatched : 0;
   return report.summary.errors > 0 || renderMismatches > 0 ? 1 : 0;
 }
 
