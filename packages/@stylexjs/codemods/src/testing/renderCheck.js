@@ -30,16 +30,27 @@
 
 import { verifyRender } from './renderPipeline';
 import { isRenderGateAvailable } from './renderGate';
+import { verifyThemeRender } from './renderTheme';
 import type { StyleDiff } from './renderGate';
 
 /** Sample prop objects to render a component under (default `[{}]`). */
 export type RenderCaseSet = $ReadOnlyArray<{ +[string]: mixed }>;
+
+/** A theme conversion needs its two INDEPENDENT value sources to render (see
+ * `renderTheme`): the real runtime theme and the authored defineVars module. */
+export type ThemeRenderContext = {
+  +themeModuleSource: string,
+  +varsModuleSource: string,
+  +varsImportPath: string,
+};
 
 export type RenderCheckItem = {
   +path: string,
   +inputSource: string, // the original Emotion source
   +outputCode: string, // the converted StyleX source
   +cases?: RenderCaseSet,
+  // Present for a theme conversion → routed to the theme render-check.
+  +theme?: ThemeRenderContext | null,
 };
 
 export type RenderCheckResult =
@@ -54,6 +65,9 @@ export type RenderCheckResult =
     }
   // Could not be rendered in isolation (build/bundle failure) — review by hand.
   | { +path: string, +status: 'skipped', +reason: string }
+  // A theme conversion whose defineVars is still the placeholder skeleton —
+  // fill in real values before it can be checked (not a failure).
+  | { +path: string, +status: 'placeholder', +reason: string }
   // No browser to render with (opt-in tool absent) — not a verdict.
   | { +path: string, +status: 'unavailable', +reason: string };
 
@@ -61,6 +75,7 @@ export type RenderCheckReport = {
   +matched: number,
   +mismatched: number,
   +skipped: number,
+  +placeholder: number,
   +unavailable: number,
   +results: $ReadOnlyArray<RenderCheckResult>,
 };
@@ -74,6 +89,28 @@ export async function renderCheckFile(
 ): Promise<RenderCheckResult> {
   const { path } = item;
   try {
+    if (item.theme != null) {
+      const tv = await verifyThemeRender(
+        {
+          emotionInput: item.inputSource,
+          stylexOutput: item.outputCode,
+          themeModuleSource: item.theme.themeModuleSource,
+          varsModuleSource: item.theme.varsModuleSource,
+          varsImportPath: item.theme.varsImportPath,
+        },
+        { cases: item.cases },
+      );
+      if (tv.status === 'placeholder') {
+        return { path, status: 'placeholder', reason: tv.reason };
+      }
+      if (tv.status === 'match') {
+        return { path, status: 'match' };
+      }
+      if (tv.status === 'unavailable') {
+        return { path, status: 'unavailable', reason: tv.reason };
+      }
+      return { path, status: 'mismatch', diffs: tv.diffs, props: tv.props };
+    }
     const verdict = await verifyRender(item.inputSource, item.outputCode, {
       cases: item.cases,
     });
@@ -133,14 +170,16 @@ function tally(results: $ReadOnlyArray<RenderCheckResult>): RenderCheckReport {
   let matched = 0;
   let mismatched = 0;
   let skipped = 0;
+  let placeholder = 0;
   let unavailable = 0;
   for (const r of results) {
     if (r.status === 'match') matched++;
     else if (r.status === 'mismatch') mismatched++;
     else if (r.status === 'skipped') skipped++;
+    else if (r.status === 'placeholder') placeholder++;
     else unavailable++;
   }
-  return { matched, mismatched, skipped, unavailable, results };
+  return { matched, mismatched, skipped, placeholder, unavailable, results };
 }
 
 /** A human-readable render-check report. `cwd` shortens absolute paths. */
@@ -154,8 +193,19 @@ export function formatRenderCheckReport(
   lines.push('Render check (real-browser computed-style diff):');
   lines.push(
     `  ${report.matched} matched, ${report.mismatched} DIFFER, ` +
-      `${report.skipped} could not render, ${report.unavailable} unavailable`,
+      `${report.skipped} could not render, ${report.placeholder} theme ` +
+      `placeholders, ${report.unavailable} unavailable`,
   );
+  const placeholders = report.results.filter((r) => r.status === 'placeholder');
+  if (placeholders.length > 0) {
+    lines.push('');
+    lines.push(
+      '  ⏳ Theme not verified — fill in the defineVars values first:',
+    );
+    for (const r of placeholders.slice(0, 20)) {
+      if (r.status === 'placeholder') lines.push(`  - ${rel(r.path)}`);
+    }
+  }
   const mismatches = report.results.filter((r) => r.status === 'mismatch');
   if (mismatches.length > 0) {
     lines.push('');

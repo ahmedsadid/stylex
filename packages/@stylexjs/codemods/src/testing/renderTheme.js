@@ -119,6 +119,9 @@ async function stylexThemeRenderDoc(
           fs.readFileSync(args.path, 'utf8'),
           {
             filename: args.path,
+            // Resolve presets/plugins from the package, not the user's cwd (the
+            // CLI runs from a project dir that need not have @babel/preset-*).
+            cwd: RESOLVE_DIR,
             babelrc: false,
             configFile: false,
             presets: [
@@ -171,6 +174,7 @@ async function emotionThemeRenderDoc(
   const strip = (source: string, filename: string): string => {
     const out = babel.transformSync(source, {
       filename,
+      cwd: RESOLVE_DIR, // resolve presets from the package, not the user's cwd
       babelrc: false,
       configFile: false,
       presets: ['@babel/preset-flow'],

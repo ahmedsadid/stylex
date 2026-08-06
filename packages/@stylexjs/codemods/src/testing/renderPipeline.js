@@ -115,6 +115,7 @@ export async function emotionRenderDoc(
   // Strip Flow types but KEEP the JSX + css prop for esbuild's Emotion runtime.
   const stripped = babel.transformSync(source, {
     filename,
+    cwd: RESOLVE_DIR, // resolve presets from the package, not the user's cwd
     babelrc: false,
     configFile: false,
     presets: ['@babel/preset-flow'],
@@ -157,6 +158,7 @@ export async function stylexRenderDoc(
   // the plugin's metadata carries the atomic CSS.
   const compiled = babel.transformSync(source, {
     filename,
+    cwd: RESOLVE_DIR, // resolve presets from the package, not the user's cwd
     babelrc: false,
     configFile: false,
     presets: [

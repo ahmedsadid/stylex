@@ -120,11 +120,62 @@ test('runRenderCheck drives the gate over a real dir (clean conversions only)', 
   expect(['match', 'unavailable']).toContain(report.results[0].status);
 }, 60000);
 
+describe('runRenderCheck routes theme conversions to the theme check', () => {
+  const themeComponent =
+    '/** @jsxImportSource @emotion/react */\n' +
+    "import { useTheme } from '@emotion/react';\n" +
+    'export default function Box() {\n' +
+    '  const theme = useTheme();\n' +
+    '  return <div css={{ padding: theme.space.md }}>hi</div>;\n' +
+    '}\n';
+  const themeModule = "export default { space: { md: '16px' } };\n";
+  const varsModule = (v: string) =>
+    "import * as stylex from '@stylexjs/stylex';\n" +
+    `export const vars = stylex.defineVars({ spaceMd: '${v}' });\n`;
+
+  function setup(dir: string, varsValue: string) {
+    fs.writeFileSync(path.join(dir, 'Box.jsx'), themeComponent);
+    fs.writeFileSync(path.join(dir, 'theme.js'), themeModule);
+    fs.writeFileSync(path.join(dir, 'app.stylex.js'), varsModule(varsValue));
+    return {
+      ...DEFAULT_CONFIG,
+      themeTokens: {
+        varsImport: './app.stylex',
+        varsName: 'vars',
+        themePath: 'theme.js',
+        varsPath: 'app.stylex.js',
+      },
+    };
+  }
+
+  test('a correct authored value matches (or is cleanly unavailable)', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'stylex-rct-'));
+    const report = await runRenderCheck({
+      patterns: ['Box.jsx'],
+      cwd: dir,
+      config: setup(dir, '16px'),
+    });
+    expect(report.results.length).toBe(1);
+    expect(['match', 'unavailable']).toContain(report.results[0].status);
+  }, 60000);
+
+  test('a WRONG authored value is caught as a mismatch (anti-tautology, e2e)', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'stylex-rct-'));
+    const report = await runRenderCheck({
+      patterns: ['Box.jsx'],
+      cwd: dir,
+      config: setup(dir, '20px'), // theme says 16px
+    });
+    expect(['mismatch', 'unavailable']).toContain(report.results[0].status);
+  }, 60000);
+});
+
 test('the report formatter summarizes counts and lists what to review', () => {
   const report: RenderCheckReport = {
     matched: 3,
     mismatched: 1,
     skipped: 2,
+    placeholder: 0,
     unavailable: 0,
     results: [
       { path: '/repo/a.js', status: 'match' },

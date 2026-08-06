@@ -18,6 +18,7 @@
  */
 
 import * as fs from 'fs';
+import * as path from 'path';
 // $FlowFixMe[cannot-resolve-module] - fast-glob has no flow libdef here
 import fastGlob from 'fast-glob';
 import { transformEmotionFile } from '../adapters/emotion/transform';
@@ -28,8 +29,38 @@ import type {
   RenderCheckItem,
   RenderCheckResult,
   RenderCaseSet,
+  ThemeRenderContext,
 } from '../testing/renderCheck';
 import type { CodemodConfig } from '../config/loadConfig';
+
+/** Reads the two theme modules a theme render-check needs (the real runtime
+ * theme + the authored defineVars), once. `null` when theme render-check isn't
+ * configured (both `themePath` and `varsPath` set) or a module can't be read —
+ * theme conversions then fall through to the regular path (and skip). */
+function loadThemeContext(
+  config: CodemodConfig,
+  cwd: string,
+): ThemeRenderContext | null {
+  const t = config.themeTokens;
+  if (t == null) {
+    return null;
+  }
+  // Bind before the reads — a readFileSync between two property refinements
+  // would otherwise invalidate the second (Flow).
+  const { themePath, varsPath, varsImport } = t;
+  if (themePath == null || varsPath == null) {
+    return null;
+  }
+  try {
+    return {
+      themeModuleSource: fs.readFileSync(path.resolve(cwd, themePath), 'utf8'),
+      varsModuleSource: fs.readFileSync(path.resolve(cwd, varsPath), 'utf8'),
+      varsImportPath: varsImport,
+    };
+  } catch {
+    return null;
+  }
+}
 
 export type RenderCheckRunOptions = {
   +patterns: $ReadOnlyArray<string>,
@@ -62,6 +93,7 @@ export async function runRenderCheck(
     ignore: ['**/node_modules/**'],
   });
 
+  const themeContext = loadThemeContext(options.config, cwd);
   const items: Array<RenderCheckItem> = [];
   for (const file of files) {
     let source: string;
@@ -91,11 +123,17 @@ export async function runRenderCheck(
     if (result.sites.length === 0 && result.keyframes.length === 0) {
       continue;
     }
+    // A theme conversion (referenced ≥1 token) is routed to the theme
+    // render-check when its two modules are configured; else it falls through to
+    // the regular path (and skips, since its output imports an unresolvable
+    // defineVars module).
+    const theme = result.themeTokens.length > 0 ? themeContext : null;
     items.push({
       path: file,
       inputSource: source,
       outputCode: result.code,
       cases: renderCasesFor(options.config, file),
+      theme,
     });
   }
 

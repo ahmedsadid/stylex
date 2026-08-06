@@ -29,13 +29,24 @@ export type RenderCaseRule = {
   +cases: $ReadOnlyArray<{ +[string]: mixed }>,
 };
 
+// M13: theme → defineVars token conversion. `varsImport`/`varsName` drive the
+// rewrite. `themePath`/`varsPath` are OPTIONAL and only used by theme
+// `--render-check`: the real runtime theme module (for the `<ThemeProvider>`)
+// and the authored defineVars module (for the StyleX side's real values). Both
+// present → theme conversions are render-checked; absent → they're skipped.
+export type ThemeTokensConfig = {
+  +varsImport: string,
+  +varsName: string,
+  +themePath?: string,
+  +varsPath?: string,
+};
+
 export type CodemodConfig = {
   +hoverGuard: boolean,
   +logicalProperties: boolean,
-  // M13: theme → defineVars token conversion. `null` (default) leaves `useTheme`
-  // as a whole-file blocker; set it to map `theme.<path>` reads to
-  // `<varsName>.<token>` from `varsImport`.
-  +themeTokens: { +varsImport: string, +varsName: string } | null,
+  // `null` (default) leaves `useTheme` as a whole-file blocker; set it to map
+  // `theme.<path>` reads to `<varsName>.<token>` from `varsImport`.
+  +themeTokens: ThemeTokensConfig | null,
   // Confidence workflow: sample props to render each file under (`--render-check`).
   +renderCases: $ReadOnlyArray<RenderCaseRule>,
 };
@@ -169,17 +180,21 @@ export function pickTransformOptions(config: CodemodConfig): {
   +logicalProperties: boolean,
   +themeTokens: { +varsImport: string, +varsName: string } | null,
 } {
+  // Strip the render-only fields (themePath/varsPath) — the transform's
+  // themeTokens is an exact object that only accepts varsImport/varsName.
+  const t = config.themeTokens;
   return {
     hoverGuard: config.hoverGuard,
     logicalProperties: config.logicalProperties,
-    themeTokens: config.themeTokens,
+    themeTokens:
+      t == null ? null : { varsImport: t.varsImport, varsName: t.varsName },
   };
 }
 
 function validateThemeTokens(
   value: mixed,
   source: string,
-): { +varsImport: string, +varsName: string } | null {
+): ThemeTokensConfig | null {
   if (value == null) {
     return null;
   }
@@ -193,5 +208,20 @@ function validateThemeTokens(
       `${source}: 'themeTokens' needs string 'varsImport' and 'varsName'`,
     );
   }
-  return { varsImport, varsName };
+  const optionalPath = (key: string): string | void => {
+    const v = value[key];
+    if (v == null) {
+      return undefined;
+    }
+    if (typeof v !== 'string') {
+      throw new ConfigError(`${source}: 'themeTokens.${key}' must be a string`);
+    }
+    return v;
+  };
+  return {
+    varsImport,
+    varsName,
+    themePath: optionalPath('themePath'),
+    varsPath: optionalPath('varsPath'),
+  };
 }
