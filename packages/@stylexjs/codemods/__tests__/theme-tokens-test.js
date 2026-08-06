@@ -67,6 +67,25 @@ test('theme reads convert to vars tokens; useTheme dropped; import added', () =>
   ]);
 });
 
+test('a TS-cast theme binding (useTheme() as Theme) still tokenizes', () => {
+  const src =
+    '/** @jsxImportSource @emotion/react */\n' +
+    "import { useTheme } from '@emotion/react';\n" +
+    'type Theme = { space: { md: string } };\n' +
+    'export default function Box() {\n' +
+    '  const theme = useTheme() as Theme;\n' +
+    '  return <div css={{ padding: theme.space.md }}>hi</div>;\n' +
+    '}\n';
+  const r = transformEmotionFile(src, 'Box.tsx', CONFIG);
+  expect(r.status).toBe('converted');
+  if (r.status !== 'converted') {
+    return;
+  }
+  expect(r.code).toContain('padding: vars.spaceMd');
+  expect(r.code).not.toContain('useTheme'); // binding + import both dropped
+  expect(r.themeTokens).toEqual(['spaceMd']);
+});
+
 test('a theme read under a condition converts (nested token)', () => {
   const src = wrap(
     'export default function Box() {\n' +

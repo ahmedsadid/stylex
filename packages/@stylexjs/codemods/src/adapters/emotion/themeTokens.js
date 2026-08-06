@@ -35,7 +35,38 @@ export function tokenName(pathParts: $ReadOnlyArray<string>): string {
     .join('');
 }
 
-/** Binding names introduced by `const <x> = useTheme()`. */
+/** Strips type-cast wrappers so `useTheme() as Theme` (TS), `<Theme>useTheme()`,
+ * `useTheme() satisfies Theme`, and `(useTheme(): Theme)` (Flow) all resolve to
+ * the inner `useTheme()` call. Real TS/Flow theme code casts the hook result. */
+function unwrapCast(node: $FlowFixMe): $FlowFixMe {
+  let cur = node;
+  while (
+    cur != null &&
+    (cur.type === 'TSAsExpression' ||
+      cur.type === 'TSTypeAssertion' ||
+      cur.type === 'TSSatisfiesExpression' ||
+      cur.type === 'TSNonNullExpression' ||
+      cur.type === 'TypeCastExpression' ||
+      cur.type === 'AsExpression')
+  ) {
+    cur = cur.expression;
+  }
+  return cur;
+}
+
+/** Whether `node` is a zero-arg call of `useThemeLocalName` (through any casts). */
+function isUseThemeCall(node: $FlowFixMe, useThemeLocalName: string): boolean {
+  const expr = unwrapCast(node);
+  return (
+    expr != null &&
+    expr.type === 'CallExpression' &&
+    expr.callee.type === 'Identifier' &&
+    expr.callee.name === useThemeLocalName &&
+    expr.arguments.length === 0
+  );
+}
+
+/** Binding names introduced by `const <x> = useTheme()` (casts unwrapped). */
 export function detectThemeBindings(
   j: $FlowFixMe,
   root: $FlowFixMe,
@@ -47,10 +78,7 @@ export function detectThemeBindings(
     if (
       id.type === 'Identifier' &&
       init != null &&
-      init.type === 'CallExpression' &&
-      init.callee.type === 'Identifier' &&
-      init.callee.name === useThemeLocalName &&
-      init.arguments.length === 0
+      isUseThemeCall(init, useThemeLocalName)
     ) {
       names.add(id.name);
     }
@@ -170,9 +198,7 @@ export function dropUnusedThemeBindings(
     if (
       decl.id.type === 'Identifier' &&
       decl.init != null &&
-      decl.init.type === 'CallExpression' &&
-      decl.init.callee.type === 'Identifier' &&
-      decl.init.callee.name === useThemeLocalName &&
+      isUseThemeCall(decl.init, useThemeLocalName) &&
       !stillReferenced(decl.id.name)
     ) {
       j(path).remove();
