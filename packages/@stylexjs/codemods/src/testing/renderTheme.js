@@ -41,6 +41,7 @@ import * as esbuild from 'esbuild';
 import * as babel from '@babel/core';
 import styleXPlugin from '@stylexjs/babel-plugin';
 import { RENDER_DONE_FLAG, renderStyleDiff } from './renderGate';
+import { typeStripPresets } from './renderPipeline';
 import type { RenderDoc } from './renderGate';
 import type { VerifyRenderResult } from './renderPipeline';
 
@@ -88,6 +89,7 @@ async function stylexThemeRenderDoc(
   varsModuleSource: string,
   varsImportPath: string,
   props: { +[string]: mixed },
+  ext: string, // the component's real extension (.tsx/.jsx) → strip dialect
 ): Promise<RenderDoc> {
   // Normalize the vars import to a sibling module so no path structure matters.
   const rewritten = outputSource
@@ -96,10 +98,12 @@ async function stylexThemeRenderDoc(
     .split(`"${varsImportPath}"`)
     .join(`"./${VARS_MODULE}"`);
   fs.writeFileSync(path.join(dir, `${VARS_MODULE}.js`), varsModuleSource);
-  fs.writeFileSync(path.join(dir, 'sx-component.jsx'), rewritten);
+  // Write the component with its REAL extension so the onLoad picks Flow vs TS
+  // stripping by it; import it extensionless so esbuild probes.
+  fs.writeFileSync(path.join(dir, `sx-component${ext}`), rewritten);
   fs.writeFileSync(
     path.join(dir, 'sx-mount.jsx'),
-    "import App from './sx-component.jsx';\n" +
+    "import App from './sx-component';\n" +
       mountCommon +
       `const props = ${JSON.stringify(props)};\n` +
       "flushSync(() => createRoot(document.getElementById('render-root'))" +
@@ -125,7 +129,7 @@ async function stylexThemeRenderDoc(
             babelrc: false,
             configFile: false,
             presets: [
-              '@babel/preset-flow',
+              ...typeStripPresets(args.path),
               ['@babel/preset-react', { runtime: 'automatic' }],
             ],
             plugins: [
@@ -170,14 +174,18 @@ async function emotionThemeRenderDoc(
   inputSource: string,
   themeModuleSource: string,
   props: { +[string]: mixed },
+  inputFilename: string, // real path/ext → Flow vs TS stripping of the input
+  themeFilename: string, // real path/ext → Flow vs TS stripping of the theme
 ): Promise<RenderDoc> {
+  // Strip types (Flow or TS, by the source's own extension) and write plain JS,
+  // so the temp file extension no longer matters downstream.
   const strip = (source: string, filename: string): string => {
     const out = babel.transformSync(source, {
       filename,
       cwd: RESOLVE_DIR, // resolve presets from the package, not the user's cwd
       babelrc: false,
       configFile: false,
-      presets: ['@babel/preset-flow'],
+      presets: [...typeStripPresets(filename)],
       plugins: ['@babel/plugin-syntax-jsx'],
     });
     if (out == null || out.code == null) {
@@ -187,11 +195,11 @@ async function emotionThemeRenderDoc(
   };
   fs.writeFileSync(
     path.join(dir, 'em-component.jsx'),
-    strip(inputSource, 'input.js'),
+    strip(inputSource, inputFilename),
   );
   fs.writeFileSync(
     path.join(dir, 'theme.js'),
-    strip(themeModuleSource, 'theme.js'),
+    strip(themeModuleSource, themeFilename),
   );
   fs.writeFileSync(
     path.join(dir, 'em-mount.jsx'),
@@ -230,6 +238,10 @@ export type ThemeRenderInputs = {
   // from the theme above — that independence is the whole check.
   +varsModuleSource: string,
   +varsImportPath: string, // what the output imports vars from (e.g. './app.stylex')
+  // Real filenames — their extensions decide Flow vs TS type-stripping so a
+  // `.tsx` component / `.ts` theme renders instead of skipping. Default `.js`.
+  +componentFilename?: string, // the input+output component (shared dialect)
+  +themeFilename?: string, // the runtime theme module
 };
 
 /**
@@ -252,6 +264,11 @@ export async function verifyThemeRender(
     };
   }
   const cases = options?.cases ?? [{}];
+  const componentFilename = inputs.componentFilename ?? 'component.js';
+  const themeFilename = inputs.themeFilename ?? 'theme.js';
+  const componentExt = /\.[jt]sx?$/.test(componentFilename)
+    ? componentFilename.slice(componentFilename.lastIndexOf('.'))
+    : '.jsx';
   const dir = fs.mkdtempSync(path.join(RESOLVE_DIR, '.render-theme-'));
   try {
     for (const props of cases) {
@@ -260,6 +277,8 @@ export async function verifyThemeRender(
         inputs.emotionInput,
         inputs.themeModuleSource,
         props,
+        componentFilename,
+        themeFilename,
       );
       const after = await stylexThemeRenderDoc(
         dir,
@@ -267,6 +286,7 @@ export async function verifyThemeRender(
         inputs.varsModuleSource,
         inputs.varsImportPath,
         props,
+        componentExt,
       );
       const verdict = await renderStyleDiff(before, after);
       if (verdict.status === 'unavailable') {

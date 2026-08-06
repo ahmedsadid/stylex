@@ -42,6 +42,7 @@ export type ThemeRenderContext = {
   +themeModuleSource: string,
   +varsModuleSource: string,
   +varsImportPath: string,
+  +themeFilename?: string, // the theme module path (its extension → dialect)
 };
 
 export type RenderCheckItem = {
@@ -97,6 +98,8 @@ export async function renderCheckFile(
           themeModuleSource: item.theme.themeModuleSource,
           varsModuleSource: item.theme.varsModuleSource,
           varsImportPath: item.theme.varsImportPath,
+          componentFilename: item.path, // .tsx/.jsx → dialect
+          themeFilename: item.theme.themeFilename,
         },
         { cases: item.cases },
       );
@@ -113,6 +116,7 @@ export async function renderCheckFile(
     }
     const verdict = await verifyRender(item.inputSource, item.outputCode, {
       cases: item.cases,
+      filename: item.path, // extension → Flow vs TS type-stripping
     });
     if (verdict.status === 'match') {
       return { path, status: 'match' };

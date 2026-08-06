@@ -34,8 +34,8 @@ const emotionInput =
   "  return <div css={{ color: 'rgb(1, 2, 3)', padding: 8 }}>hi</div>;\n" +
   '}\n';
 
-function convert(source: string): string {
-  const r = transformEmotionFile(source, 'in.js');
+function convert(source: string, filename: string = 'in.js'): string {
+  const r = transformEmotionFile(source, filename);
   if (r.status !== 'converted') {
     throw new Error(`fixture did not convert: ${r.status}`);
   }
@@ -51,6 +51,29 @@ test('a real conversion renders identically (or cleanly unavailable)', async () 
   });
   if (result.status === 'unavailable') {
     return; // no browser here — the opt-in gate stays green
+  }
+  expect(result.status).toBe('match');
+}, 60000);
+
+test('a .tsx conversion renders (TS is stripped by extension, not skipped)', async () => {
+  // Real TS syntax (type alias, `satisfies`, non-null) that Flow-stripping would
+  // choke on — the render pipeline now picks the TS stripper by the .tsx filename.
+  const tsx =
+    '/** @jsxImportSource @emotion/react */\n' +
+    'type P = { label: string };\n' +
+    'const meta = { k: 1 } satisfies Record<string, number>;\n' +
+    'export default function Box({ label }: P): React.ReactElement {\n' +
+    '  const n = [8, 9][0]!;\n' +
+    "  return <div css={{ color: 'rgb(3, 4, 5)', padding: n }}>{label}{meta.k}</div>;\n" +
+    '}\n';
+  const outputCode = convert(tsx, 'Box.tsx');
+  const result = await renderCheckFile({
+    path: 'Box.tsx',
+    inputSource: tsx,
+    outputCode,
+  });
+  if (result.status === 'unavailable') {
+    return;
   }
   expect(result.status).toBe('match');
 }, 60000);

@@ -56,6 +56,7 @@ function loadThemeContext(
       themeModuleSource: fs.readFileSync(path.resolve(cwd, themePath), 'utf8'),
       varsModuleSource: fs.readFileSync(path.resolve(cwd, varsPath), 'utf8'),
       varsImportPath: varsImport,
+      themeFilename: themePath, // its extension → Flow vs TS stripping
     };
   } catch {
     return null;

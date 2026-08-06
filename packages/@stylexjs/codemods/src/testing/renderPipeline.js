@@ -106,19 +106,29 @@ async function bundle(
   return result.outputFiles[0].text;
 }
 
+/** The type-stripping preset for a file, by extension: TypeScript for
+ * `.ts/.tsx` (matching the compile gate), else Flow. The dialect is carried by
+ * the filename — Flow and TS annotations overlap but aren't interchangeable, so
+ * preset-typescript on Flow source (or vice versa) would mis-parse. */
+export function typeStripPresets(filename: string): Array<$FlowFixMe> {
+  return /\.(ts|tsx|mts|cts)$/.test(filename)
+    ? [['@babel/preset-typescript', { allExtensions: true, isTSX: true }]]
+    : ['@babel/preset-flow'];
+}
+
 /** Emotion input → a script-mounted `RenderDoc` (Emotion injects its own CSS). */
 export async function emotionRenderDoc(
   source: string,
   options?: RenderBuildOptions,
 ): Promise<RenderDoc> {
   const filename = options?.filename ?? 'before.js';
-  // Strip Flow types but KEEP the JSX + css prop for esbuild's Emotion runtime.
+  // Strip Flow/TS types but KEEP the JSX + css prop for esbuild's Emotion runtime.
   const stripped = babel.transformSync(source, {
     filename,
     cwd: RESOLVE_DIR, // resolve presets from the package, not the user's cwd
     babelrc: false,
     configFile: false,
-    presets: ['@babel/preset-flow'],
+    presets: [...typeStripPresets(filename)],
     plugins: ['@babel/plugin-syntax-jsx'],
   });
   if (stripped == null || stripped.code == null) {
@@ -154,7 +164,7 @@ export async function stylexRenderDoc(
   // runtime reads the `@jsx` factory from the file (`jsx`, still imported from
   // @emotion/react and bundled). Without a pragma, use the automatic runtime.
   const classicPragma = /@jsx\s+[A-Za-z_$]/.test(source);
-  // Strip Flow, transform JSX, and compile StyleX (real plugin) in one pass;
+  // Strip Flow/TS, transform JSX, and compile StyleX (real plugin) in one pass;
   // the plugin's metadata carries the atomic CSS.
   const compiled = babel.transformSync(source, {
     filename,
@@ -162,7 +172,7 @@ export async function stylexRenderDoc(
     babelrc: false,
     configFile: false,
     presets: [
-      '@babel/preset-flow',
+      ...typeStripPresets(filename),
       [
         '@babel/preset-react',
         classicPragma ? { runtime: 'classic' } : { runtime: 'automatic' },
@@ -200,12 +210,19 @@ export type VerifyRenderResult =
 export async function verifyRender(
   emotionSource: string,
   stylexSource: string,
-  options?: { +cases?: $ReadOnlyArray<{ +[string]: mixed }> },
+  options?: {
+    +cases?: $ReadOnlyArray<{ +[string]: mixed }>,
+    // The real filename — its extension decides Flow vs TS type-stripping so a
+    // `.tsx` source renders instead of skipping. Both sides share it (a `.tsx`
+    // input converts to a `.tsx` output).
+    +filename?: string,
+  },
 ): Promise<VerifyRenderResult> {
   const cases = options?.cases ?? [{}];
+  const filename = options?.filename;
   for (const props of cases) {
-    const before = await emotionRenderDoc(emotionSource, { props });
-    const after = await stylexRenderDoc(stylexSource, { props });
+    const before = await emotionRenderDoc(emotionSource, { props, filename });
+    const after = await stylexRenderDoc(stylexSource, { props, filename });
     const verdict = await renderStyleDiff(before, after);
     if (verdict.status === 'unavailable') {
       return verdict;

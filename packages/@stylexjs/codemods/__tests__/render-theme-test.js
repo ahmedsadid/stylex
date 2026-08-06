@@ -72,6 +72,52 @@ test('ANTI-TAUTOLOGY: a wrong authored value is caught as a mismatch', async () 
   }
 }, 60000);
 
+test('a .tsx component + .ts theme render-check (TS stripped by extension)', async () => {
+  // The confidence workflow is most needed on TypeScript codebases; the render
+  // pipeline strips TS by the filename extension so these don't just skip.
+  const tsInput =
+    '/** @jsxImportSource @emotion/react */\n' +
+    "import { useTheme } from '@emotion/react';\n" +
+    'type Theme = { space: { md: string } };\n' +
+    'const meta = { k: 1 } satisfies Record<string, number>;\n' +
+    'export default function Box(): React.ReactElement {\n' +
+    '  const theme = useTheme();\n' +
+    '  return <div css={{ padding: theme.space.md }}>hi{meta.k}</div>;\n' +
+    '}\n';
+  const tsOutput =
+    "import * as stylex from '@stylexjs/stylex';\n" +
+    "import { vars } from './app.stylex';\n" +
+    'const styles = stylex.create({ box: { padding: vars.spaceMd } });\n' +
+    'export default function Box(): React.ReactElement {\n' +
+    '  return <div {...stylex.props(styles.box)}>hi1</div>;\n' +
+    '}\n';
+  const tsTheme =
+    'type Theme = { space: { md: string } };\n' +
+    "const theme: Theme = { space: { md: '16px' } };\n" +
+    'export default theme;\n';
+  const base = {
+    emotionInput: tsInput,
+    stylexOutput: tsOutput,
+    themeModuleSource: tsTheme,
+    varsImportPath: './app.stylex',
+    componentFilename: 'Box.tsx',
+    themeFilename: 'theme.ts',
+  };
+  const ok = await verifyThemeRender({
+    ...base,
+    varsModuleSource: varsModule('16px'),
+  });
+  if (ok.status === 'unavailable') {
+    return;
+  }
+  expect(ok.status).toBe('match');
+  const wrong = await verifyThemeRender({
+    ...base,
+    varsModuleSource: varsModule('20px'),
+  });
+  expect(wrong.status).toBe('mismatch'); // anti-tautology holds under TS too
+}, 60000);
+
 test('the placeholder skeleton is refused up front (no false alarms)', async () => {
   const skeleton = buildSkeleton('vars', ['spaceMd']);
   const verdict = await verifyThemeRender({
