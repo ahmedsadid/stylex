@@ -20,6 +20,7 @@ import fastGlob from 'fast-glob';
 import { transformEmotionFile } from '../adapters/emotion/transform';
 import { buildSkeleton } from '../adapters/emotion/themeTokens';
 import { pickTransformOptions } from '../config/loadConfig';
+import { fileDiff } from './diff';
 import type { CodemodConfig } from '../config/loadConfig';
 
 export type FileOutcome = {
@@ -28,6 +29,7 @@ export type FileOutcome = {
   +flags: $ReadOnlyArray<string>, // per-site TODO reasons (converted)
   +reasons: $ReadOnlyArray<string>, // whole-file refusal reasons (skipped)
   +wrote: boolean,
+  +diff?: string, // unified diff of the change (only when `diff` is requested)
 };
 
 export type RunSummary = {
@@ -56,11 +58,13 @@ export type RunOptions = {
   +config: CodemodConfig,
   +cwd?: string,
   +write?: boolean,
+  +diff?: boolean, // attach a unified diff to each converted outcome
 };
 
 export function runCodemod(options: RunOptions): RunReport {
   const cwd = options.cwd ?? process.cwd();
   const write = options.write ?? false;
+  const wantDiff = options.diff ?? false;
   const files: Array<string> = fastGlob.sync(options.patterns.slice(), {
     cwd,
     absolute: true,
@@ -104,6 +108,7 @@ export function runCodemod(options: RunOptions): RunReport {
         flags: result.flags,
         reasons: [],
         wrote,
+        diff: wantDiff ? fileDiff(file, source, result.code) : undefined,
       };
     }
     if (result.status === 'skipped') {

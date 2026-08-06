@@ -48,6 +48,11 @@ export async function main(argv: $ReadOnlyArray<string>): Promise<number> {
       type: 'string',
       describe: 'Path to a stylex-codemod.config.js',
     })
+    .option('diff', {
+      type: 'boolean',
+      default: false,
+      describe: 'Show the unified diff of each conversion (preview the change)',
+    })
     .option('render-check', {
       type: 'boolean',
       default: false,
@@ -80,9 +85,15 @@ export async function main(argv: $ReadOnlyArray<string>): Promise<number> {
 
   const patterns = (args.glob ?? []).map(String);
   const config = loadConfig({ configPath: args.config ?? null });
-  const report = runCodemod({ patterns, config, write: Boolean(args.write) });
+  const diff = Boolean(args.diff);
+  const report = runCodemod({
+    patterns,
+    config,
+    write: Boolean(args.write),
+    diff,
+  });
   process.stdout.write(
-    `${formatReport(report, { verbose: Boolean(args.verbose) })}\n`,
+    `${formatReport(report, { verbose: Boolean(args.verbose), diff })}\n`,
   );
 
   let renderMismatches = 0;

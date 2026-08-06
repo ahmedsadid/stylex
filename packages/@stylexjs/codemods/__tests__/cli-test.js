@@ -137,6 +137,32 @@ describe('runCodemod (dry run is the default)', () => {
     expect(report.results.every((r) => r.wrote === false)).toBe(true);
   });
 
+  test('--diff attaches a unified diff to each conversion and renders it', () => {
+    const dir = makeProject();
+    const report = runCodemod({
+      patterns: ['convert.jsx'],
+      cwd: dir,
+      config: DEFAULT_CONFIG,
+      write: false,
+      diff: true,
+    });
+    const converted = report.results.find((r) => r.status === 'converted');
+    expect(converted?.diff).toContain('@@'); // a unified-diff hunk header
+    expect(converted?.diff).toContain('+import * as stylex');
+    const text = formatReport(report, { cwd: dir, diff: true });
+    expect(text).toContain('+import * as stylex'); // shown under the file line
+    // Without --diff the diff isn't computed.
+    const noDiff = runCodemod({
+      patterns: ['convert.jsx'],
+      cwd: dir,
+      config: DEFAULT_CONFIG,
+      write: false,
+    });
+    expect(noDiff.results.find((r) => r.status === 'converted')?.diff).toBe(
+      undefined,
+    );
+  });
+
   test('--write applies the conversion to disk', () => {
     const dir = makeProject();
     runCodemod({

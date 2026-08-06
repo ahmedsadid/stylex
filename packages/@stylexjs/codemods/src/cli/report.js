@@ -82,10 +82,11 @@ function outcomeLine(outcome: FileOutcome, cwd: string): string {
 
 export function formatReport(
   report: RunReport,
-  options?: { +cwd?: string, +verbose?: boolean },
+  options?: { +cwd?: string, +verbose?: boolean, +diff?: boolean },
 ): string {
   const cwd = options?.cwd ?? process.cwd();
   const verbose = options?.verbose ?? false;
+  const showDiff = options?.diff ?? false;
   const lines: Array<string> = [];
 
   const s0 = report.summary;
@@ -110,6 +111,12 @@ export function formatReport(
       for (const flag of outcome.flags) {
         lines.push(`             TODO: ${flag}`);
       }
+    }
+    if (showDiff && outcome.diff != null && outcome.diff !== '') {
+      for (const line of outcome.diff.split('\n')) {
+        lines.push(`    ${line}`);
+      }
+      lines.push('');
     }
   }
 
