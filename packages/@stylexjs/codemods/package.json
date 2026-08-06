@@ -9,7 +9,9 @@
   "scripts": {
     "prebuild": "gen-types -i src/ -o lib/",
     "build": "cross-env BABEL_ENV=cjs babel src/ --out-dir lib/ --copy-files",
-    "test": "jest"
+    "test": "yarn test:unit && yarn test:render",
+    "test:unit": "jest --testPathIgnorePatterns /__fixtures__/ /__tests__/utils/ render-.*-test",
+    "test:render": "jest --runInBand render-.*-test"
   },
   "bin": {
     "stylex-codemod": "./lib/cli/index.js"
