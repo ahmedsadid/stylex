@@ -13,6 +13,7 @@ import * as path from 'path';
 import {
   loadConfig,
   validateConfig,
+  applyThemeFlags,
   DEFAULT_CONFIG,
   ConfigError,
 } from '../src/config/loadConfig';
@@ -93,6 +94,36 @@ describe('loadConfig', () => {
     expect(() =>
       validateConfig({ themeTokens: { varsImport: './x' } }, 'x'),
     ).toThrow(/varsImport.*varsName|varsName/);
+  });
+
+  test('applyThemeFlags: --theme-vars configures theme without a config file', () => {
+    const cfg = applyThemeFlags(DEFAULT_CONFIG, {
+      themeVars: 'vars:./app.stylex',
+    });
+    expect(cfg.themeTokens).toEqual({
+      varsName: 'vars',
+      varsImport: './app.stylex',
+      themePath: undefined,
+      varsPath: undefined,
+    });
+  });
+
+  test('applyThemeFlags: --theme-path/--vars-path augment; bad --theme-vars throws', () => {
+    const cfg = applyThemeFlags(DEFAULT_CONFIG, {
+      themeVars: 'vars:./app.stylex',
+      themePath: './theme',
+      varsPath: './app.stylex.js',
+    });
+    expect(cfg.themeTokens?.themePath).toBe('./theme');
+    expect(cfg.themeTokens?.varsPath).toBe('./app.stylex.js');
+    // path flags alone (no themeTokens) are inert.
+    expect(
+      applyThemeFlags(DEFAULT_CONFIG, { themePath: './theme' }).themeTokens,
+    ).toBeNull();
+    // malformed value → a clear ConfigError.
+    expect(() =>
+      applyThemeFlags(DEFAULT_CONFIG, { themeVars: 'novalue' }),
+    ).toThrow(/<name>:<import>/);
   });
 
   test('renderCases: a valid array is accepted, a malformed one throws', () => {

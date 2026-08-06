@@ -22,7 +22,7 @@
 import yargs from 'yargs';
 // $FlowFixMe[cannot-resolve-module] - yargs/helpers has no flow libdef here
 import { hideBin } from 'yargs/helpers';
-import { loadConfig } from '../config/loadConfig';
+import { loadConfig, applyThemeFlags } from '../config/loadConfig';
 import { runCodemod } from './run';
 import { formatReport } from './report';
 import { runInit } from './init';
@@ -47,6 +47,20 @@ export async function main(argv: $ReadOnlyArray<string>): Promise<number> {
     .option('config', {
       type: 'string',
       describe: 'Path to a stylex-codemod.config.js',
+    })
+    .option('theme-vars', {
+      type: 'string',
+      describe:
+        "Convert theme reads without a config file: '<varsName>:<import>' " +
+        "(e.g. 'vars:./app.stylex')",
+    })
+    .option('theme-path', {
+      type: 'string',
+      describe: '(--render-check) path to your real runtime theme module',
+    })
+    .option('vars-path', {
+      type: 'string',
+      describe: '(--render-check) path to your authored defineVars module',
     })
     .option('diff', {
       type: 'boolean',
@@ -84,7 +98,20 @@ export async function main(argv: $ReadOnlyArray<string>): Promise<number> {
   }
 
   const patterns = (args.glob ?? []).map(String);
-  const config = loadConfig({ configPath: args.config ?? null });
+  let config;
+  try {
+    config = applyThemeFlags(loadConfig({ configPath: args.config ?? null }), {
+      themeVars: args['theme-vars'],
+      themePath: args['theme-path'],
+      varsPath: args['vars-path'],
+    });
+  } catch (error) {
+    // A bad config or --theme-vars should read as a clear message, not a crash.
+    process.stderr.write(
+      `${error instanceof Error ? error.message : String(error)}\n`,
+    );
+    return 2;
+  }
   const diff = Boolean(args.diff);
   const report = runCodemod({
     patterns,

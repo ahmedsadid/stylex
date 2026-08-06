@@ -173,6 +173,47 @@ function validateRenderCases(
   });
 }
 
+/**
+ * Applies CLI theme flags over a loaded config (CLI wins), so a theme migration
+ * needs no config file: `--theme-vars <name>:<import>` sets the token binding +
+ * import; `--theme-path`/`--vars-path` add the modules `--render-check` needs.
+ * The path flags alone (no themeTokens) are inert — they only augment a
+ * configured theme.
+ */
+export function applyThemeFlags(
+  config: CodemodConfig,
+  flags: { +themeVars?: string, +themePath?: string, +varsPath?: string },
+): CodemodConfig {
+  let themeTokens = config.themeTokens;
+  const themeVars = flags.themeVars;
+  if (themeVars != null) {
+    const colon = themeVars.indexOf(':');
+    if (colon <= 0 || colon === themeVars.length - 1) {
+      throw new ConfigError(
+        '--theme-vars must be \'<name>:<import>\' (e.g. \'vars:./app.stylex\'), ' +
+          `got '${themeVars}'`,
+      );
+    }
+    themeTokens = {
+      varsName: themeVars.slice(0, colon),
+      varsImport: themeVars.slice(colon + 1),
+      themePath: themeTokens?.themePath,
+      varsPath: themeTokens?.varsPath,
+    };
+  }
+  if (
+    themeTokens != null &&
+    (flags.themePath != null || flags.varsPath != null)
+  ) {
+    themeTokens = {
+      ...themeTokens,
+      themePath: flags.themePath ?? themeTokens.themePath,
+      varsPath: flags.varsPath ?? themeTokens.varsPath,
+    };
+  }
+  return { ...config, themeTokens };
+}
+
 /** The transform-relevant subset of the config (the CLI's config also carries
  * `renderCases`, which the transform doesn't accept). */
 export function pickTransformOptions(config: CodemodConfig): {
