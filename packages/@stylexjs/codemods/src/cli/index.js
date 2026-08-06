@@ -25,6 +25,7 @@ import { hideBin } from 'yargs/helpers';
 import { loadConfig } from '../config/loadConfig';
 import { runCodemod } from './run';
 import { formatReport } from './report';
+import { runInit } from './init';
 import { runRenderCheck } from './renderCheckRun';
 import { formatRenderCheckReport } from '../testing/renderCheck';
 
@@ -33,6 +34,7 @@ export async function main(argv: $ReadOnlyArray<string>): Promise<number> {
     .scriptName('stylex-codemod')
     .usage('$0 <adapter> <glob..> [options]')
     .command('emotion <glob..>', 'Migrate Emotion styles to StyleX')
+    .command('init', 'Scaffold stylex-codemod.config.js + print a quick-start')
     .positional('glob', {
       describe: 'File glob(s) to transform',
       type: 'string',
@@ -63,9 +65,16 @@ export async function main(argv: $ReadOnlyArray<string>): Promise<number> {
     .help()
     .parseSync();
 
-  const adapter = String(args._[0]);
-  if (adapter !== 'emotion') {
-    process.stderr.write(`Unknown adapter '${adapter}' (only 'emotion').\n`);
+  const command = String(args._[0]);
+  if (command === 'init') {
+    const result = runInit(process.cwd());
+    process.stdout.write(`${result.message}\n`);
+    return 0;
+  }
+  if (command !== 'emotion') {
+    process.stderr.write(
+      `Unknown command '${command}' (use 'emotion' or 'init').\n`,
+    );
     return 2;
   }
 

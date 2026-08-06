@@ -18,6 +18,7 @@ import {
 } from '../src/config/loadConfig';
 import { runCodemod } from '../src/cli/run';
 import { formatReport } from '../src/cli/report';
+import { runInit } from '../src/cli/init';
 
 const CONVERTIBLE =
   '/** @jsxImportSource @emotion/react */\n' +
@@ -204,6 +205,25 @@ describe('runCodemod (dry run is the default)', () => {
     const skeletonPath = path.join(dir, 'app.stylex.js');
     expect(fs.existsSync(skeletonPath)).toBe(true);
     expect(fs.readFileSync(skeletonPath, 'utf8')).toContain('spaceMd:');
+  });
+});
+
+describe('init', () => {
+  test('scaffolds a VALID config + quick-start; never clobbers', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'stylex-init-'));
+    const first = runInit(dir);
+    expect(first.created).toBe(true);
+    expect(fs.existsSync(path.join(dir, 'stylex-codemod.config.js'))).toBe(
+      true,
+    );
+    expect(first.message).toContain('Quick start:');
+    expect(first.message).toContain('--write');
+    // The scaffold must load cleanly and equal the defaults (options commented).
+    expect(loadConfig({ configPath: first.path })).toEqual(DEFAULT_CONFIG);
+    // Re-running leaves it untouched.
+    const second = runInit(dir);
+    expect(second.created).toBe(false);
+    expect(second.message).toMatch(/already exists/);
   });
 });
 
