@@ -23,8 +23,9 @@
  * vocabulary. Only the inline-axis pairs are mapped — block-axis (`top`,
  * `bottom`) does not flip in RTL and is left physical.
  *
- * Later M3 slices add here: multi-value shorthand expansion
- * (`style-value-parser`) and unitless handling.
+ * Multi-value shorthand expansion and unitless handling are layered in by the
+ * adapter/referee pipeline (this codemod does its own value handling — it does
+ * not depend on StyleX's internal value parser).
  */
 
 import type { Atom, FileIR, StyleRule } from './ir';

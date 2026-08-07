@@ -29,7 +29,6 @@
     "hermes-eslint": "0.36.1",
     "jscodeshift": "^17.3.0",
     "postcss": "^8.5.0",
-    "style-value-parser": "0.19.0",
     "yargs": "^17.7.2"
   },
   "devDependencies": {
