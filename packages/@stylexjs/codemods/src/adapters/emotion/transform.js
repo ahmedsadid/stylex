@@ -105,9 +105,24 @@ export function transformEmotionFile(
     return { status: 'unchanged' };
   }
 
-  const { j, root } = parseSource(source, {
-    parser: parserForFile(filename),
-  });
+  // A file that survived the cheap bail (it mentions Emotion) but can't be
+  // parsed — a code-generator template with placeholder syntax (`<%= x %>`),
+  // or genuinely malformed source — is REFUSED, never a crash. This is the
+  // robustness invariant: the transform must return a verdict for every input.
+  let parsed;
+  try {
+    parsed = parseSource(source, { parser: parserForFile(filename) });
+  } catch (error) {
+    return {
+      status: 'skipped',
+      reasons: [
+        `could not parse file (syntax error: ${
+          error instanceof Error ? error.message : String(error)
+        })`,
+      ],
+    };
+  }
+  const { j, root } = parsed;
 
   const wiring = analyzeEmotionWiring(j, root);
   if (

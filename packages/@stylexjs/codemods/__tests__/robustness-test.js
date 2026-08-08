@@ -121,6 +121,19 @@ const CORPUS: Array<{ name: string, filename: string, source: string }> = [
       "const shared = { color: 'red' };\n" +
       'export const C = () => <div css={shared}>x</div>;\n',
   },
+  {
+    // Real case from the elastic/eui corpus: a code-generator template with a
+    // `.ts` extension and `<%= … %>` placeholders. It imports `@emotion/react`,
+    // so it survives the cheap bail, then can't be parsed — must REFUSE, never
+    // throw (the robustness invariant this whole suite exists to hold).
+    name: 'unparseable file that mentions Emotion (code-gen template) is refused, not crashed',
+    filename: 'component.styles.ts',
+    source:
+      "import { css } from '@emotion/react';\n" +
+      'export const <%= cssClassName %>Styles = ({ euiTheme }) => ({\n' +
+      '  root: css`color: ${euiTheme.colors.textPrimary};`,\n' +
+      '});\n',
+  },
 ];
 
 describe.each(CORPUS.map((c) => [c.name, c]))(
