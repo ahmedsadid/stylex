@@ -160,8 +160,9 @@ function activationFact(
           file,
           detail: 'runtime Emotion import does not prove JSX activation',
         },
+        ...projectActivation.provenance,
       ],
-      inputFiles: [file],
+      inputFiles: [file, ...projectActivation.inputFiles],
     });
   }
   if (!hasSyntax) {
@@ -173,8 +174,9 @@ function activationFact(
     value: null,
     provenance: [
       { kind: 'source', file, detail: 'no file-local activation evidence' },
+      ...projectActivation.provenance,
     ],
-    inputFiles: [file],
+    inputFiles: [file, ...projectActivation.inputFiles],
   });
 }
 

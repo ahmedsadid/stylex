@@ -111,4 +111,24 @@ export const Local = () => <div css={{ color: 'blue' }} />;
     expect(app?.classification).toBe('owner-decision');
     expect(local?.classification).toBe('mechanical');
   });
+
+  test('inconclusive activation retains every inspected configuration input', () => {
+    repo = createTempRepo({
+      'package.json': JSON.stringify({ name: 'fixture' }),
+      'src/App.jsx': `import {css} from '@emotion/react';
+export const App = () => <div css={{ color: 'red' }} />;
+`,
+    });
+    const inventory = scanRepository({ repositoryRoot: repo });
+    const activation = inventory.facts.find(
+      (fact) => fact.id === inventory.sites[0].factIds[0],
+    );
+    expect(activation?.status).toBe('inferred');
+    expect(activation?.inputFiles).toEqual(['package.json', 'src/App.jsx']);
+    expect(activation?.provenance).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ kind: 'config', file: 'package.json' }),
+      ]),
+    );
+  });
 });
