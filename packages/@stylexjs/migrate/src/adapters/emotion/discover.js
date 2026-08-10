@@ -248,7 +248,7 @@ function readLiteralDeclarations(
 ):
   | { +ok: true, +declarations: $ReadOnlyArray<Declaration> }
   | { +ok: false, +reason: RefusalReason } {
-  const declarations = [];
+  const declarations: Array<Declaration> = [];
   // JavaScript evaluates every object value, including a value overwritten by
   // a duplicate key. Validate them all before retaining only the winner, or a
   // conversion could silently erase an effectful expression.
@@ -336,7 +336,7 @@ function readAtRuleDeclarations(
 ):
   | { +ok: true, +declarations: $ReadOnlyArray<Declaration> }
   | { +ok: false, +reason: RefusalReason } {
-  const declarations = [];
+  const declarations: Array<Declaration> = [];
   const lastIndexes = lastPropertyIndexes(objectExpression.properties);
   for (let index = 0; index < objectExpression.properties.length; index++) {
     const property = objectExpression.properties[index];

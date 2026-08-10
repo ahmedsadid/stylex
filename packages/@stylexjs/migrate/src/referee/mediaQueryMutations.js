@@ -56,7 +56,9 @@ export const MEDIA_QUERY_MUTATION_MANIFEST: $ReadOnlyArray<MediaQueryMutation> =
     {
       id: 'at-rule-kind-changed',
       field: 'conditionKind',
-      expectedGate: 'observer',
+      // The shared observer now understands supports rules, but the media-only
+      // grammar must still reject changing the at-rule family.
+      expectedGate: 'grammar',
     },
     {
       id: 'style-key-wiring-changed',
