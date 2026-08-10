@@ -73,6 +73,21 @@ describe('the comparison model', () => {
     }
   });
 
+  test('importance is part of declaration identity', () => {
+    const important = parseDeclarations('color:red!important;');
+    const ordinary = parseDeclarations('color:red;');
+    expect(important).toEqual({
+      ok: true,
+      declarations: [{ property: 'color', value: 'red', important: true }],
+    });
+    if (important.ok && ordinary.ok) {
+      expect(
+        compareDeclarations(important.declarations, ordinary.declarations)
+          .equal,
+      ).toBe(false);
+    }
+  });
+
   test('string contents are never canonicalised', () => {
     expect(canonicalValue('"a  b"')).toBe('"a  b"');
     expect(canonicalValue('"a, b"')).toBe('"a, b"');
@@ -129,7 +144,7 @@ describe('the Emotion baseline', () => {
 });
 
 describe('proposing a conversion', () => {
-  test('a correct conversion is claimed static-equivalent, and says what it did not check', () => {
+  test('a correct conversion produces static CSS evidence and says what it did not check', () => {
     const result = proposeStaticConversion({
       source: file("{ color: 'red', fontSize: 12 }"),
       filename: FILENAME,
@@ -138,7 +153,6 @@ describe('proposing a conversion', () => {
     if (result.status !== 'proposed') {
       return;
     }
-    expect(result.claim).toBe('static-equivalent');
     expect(result.model).toBe(COMPARISON_MODEL);
     expect(result.entries[0].classNames.length).toBe(2);
     expect(result.evidence.map((item) => item.check)).toEqual([
@@ -173,6 +187,17 @@ describe('proposing a conversion', () => {
       filename: FILENAME,
     });
     expect(result.status).toBe('proposed');
+  });
+
+  test('important declarations are refused by the flat mechanical lane', () => {
+    const result = proposeStaticConversion({
+      source: file('{ color: "red !important" }'),
+      filename: FILENAME,
+    });
+    expect(result.status).toBe('refused');
+    if (result.status === 'refused') {
+      expect(result.reason).toContain('contains !important');
+    }
   });
 
   test('several sites are each compared on their own', () => {
@@ -258,6 +283,23 @@ describe('mutation testing the checker', () => {
       converted: {
         ...converted,
         code: converted.code.replace('"a;b"', '"a;c"'),
+      },
+    });
+    expect(result.status).toBe('refused');
+  });
+
+  test('removing important with an offset-preserving mutation is caught', () => {
+    const importantSource = `${PRAGMA}const A = () => <div css={{ color: 'red !important' }} />;\n`;
+    const converted = convertSource(importantSource, FILENAME);
+    if (converted.status !== 'converted') {
+      throw new Error('fixture did not convert');
+    }
+    const result = verifyConversion({
+      source: importantSource,
+      filename: FILENAME,
+      converted: {
+        ...converted,
+        code: converted.code.replace('red !important', 'red           '),
       },
     });
     expect(result.status).toBe('refused');

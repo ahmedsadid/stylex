@@ -10,7 +10,7 @@
 import postcss from 'postcss';
 
 /**
- * Comparison model `static-css-v2`.
+ * Comparison model `static-css-v3`.
  *
  * This module decides whether two stylesheets say the same thing. It is
  * comparison-only: it never produces CSS, and neither the Emotion side nor the
@@ -42,16 +42,18 @@ import postcss from 'postcss';
  * one of those would let a real difference through, and the supported subset is
  * drawn so that none of them is needed.
  *
- * The model is versioned because admitting a new construct — or fixing what
- * counts as equal, as this version does — changes the meaning of the claim,
- * and a claim that does not name its model is not a claim.
+ * v3 adds declaration importance to the comparison identity. The model is
+ * versioned because admitting a construct — or fixing what counts as equal —
+ * changes the meaning of the claim, and a claim that does not name its model is
+ * not a claim.
  */
 
-export const COMPARISON_MODEL: string = 'static-css-v2';
+export const COMPARISON_MODEL: string = 'static-css-v3';
 
 export type CssDeclaration = {
   +property: string,
   +value: string,
+  +important?: boolean,
 };
 
 export type ParsedCss =
@@ -179,6 +181,7 @@ function collect(root: $FlowFixMe): ParsedCss {
     declarations.push({
       property: canonicalProperty(String(node.prop)),
       value: canonicalValue(String(node.value)),
+      ...(node.important === true ? { important: true } : {}),
     });
   }
   return { ok: true, declarations };
@@ -221,11 +224,11 @@ export function parseRule(rule: string): ParsedCss {
 
 function toMap(
   declarations: $ReadOnlyArray<CssDeclaration>,
-): Map<string, string> {
-  const map = new Map<string, string>();
+): Map<string, CssDeclaration> {
+  const map = new Map<string, CssDeclaration>();
   for (const declaration of declarations) {
     // A later declaration for the same property wins, as in a stylesheet.
-    map.set(declaration.property, declaration.value);
+    map.set(declaration.property, declaration);
   }
   return map;
 }
@@ -242,8 +245,20 @@ export function compareDeclarations(
 
   const differences = [];
   for (const property of properties) {
-    const sourceValue = sourceMap.get(property) ?? null;
-    const targetValue = targetMap.get(property) ?? null;
+    const sourceDeclaration = sourceMap.get(property) ?? null;
+    const targetDeclaration = targetMap.get(property) ?? null;
+    const sourceValue =
+      sourceDeclaration == null
+        ? null
+        : `${sourceDeclaration.value}${
+            sourceDeclaration.important === true ? ' !important' : ''
+          }`;
+    const targetValue =
+      targetDeclaration == null
+        ? null
+        : `${targetDeclaration.value}${
+            targetDeclaration.important === true ? ' !important' : ''
+          }`;
     if (sourceValue !== targetValue) {
       differences.push({ property, source: sourceValue, target: targetValue });
     }

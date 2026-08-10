@@ -70,20 +70,26 @@ export type {
 
 /**
  * The writer itself is not exported. Reaching the user's files goes through a
- * commit plan, which requires an immutable candidate, evidence bound to that
+ * apply plan, which requires an immutable candidate, evidence bound to that
  * candidate's hash, and an approval naming it. Exposing the low-level writer
  * would make all of that optional.
  */
 export type { WriteIO, WriteResult } from './candidate/write';
 
-export { approve, bundleEvidence, writeCommitPlan } from './kernel/commitPlan';
+export {
+  approve,
+  bundleEvidence,
+  applyPlan,
+  MECHANICAL_COMPARISON_MODEL,
+  MECHANICAL_POLICY_ID,
+} from './kernel/applyPlan';
 export type {
   Approval,
-  CommitPlan,
-  CommitPlanEntry,
-  CommitPlanResult,
+  ApplyPlan,
+  ApplyPlanEntry,
+  ApplyPlanResult,
   EvidenceBundle,
-} from './kernel/commitPlan';
+} from './kernel/applyPlan';
 
 export { parseSource, pluginsForFilename } from './static/parse';
 export type { ParseResult } from './static/parse';

@@ -13,7 +13,7 @@
  * This is the shape of a result and the rule for reading a set of them. It
  * knows nothing about which tools produce evidence — that belongs to the
  * providers, which arrive with the checks themselves. The kernel needs the
- * contract because a commit plan has to decide whether a candidate's evidence
+ * contract because an apply plan has to decide whether a candidate's evidence
  * permits a write, and it must be able to do that without depending on any
  * particular checker existing.
  *
@@ -22,8 +22,8 @@
  */
 
 export type Claim =
-  // Source and generated CSS are equal under a named, versioned model.
-  | 'static-equivalent'
+  // Source and generated CSS matched under a named, versioned model.
+  | 'static-css-matched'
   // The listed commands passed, at the listed versions.
   | 'checks-passed'
   // Named runtime cases matched, for named states, in a recorded environment.
@@ -44,10 +44,12 @@ export type CheckOutcome = 'pass' | 'fail' | 'unavailable' | 'not-applicable';
  * required to contain precisely the code that was checked.
  */
 export type EvidenceSubject = {
+  // Repository-relative path whose source and target bytes were examined.
+  +file: string,
   // Hash of the source the proposal was derived from.
-  +sourceHash: string,
+  +sourceHash: string | null,
   // Hash of the generated code the check ran against.
-  +targetHash: string,
+  +targetHash: string | null,
   // The named comparison model, where one applies.
   +model?: string,
 };

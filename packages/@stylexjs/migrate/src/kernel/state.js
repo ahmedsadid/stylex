@@ -14,7 +14,7 @@
  *
  *   1. Only the kernel advances a candidate. A proposer — deterministic rule or
  *      agent alike — can create a candidate and nothing else. It can never mark
- *      its own work auto-eligible, approved, or committed.
+ *      its own work auto-eligible, approved, or applied.
  *   2. Approval is a human act. No automated actor can produce `approved`.
  */
 
@@ -30,7 +30,7 @@ export type MigrationState =
   | 'auto-eligible'
   | 'approved'
   | 'write-ready'
-  | 'committed'
+  | 'applied'
   | 'stale';
 
 export type Actor = 'kernel' | 'proposer' | 'human';
@@ -52,11 +52,11 @@ const TRANSITIONS: { +[MigrationState]: $ReadOnlyArray<MigrationState> } = {
   'eligible-for-review': ['approved', 'rejected', 'blocked', 'stale'],
   'auto-eligible': ['write-ready', 'rejected', 'blocked', 'stale'],
   approved: ['write-ready', 'stale'],
-  'write-ready': ['committed', 'stale', 'rejected'],
+  'write-ready': ['applied', 'stale', 'rejected'],
   rejected: ['candidate-created'],
   blocked: ['candidate-created'],
   stale: ['planned'],
-  committed: [],
+  applied: [],
 };
 
 const ACTORS_ALLOWED: { +[MigrationState]: $ReadOnlyArray<Actor> } = {

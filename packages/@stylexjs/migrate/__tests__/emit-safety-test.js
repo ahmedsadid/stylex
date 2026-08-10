@@ -232,13 +232,39 @@ const A = () => <div css={{ color: 'red' }} />;
     }
   });
 
-  test('@emotion/react does enable it', () => {
+  test('@emotion/react import alone does not enable it', () => {
     const result = convertSource(
       `import { css } from '@emotion/react';
 const A = () => <div css={{ color: 'red' }} />;
 `,
       'Component.jsx',
     );
-    expect(result.status).toBe('converted');
+    expect(result.status).toBe('unchanged');
+    if (result.status === 'unchanged') {
+      expect(result.reason).toBe('not-emotion');
+    }
+  });
+
+  test('a type-only @emotion/react import never enables it', () => {
+    const result = convertSource(
+      `import type { Theme } from '@emotion/react';
+const A = () => <div css={{ color: 'red' }} />;
+`,
+      'Component.js',
+    );
+    expect(result.status).toBe('unchanged');
+    if (result.status === 'unchanged') {
+      expect(result.reason).toBe('not-emotion');
+    }
+  });
+
+  test('an unrelated comment containing pragma text does not enable it', () => {
+    const result = convertSource(
+      `/** Documentation mentioning @jsxImportSource @emotion/react is not configuration. */
+const A = () => <div css={{ color: 'red' }} />;
+`,
+      'Component.jsx',
+    );
+    expect(result.status).toBe('unchanged');
   });
 });

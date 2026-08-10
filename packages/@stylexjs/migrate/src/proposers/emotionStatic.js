@@ -22,7 +22,7 @@ import {
 import { parseSource } from '../static/parse';
 import { walk } from '../static/walk';
 import { STYLEX_MODULE } from '../static/emit';
-import type { Claim, EvidenceResult } from '../evidence/claims';
+import type { EvidenceResult } from '../evidence/claims';
 import type { EmotionRefusal } from '../adapters/emotion/discover';
 import type { ConvertedOutcome } from '../adapters/emotion/convert';
 
@@ -55,9 +55,8 @@ export type Proposal =
   | {
       +status: 'proposed',
       +code: string,
-      +claim: Claim,
       +model: string,
-      // The exact bytes this claim is about. A candidate built from this
+      // The exact bytes this evidence is about. A candidate built from this
       // proposal must contain `generatedHash`, or the evidence belongs to
       // something else.
       +sourceHash: string,
@@ -241,7 +240,7 @@ export function verifyConversion({
   // be required to contain precisely the code these checks passed on.
   const sourceHash = hashString(source);
   const targetHash = hashString(converted.code);
-  const subject = { sourceHash, targetHash };
+  const subject = { file: filename, sourceHash, targetHash };
 
   // 1. The generated file compiles through StyleX's own compiler.
   const compiled = compileStyleX(converted.code, filename);
@@ -340,6 +339,30 @@ export function verifyConversion({
       };
     }
 
+    if (
+      baseline.declarations.some(
+        (declaration) => declaration.important === true,
+      )
+    ) {
+      const reason =
+        `CSS for ${entry.key} contains !important, which is outside ` +
+        `comparison model ${COMPARISON_MODEL}`;
+      results.push(
+        evidence({
+          check: 'static-css-comparison',
+          provider: 'stylex-migrate',
+          subject: { ...subject, model: COMPARISON_MODEL },
+          scope: [`${filename}#${entry.key}`],
+          result: 'not-applicable',
+          detail: reason,
+          limitations: [
+            '!important is not supported by the flat mechanical lane',
+          ],
+        }),
+      );
+      return { status: 'refused', reason, evidence: results };
+    }
+
     const target = stylexCssForKey({
       importText: structure.structure.importText,
       registryName: converted.registryName,
@@ -412,13 +435,12 @@ export function verifyConversion({
     };
   }
 
-  // Frozen: the claim and the evidence describe these exact bytes, and a
+  // Frozen: the evidence describes these exact bytes, and a
   // proposal whose `code` could be replaced afterwards would carry a
-  // `static-equivalent` claim for something nothing ever checked.
+  // successful result for something nothing ever checked.
   return Object.freeze({
     status: 'proposed',
     code: converted.code,
-    claim: 'static-equivalent',
     model: COMPARISON_MODEL,
     sourceHash,
     generatedHash: targetHash,

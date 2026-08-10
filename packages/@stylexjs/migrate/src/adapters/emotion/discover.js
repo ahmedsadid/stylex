@@ -62,18 +62,21 @@ export type DiscoveryResult = {
   +refusals: $ReadOnlyArray<EmotionRefusal>,
 };
 
-/**
- * Only these modules put Emotion's JSX runtime in play for a `css` prop.
- * `@emotion/styled` alone does not: a file can import it, use it, and still
- * have no Emotion handling for a `css` prop on a host element.
- */
-const CSS_PROP_MODULES: $ReadOnlySet<string> = new Set([
-  '@emotion/react',
-  '@emotion/core',
-]);
-
+// M2 accepts only file-local JSX runtime directives. Imports are ordinary
+// bindings, not proof of how JSX is compiled.
 const JSX_IMPORT_SOURCE_PRAGMA = '@jsxImportSource @emotion/react';
 const CLASSIC_JSX_PRAGMA = '@jsx jsx';
+
+function commentDirectiveLines(value: string): $ReadOnlyArray<string> {
+  return value.split(/\r?\n/).map((line) =>
+    line
+      .trim()
+      // Block comments expose their formatting `*` through Babel's comment
+      // value. It is not part of the directive.
+      .replace(/^\*\s?/, '')
+      .trim(),
+  );
+}
 
 // Emotion accepts `fontSize` and `'font-size'` alike; StyleX takes the
 // camelCase form. Rather than translate between them here — which would be this
@@ -147,24 +150,19 @@ export function usesEmotion(ast: $FlowFixMe): boolean {
   for (const comment of ast.comments ?? []) {
     const value = String(comment.value ?? '');
     if (
-      value.includes(JSX_IMPORT_SOURCE_PRAGMA) ||
-      value.includes(CLASSIC_JSX_PRAGMA)
+      commentDirectiveLines(value).some(
+        (line) =>
+          line === JSX_IMPORT_SOURCE_PRAGMA || line === CLASSIC_JSX_PRAGMA,
+      )
     ) {
       return true;
     }
   }
-  let found = false;
-  walk(ast, (node) => {
-    if (
-      node.type === 'ImportDeclaration' &&
-      node.source != null &&
-      typeof node.source.value === 'string' &&
-      CSS_PROP_MODULES.has(node.source.value)
-    ) {
-      found = true;
-    }
-  });
-  return found;
+  // An import is not JSX-runtime configuration. This is especially clear for
+  // `import type`, but a value import alone also does not establish that the
+  // Emotion Babel transform or JSX runtime handles host-element `css` props.
+  // Project-wide configuration becomes a separate, explicit fact in M4.
+  return false;
 }
 
 function readDeclarations(

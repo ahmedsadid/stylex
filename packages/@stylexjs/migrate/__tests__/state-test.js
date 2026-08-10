@@ -36,7 +36,7 @@ describe('the migration state machine', () => {
   });
 
   test('states cannot be skipped', () => {
-    expect(() => transition('planned', 'committed', 'kernel')).toThrow(
+    expect(() => transition('planned', 'applied', 'kernel')).toThrow(
       'Invalid migration state transition',
     );
     expect(() => transition('candidate-created', 'approved', 'human')).toThrow(
@@ -50,8 +50,8 @@ describe('the migration state machine', () => {
     ).toBe(true);
   });
 
-  test('committed is terminal', () => {
-    expect(isTerminal('committed')).toBe(true);
+  test('applied is terminal', () => {
+    expect(isTerminal('applied')).toBe(true);
     expect(isTerminal('planned')).toBe(false);
   });
 

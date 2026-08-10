@@ -66,11 +66,11 @@ describe('emotion discovery', () => {
     expect(result.usesEmotion).toBe(true);
   });
 
-  test('an import of @emotion/react marks a file as emotion', () => {
+  test('an import of @emotion/react does not prove JSX runtime activation', () => {
     const result = read(
       'import { css } from "@emotion/react";\nexport const App = () => <div />;',
     );
-    expect(result.usesEmotion).toBe(true);
+    expect(result.usesEmotion).toBe(false);
   });
 
   test('reads a flat object literal on a host element', () => {

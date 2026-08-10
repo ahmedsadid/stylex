@@ -19,16 +19,17 @@ Not a codemod. A deterministic control plane that:
 
 ## The claims vocabulary
 
-Every result names exactly one claim. The words _proven_, _safe_, _verified_,
-and _equivalent_ are never used unqualified.
+Every verdict names its exact claim. Evidence does not become a claim until the
+kernel's policy accepts the complete required check set. The words _proven_,
+_safe_, _verified_, and _equivalent_ are never used unqualified.
 
-| Claim               | Meaning                                                                                 |
-| ------------------- | --------------------------------------------------------------------------------------- |
-| `static-equivalent` | Source CSS and generated StyleX CSS are equal under a named, versioned comparison model |
-| `checks-passed`     | The listed parse, compile, type, lint, and test commands passed at the listed versions  |
-| `runtime-matched`   | Named runtime cases matched for named states in a recorded environment                  |
-| `approved`          | A human accepted one specific candidate hash and its stated limitations                 |
-| `blocked`           | The system lacks information, support, or evidence that policy requires                 |
+| Claim                | Meaning                                                                                |
+| -------------------- | -------------------------------------------------------------------------------------- |
+| `static-css-matched` | Source CSS and generated StyleX CSS match under a named, versioned comparison model    |
+| `checks-passed`      | The listed parse, compile, type, lint, and test commands passed at the listed versions |
+| `runtime-matched`    | Named runtime cases matched for named states in a recorded environment                 |
+| `approved`           | A human accepted one specific candidate hash and its stated limitations                |
+| `blocked`            | The system lacks information, support, or evidence that policy requires                |
 
 A check that could not run reports `unavailable`. That never counts as a pass.
 

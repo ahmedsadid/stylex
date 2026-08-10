@@ -38,6 +38,9 @@ export type WorkspaceSnapshot = {
   +dirty: boolean,
   +configHash: string,
   +fileHashes: { +[path: string]: string | null },
+  // Git-relevant file mode at `gitCommit`. Content alone cannot distinguish a
+  // regular source file from an executable one.
+  +fileModes: { +[path: string]: string | null },
 };
 
 export function git(
@@ -126,6 +129,26 @@ function commitHashAt(
   return blob == null ? null : hashBytes(blob);
 }
 
+function commitModeAt(
+  repositoryRoot: string,
+  commit: string,
+  relativePath: string,
+): string | null {
+  const output = gitBufferOrNull(repositoryRoot, [
+    'ls-tree',
+    '-z',
+    commit,
+    '--',
+    relativePath,
+  ]);
+  if (output == null || output.length === 0) {
+    return null;
+  }
+  const header = output.toString('utf8').split('\t', 1)[0];
+  const mode = header.split(' ', 1)[0];
+  return mode === '' ? null : mode;
+}
+
 /**
  * The hash of what is on disk right now, or null when nothing is there.
  *
@@ -153,6 +176,26 @@ function workingTreeHashAt(
   return hashBytes(fs.readFileSync(absolute));
 }
 
+function workingTreeModeAt(
+  repositoryRoot: string,
+  relativePath: string,
+): string | null {
+  const absolute = path.join(repositoryRoot, relativePath);
+  let stats;
+  try {
+    stats = fs.lstatSync(absolute);
+  } catch (error) {
+    return null;
+  }
+  if (stats.isSymbolicLink()) {
+    return '120000';
+  }
+  if (!stats.isFile()) {
+    return 'other';
+  }
+  return (stats.mode & 0o111) !== 0 ? '100755' : '100644';
+}
+
 export function createSnapshot({
   repositoryRoot,
   files,
@@ -165,8 +208,10 @@ export function createSnapshot({
   const root = canonicalRoot(repositoryRoot);
   const gitCommit = gitCommitOf(root);
   const fileHashes: { [path: string]: string | null } = {};
+  const fileModes: { [path: string]: string | null } = {};
   for (const file of files) {
     fileHashes[file] = commitHashAt(root, gitCommit, file);
+    fileModes[file] = commitModeAt(root, gitCommit, file);
   }
   return Object.freeze({
     repositoryRoot: root,
@@ -174,6 +219,7 @@ export function createSnapshot({
     dirty: !isWorktreeClean(root),
     configHash: configHash ?? hashString(''),
     fileHashes: Object.freeze(fileHashes),
+    fileModes: Object.freeze(fileModes),
   });
 }
 
@@ -197,8 +243,16 @@ export function extendSnapshot(
   const fileHashes: { [path: string]: string | null } = {
     ...snapshot.fileHashes,
   };
+  const fileModes: { [path: string]: string | null } = {
+    ...snapshot.fileModes,
+  };
   for (const file of missing) {
     fileHashes[file] = commitHashAt(
+      snapshot.repositoryRoot,
+      snapshot.gitCommit,
+      file,
+    );
+    fileModes[file] = commitModeAt(
       snapshot.repositoryRoot,
       snapshot.gitCommit,
       file,
@@ -207,6 +261,7 @@ export function extendSnapshot(
   return Object.freeze({
     ...snapshot,
     fileHashes: Object.freeze(fileHashes),
+    fileModes: Object.freeze(fileModes),
   });
 }
 
@@ -218,7 +273,11 @@ export function snapshotHash(snapshot: WorkspaceSnapshot): string {
     snapshot.configHash,
   ];
   for (const file of paths) {
-    fields.push(file, snapshot.fileHashes[file] ?? 'absent');
+    fields.push(
+      file,
+      snapshot.fileModes[file] ?? 'absent',
+      snapshot.fileHashes[file] ?? 'absent',
+    );
   }
   return hashFields(fields);
 }
@@ -235,7 +294,9 @@ export function detectStaleFiles(
   for (const file of Object.keys(snapshot.fileHashes).sort()) {
     const recorded = snapshot.fileHashes[file];
     const current = workingTreeHashAt(snapshot.repositoryRoot, file);
-    if (recorded !== current) {
+    const recordedMode = snapshot.fileModes[file];
+    const currentMode = workingTreeModeAt(snapshot.repositoryRoot, file);
+    if (recorded !== current || recordedMode !== currentMode) {
       stale.push(file);
     }
   }

@@ -199,7 +199,8 @@ export function createCandidatePatch({
   // Repository-relative path to the content hash a verified proposal produced.
   // Supplying it closes the gap between "these bytes were checked" and "these
   // bytes are staged": without it, a candidate can carry evidence for code that
-  // is not the code in the workspace.
+  // is not the code in the workspace. It is mandatory and exact for a
+  // deterministic proposer; agent and human candidates use the approval lane.
   +expectedContent?: { +[path: string]: string },
 }): CandidateResult {
   if (workspace.repositoryRoot !== snapshot.repositoryRoot) {
@@ -217,6 +218,15 @@ export function createCandidatePatch({
       reason:
         `the candidate workspace is based on ${workspace.baseCommit} but the ` +
         `snapshot records ${snapshot.gitCommit}`,
+      paths: [],
+    };
+  }
+  if (proposer.kind === 'deterministic' && expectedContent == null) {
+    return {
+      ok: false,
+      reason:
+        'a deterministic candidate must name the exact content hashes its ' +
+        'proposal produced',
       paths: [],
     };
   }
@@ -279,6 +289,15 @@ export function createCandidatePatch({
       };
     }
     const content = bytes.toString('utf8');
+    if (!Buffer.from(content, 'utf8').equals(bytes)) {
+      return {
+        ok: false,
+        reason:
+          `${change.path} is not valid UTF-8. The candidate boundary cannot ` +
+          'round-trip its bytes exactly, so it must be migrated separately.',
+        paths: [change.path],
+      };
+    }
     changes.push(
       Object.freeze({
         path: change.path,
@@ -291,6 +310,7 @@ export function createCandidatePatch({
   }
 
   if (expectedContent != null) {
+    const expectedPaths = new Set(Object.keys(expectedContent));
     const byPath = new Map(
       changes.map((change) => [change.path, change.contentHash]),
     );
@@ -313,6 +333,17 @@ export function createCandidatePatch({
         };
       }
     }
+    for (const change of changes) {
+      if (!expectedPaths.has(change.path)) {
+        return {
+          ok: false,
+          reason:
+            `${change.path} is an extra candidate change that the verified ` +
+            'proposal did not produce',
+          paths: [change.path],
+        };
+      }
+    }
   }
 
   const touchedFiles = changes.map((change) => change.path);
@@ -329,7 +360,9 @@ export function createCandidatePatch({
   );
 
   const candidate: CandidatePatch = Object.freeze({
-    id: shortHash(hashFields([baseSnapshotHash, patchHash])),
+    id: shortHash(
+      hashFields([baseSnapshotHash, patchHash, ...decisionArtifactHashes]),
+    ),
     clusterIds: Object.freeze([...clusterIds]),
     baseSnapshotHash,
     baseCommit: workspace.baseCommit,
@@ -356,4 +389,56 @@ export function changedPaths(
 
 export function isEmpty(candidate: CandidatePatch): boolean {
   return candidate.changes.length === 0;
+}
+
+/** Recompute every content-addressed field before evidence or writing. */
+export function validateCandidatePatch(
+  candidate: CandidatePatch,
+  snapshot: WorkspaceSnapshot,
+): string | null {
+  const expectedSnapshotHash = snapshotHash(snapshot);
+  if (candidate.baseSnapshotHash !== expectedSnapshotHash) {
+    return 'candidate is not bound to the supplied snapshot';
+  }
+  if (candidate.repositoryRoot !== snapshot.repositoryRoot) {
+    return 'candidate and snapshot describe different repositories';
+  }
+  if (candidate.baseCommit !== snapshot.gitCommit) {
+    return 'candidate and snapshot describe different base commits';
+  }
+  for (const change of candidate.changes) {
+    const contentHash =
+      change.content == null ? null : hashString(change.content);
+    if (contentHash !== change.contentHash) {
+      return `candidate content hash does not match ${change.path}`;
+    }
+  }
+  const patchHash = hashFields(
+    candidate.changes.flatMap((change) => [
+      change.status,
+      change.mode,
+      change.path,
+      change.contentHash ?? 'deleted',
+    ]),
+  );
+  if (patchHash !== candidate.patchHash) {
+    return 'candidate patch hash does not match its changes';
+  }
+  const touchedFiles = candidate.changes.map((change) => change.path);
+  if (
+    touchedFiles.length !== candidate.touchedFiles.length ||
+    touchedFiles.some((file, index) => file !== candidate.touchedFiles[index])
+  ) {
+    return 'candidate touched-file list does not match its changes';
+  }
+  const id = shortHash(
+    hashFields([
+      candidate.baseSnapshotHash,
+      patchHash,
+      ...candidate.decisionArtifactHashes,
+    ]),
+  );
+  return id === candidate.id
+    ? null
+    : 'candidate id does not match its contents';
 }

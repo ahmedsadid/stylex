@@ -18,9 +18,10 @@ import {
   createSnapshot,
   hashString,
   makeEvidence,
+  proposeStaticConversion,
   removeCandidateWorkspace,
   transition,
-  writeCommitPlan,
+  applyPlan,
 } from '../src/index';
 import { writeCandidate } from '../src/candidate/write';
 import type {
@@ -46,18 +47,35 @@ const INITIAL: { +[path: string]: string } = {
   'README.md': '# project\n',
 };
 
-const SUBJECT = { sourceHash: 'source-hash', targetHash: 'target-hash' };
-
-const PASSING_EVIDENCE = [
-  makeEvidence({
-    check: 'test-only',
-    provider: 'stylex-migrate',
-    providerVersion: 'test',
-    subject: SUBJECT,
-    scope: ['test'],
-    result: 'pass',
-  }),
-];
+function passingEvidence(
+  candidate: CandidatePatch,
+  snapshot: WorkspaceSnapshot,
+) {
+  const change = candidate.changes[0];
+  const subject = {
+    file: change.path,
+    sourceHash: snapshot.fileHashes[change.path] ?? null,
+    targetHash: change.contentHash,
+  };
+  return [
+    ['stylex-plugin-transform', '@stylexjs/babel-plugin'],
+    ['stylex-lint', '@stylexjs/eslint-plugin'],
+    ['binding-integrity', 'stylex-migrate'],
+    ['static-css-comparison', 'stylex-migrate'],
+  ].map(([check, provider]) =>
+    makeEvidence({
+      check,
+      provider,
+      providerVersion: 'test',
+      subject:
+        check === 'static-css-comparison'
+          ? { ...subject, model: 'static-css-v3' }
+          : subject,
+      scope: [change.path],
+      result: 'pass',
+    }),
+  );
+}
 
 describe('the candidate boundary', () => {
   let repo: string;
@@ -159,8 +177,8 @@ describe('the candidate boundary', () => {
 
     expect(write(candidate, snapshot).status).toBe('written');
 
-    state = transition(state, 'committed', 'kernel');
-    expect(state).toBe('committed');
+    state = transition(state, 'applied', 'kernel');
+    expect(state).toBe('applied');
     expect(readFile(repo, 'src/Button.js')).toBe(INITIAL['src/Button.js']);
   });
 
@@ -341,7 +359,7 @@ describe('the candidate boundary', () => {
     });
 
     expect(() => write(candidate, unrelated)).toThrow(
-      'not bound to the given snapshot',
+      'not bound to the supplied snapshot',
     );
   });
 
@@ -364,6 +382,28 @@ describe('the candidate boundary', () => {
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.reason).toContain('binary file');
+    }
+  });
+
+  test('invalid UTF-8 without a NUL byte is refused', () => {
+    const workspace = openWorkspace(['src/**']);
+    fs.writeFileSync(
+      path.join(workspace.path, 'src/invalid.js'),
+      Buffer.from([0x66, 0x6f, 0x80, 0x6f]),
+    );
+
+    const snapshot = createSnapshot({
+      repositoryRoot: repo,
+      files: ['src/Button.js'],
+    });
+    const result = createCandidatePatch({
+      workspace,
+      snapshot,
+      proposer: PROPOSER,
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.reason).toContain('not valid UTF-8');
     }
   });
 
@@ -523,6 +563,41 @@ describe('the candidate boundary', () => {
         0o640,
       );
     });
+
+    test('changing the executable bit after verification makes the candidate stale', () => {
+      const workspace = openWorkspace(['src/**']);
+      writeFiles(workspace.path, {
+        'src/Button.js': 'export const Button = 42;\n',
+      });
+      const { candidate, snapshot } = propose(workspace, ['src/Button.js']);
+
+      fs.chmodSync(path.join(repo, 'src/Button.js'), 0o755);
+
+      const result = write(candidate, snapshot);
+      expect(result.status).toBe('stale');
+      if (result.status === 'stale') {
+        expect(result.staleFiles).toEqual(['src/Button.js']);
+      }
+    });
+
+    test('a symlinked destination parent cannot redirect a write outside the repository', () => {
+      const workspace = openWorkspace(['src/**']);
+      writeFiles(workspace.path, {
+        'src/generated/New.js': 'export const New = 1;\n',
+      });
+      const { candidate, snapshot } = propose(workspace, ['src/Button.js']);
+      const outside = createTempDir('stylex-migrate-outside-');
+      try {
+        fs.symlinkSync(outside, path.join(repo, 'src/generated'));
+        expect(() => write(candidate, snapshot)).toThrow(
+          'symbolic-link parent',
+        );
+        expect(fs.existsSync(path.join(outside, 'New.js'))).toBe(false);
+      } finally {
+        fs.rmSync(path.join(repo, 'src/generated'), { force: true });
+        removeTempDir(outside);
+      }
+    });
   });
 
   /**
@@ -531,6 +606,26 @@ describe('the candidate boundary', () => {
    * contain the content that was checked.
    */
   describe('binding a verified proposal to a candidate', () => {
+    test('a deterministic candidate cannot omit the proposal hashes', () => {
+      const workspace = openWorkspace(['src/**']);
+      writeFiles(workspace.path, {
+        'src/Button.js': 'export const Button = 42;\n',
+      });
+      const snapshot = createSnapshot({
+        repositoryRoot: repo,
+        files: ['src/Button.js'],
+      });
+      const result = createCandidatePatch({
+        workspace,
+        snapshot,
+        proposer: { kind: 'deterministic', version: 'test-1' },
+      });
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.reason).toContain('must name the exact content hashes');
+      }
+    });
+
     test('a candidate whose content matches the proposal is accepted', () => {
       const workspace = openWorkspace(['src/**']);
       const verified = 'export const Button = 42;\n';
@@ -594,9 +689,33 @@ describe('the candidate boundary', () => {
         expect(result.reason).toContain('but the candidate does not');
       }
     });
+
+    test('an extra allowlisted edit that the proposal did not produce is refused', () => {
+      const workspace = openWorkspace(['src/**']);
+      const verified = 'export const Button = 42;\n';
+      writeFiles(workspace.path, {
+        'src/Button.js': verified,
+        'src/Card.js': 'export const Card = 43;\n',
+      });
+      const snapshot = createSnapshot({
+        repositoryRoot: repo,
+        files: ['src/Button.js', 'src/Card.js'],
+      });
+      const result = createCandidatePatch({
+        workspace,
+        snapshot,
+        proposer: { kind: 'deterministic', version: 'test-1' },
+        expectedContent: { 'src/Button.js': hashString(verified) },
+      });
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.reason).toContain('extra candidate change');
+        expect(result.paths).toEqual(['src/Card.js']);
+      }
+    });
   });
 
-  describe('the commit plan', () => {
+  describe('the apply plan', () => {
     // The value distinguishes otherwise identical plans. Two candidates built
     // from the same bytes on the same base are the same candidate and share an
     // id, which is the point of content addressing — so a test about mismatched
@@ -613,40 +732,126 @@ describe('the candidate boundary', () => {
       return { candidate, snapshot, scopeRules: { allowedPaths } };
     }
 
-    test('an approved candidate with passing evidence is committed', () => {
+    test('real M2 evidence makes a mechanical candidate auto-eligible for an explicit write', () => {
+      const source = `/** @jsxImportSource @emotion/react */
+export const Button = () => <button css={{ color: 'red' }} />;
+`;
+      writeFiles(repo, { 'src/Button.js': source });
+      execFileSync('git', ['add', '-A'], { cwd: repo });
+      execFileSync(
+        'git',
+        ['commit', '--quiet', '--no-verify', '-m', 'emotion source'],
+        { cwd: repo },
+      );
+
+      const proposal = proposeStaticConversion({
+        source,
+        filename: 'src/Button.js',
+      });
+      if (proposal.status !== 'proposed') {
+        throw new Error(`expected a proposal, got ${proposal.status}`);
+      }
+      const workspace = openWorkspace(['src/**']);
+      writeFiles(workspace.path, { 'src/Button.js': proposal.code });
+      const snapshot = createSnapshot({
+        repositoryRoot: repo,
+        files: ['src/Button.js'],
+      });
+      const built = createCandidatePatch({
+        workspace,
+        snapshot,
+        proposer: { kind: 'deterministic', version: 'm2-test' },
+        expectedContent: { 'src/Button.js': proposal.generatedHash },
+      });
+      if (!built.ok) {
+        throw new Error(`candidate failed: ${built.reason}`);
+      }
+      const evidence = bundleEvidence(
+        built.candidate,
+        built.snapshot,
+        proposal.evidence,
+      );
+      const result = applyPlan(
+        {
+          entries: [
+            {
+              candidate: built.candidate,
+              snapshot: built.snapshot,
+              evidence,
+              scopeRules: { allowedPaths: ['src/**'] },
+            },
+          ],
+        },
+        { recoveryRoot },
+      );
+
+      expect(result.status).toBe('applied');
+      expect(readFile(repo, 'src/Button.js')).toBe(proposal.code);
+    });
+
+    test('an approved candidate with passing evidence is applied', () => {
       const { candidate, snapshot, scopeRules } = planFor();
-      const result = writeCommitPlan(
+      const evidence = bundleEvidence(
+        candidate,
+        snapshot,
+        passingEvidence(candidate, snapshot),
+      );
+      const result = applyPlan(
         {
           entries: [
             {
               candidate,
               snapshot,
               scopeRules,
-              evidence: bundleEvidence(candidate, PASSING_EVIDENCE),
-              approval: approve({ candidate, approvedBy: 'tester' }),
+              evidence,
+              approval: approve({ candidate, evidence, approvedBy: 'tester' }),
             },
           ],
         },
         { recoveryRoot },
       );
-      expect(result.status).toBe('committed');
+      expect(result.status).toBe('applied');
       expect(readFile(repo, 'src/Button.js')).toBe(
         'export const Button = 42;\n',
       );
+    });
+
+    test('a non-deterministic candidate cannot apply without approval', () => {
+      const { candidate, snapshot, scopeRules } = planFor();
+      const evidence = bundleEvidence(
+        candidate,
+        snapshot,
+        passingEvidence(candidate, snapshot),
+      );
+      const result = applyPlan(
+        { entries: [{ candidate, snapshot, scopeRules, evidence }] },
+        { recoveryRoot },
+      );
+      expect(result.status).toBe('rejected');
+      if (result.status === 'rejected') {
+        expect(result.reason).toContain('requires approval');
+      }
+      expect(readFile(repo, 'src/Button.js')).toBe(INITIAL['src/Button.js']);
     });
 
     test('evidence belonging to another candidate is rejected', () => {
       const first = planFor(42);
       const second = planFor(43);
       expect(second.candidate.id).not.toBe(first.candidate.id);
-      const result = writeCommitPlan(
+      const evidence = bundleEvidence(
+        second.candidate,
+        second.snapshot,
+        passingEvidence(second.candidate, second.snapshot),
+      );
+      const result = applyPlan(
         {
           entries: [
             {
               ...first,
-              evidence: bundleEvidence(second.candidate, PASSING_EVIDENCE),
+              evidence,
               approval: approve({
                 candidate: first.candidate,
+                evidence,
                 approvedBy: 'tester',
               }),
             },
@@ -665,14 +870,20 @@ describe('the candidate boundary', () => {
       const first = planFor(42);
       const second = planFor(43);
       expect(second.candidate.id).not.toBe(first.candidate.id);
-      const result = writeCommitPlan(
+      const evidence = bundleEvidence(
+        first.candidate,
+        first.snapshot,
+        passingEvidence(first.candidate, first.snapshot),
+      );
+      const result = applyPlan(
         {
           entries: [
             {
               ...first,
-              evidence: bundleEvidence(first.candidate, PASSING_EVIDENCE),
+              evidence,
               approval: approve({
                 candidate: second.candidate,
+                evidence,
                 approvedBy: 'tester',
               }),
             },
@@ -689,25 +900,31 @@ describe('the candidate boundary', () => {
 
     test('failing evidence is rejected before anything is written', () => {
       const { candidate, snapshot, scopeRules } = planFor();
+      const change = candidate.changes[0];
       const failing = [
         makeEvidence({
-          check: 'test-only',
+          check: 'stylex-plugin-transform',
           provider: 'stylex-migrate',
           providerVersion: 'test',
-          subject: SUBJECT,
-          scope: ['test'],
+          subject: {
+            file: change.path,
+            sourceHash: snapshot.fileHashes[change.path] ?? null,
+            targetHash: change.contentHash,
+          },
+          scope: [change.path],
           result: 'fail',
         }),
       ];
-      const result = writeCommitPlan(
+      const evidence = bundleEvidence(candidate, snapshot, failing);
+      const result = applyPlan(
         {
           entries: [
             {
               candidate,
               snapshot,
               scopeRules,
-              evidence: bundleEvidence(candidate, failing),
-              approval: approve({ candidate, approvedBy: 'tester' }),
+              evidence,
+              approval: approve({ candidate, evidence, approvedBy: 'tester' }),
             },
           ],
         },
@@ -719,15 +936,16 @@ describe('the candidate boundary', () => {
 
     test('a candidate with no evidence at all is rejected', () => {
       const { candidate, snapshot, scopeRules } = planFor();
-      const result = writeCommitPlan(
+      const evidence = bundleEvidence(candidate, snapshot, []);
+      const result = applyPlan(
         {
           entries: [
             {
               candidate,
               snapshot,
               scopeRules,
-              evidence: bundleEvidence(candidate, []),
-              approval: approve({ candidate, approvedBy: 'tester' }),
+              evidence,
+              approval: approve({ candidate, evidence, approvedBy: 'tester' }),
             },
           ],
         },
@@ -739,19 +957,79 @@ describe('the candidate boundary', () => {
       }
     });
 
+    test('passing evidence with the wrong target hash is rejected', () => {
+      const { candidate, snapshot, scopeRules } = planFor();
+      const results = passingEvidence(candidate, snapshot);
+      const wrong = results.map((result, index) =>
+        index === 0
+          ? makeEvidence({
+              ...result,
+              subject: { ...result.subject, targetHash: 'wrong-target' },
+            })
+          : result,
+      );
+      const evidence = bundleEvidence(candidate, snapshot, wrong);
+      const result = applyPlan(
+        { entries: [{ candidate, snapshot, scopeRules, evidence }] },
+        { recoveryRoot },
+      );
+      expect(result.status).toBe('rejected');
+      if (result.status === 'rejected') {
+        expect(result.reason).toContain('wrong target hash');
+      }
+      expect(readFile(repo, 'src/Button.js')).toBe(INITIAL['src/Button.js']);
+    });
+
+    test('an arbitrary passing check cannot replace the required policy', () => {
+      const { candidate, snapshot, scopeRules } = planFor();
+      const change = candidate.changes[0];
+      const arbitrary = [
+        makeEvidence({
+          check: 'looks-good-to-me',
+          provider: 'stylex-migrate',
+          providerVersion: 'test',
+          subject: {
+            file: change.path,
+            sourceHash: snapshot.fileHashes[change.path] ?? null,
+            targetHash: change.contentHash,
+          },
+          scope: [change.path],
+          result: 'pass',
+        }),
+      ];
+      const evidence = bundleEvidence(candidate, snapshot, arbitrary);
+      const result = applyPlan(
+        { entries: [{ candidate, snapshot, scopeRules, evidence }] },
+        { recoveryRoot },
+      );
+      expect(result.status).toBe('rejected');
+      if (result.status === 'rejected') {
+        expect(result.reason).toContain('missing required check');
+      }
+    });
+
     test('two candidates changing the same file are rejected as a conflict', () => {
       const first = planFor(42);
       const second = planFor(43);
-      const result = writeCommitPlan(
+      const entries = [first, second].map((entry) => {
+        const evidence = bundleEvidence(
+          entry.candidate,
+          entry.snapshot,
+          passingEvidence(entry.candidate, entry.snapshot),
+        );
+        return {
+          ...entry,
+          evidence,
+          approval: approve({
+            candidate: entry.candidate,
+            evidence,
+            approvedBy: 'tester',
+          }),
+        };
+      });
+      const result = applyPlan(
         {
-          entries: [first, second].map((entry) => ({
-            ...entry,
-            evidence: bundleEvidence(entry.candidate, PASSING_EVIDENCE),
-            approval: approve({
-              candidate: entry.candidate,
-              approvedBy: 'tester',
-            }),
-          })),
+          entries,
         },
         { recoveryRoot },
       );

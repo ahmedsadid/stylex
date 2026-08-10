@@ -10,13 +10,14 @@
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
+import crypto from 'crypto';
 import {
   canonicalRoot,
   detectMovedHead,
   detectStaleFiles,
   snapshotHash,
 } from '../kernel/snapshot';
-import { changedPaths } from './patch';
+import { changedPaths, validateCandidatePatch } from './patch';
 import { validateScope } from './scope';
 import type { WorkspaceSnapshot } from '../kernel/snapshot';
 import type { CandidatePatch } from './patch';
@@ -27,8 +28,8 @@ import type { ScopeRules, ScopeViolation } from './scope';
  *
  * This is the only code in the kit that modifies the user's files, and it is
  * deliberately not part of the package's public surface: reaching it goes
- * through a commit plan, so that state, evidence and approval are checked
- * rather than assumed. See `kernel/commitPlan.js`.
+ * through an apply plan, so that state, evidence and approval are checked
+ * rather than assumed. See `kernel/applyPlan.js`.
  *
  * The destination is taken from the snapshot rather than accepted as an
  * argument. A separately supplied root would let a candidate verified against
@@ -41,7 +42,11 @@ import type { ScopeRules, ScopeViolation } from './scope';
  */
 
 export type WriteIO = {
-  +writeFileSync: (file: string, data: string) => void,
+  +writeFileSync: (
+    file: string,
+    data: string,
+    options?: { +flag?: string },
+  ) => void,
   +renameSync: (from: string, to: string) => void,
 };
 
@@ -72,16 +77,17 @@ export type WriteResult =
       +recoveryPath: string,
     };
 
-const TEMP_SUFFIX = '.stylex-migrate-tmp';
-
 const MODE_BITS: { +[string]: number } = {
   '100644': 0o644,
   '100755': 0o755,
 };
 
 export const defaultWriteIO: WriteIO = Object.freeze({
-  writeFileSync: (file: string, data: string) => {
-    fs.writeFileSync(file, data, 'utf8');
+  writeFileSync: (file: string, data: string, options) => {
+    fs.writeFileSync(file, data, {
+      encoding: 'utf8',
+      flag: options?.flag ?? 'w',
+    });
   },
   renameSync: (from: string, to: string) => {
     fs.renameSync(from, to);
@@ -96,6 +102,105 @@ function assertSafeRelativePath(filePath: string): void {
   if (normalized === '..' || normalized.startsWith(`..${path.sep}`)) {
     throw new Error(`Candidate path escapes the repository: ${filePath}`);
   }
+}
+
+function isInside(repositoryRoot: string, candidatePath: string): boolean {
+  const relative = path.relative(repositoryRoot, candidatePath);
+  return (
+    relative === '' ||
+    (!path.isAbsolute(relative) &&
+      relative !== '..' &&
+      !relative.startsWith(`..${path.sep}`))
+  );
+}
+
+/**
+ * Refuse destinations whose existing path components can redirect a write.
+ * Lexical `..` checks are not enough: `src/generated -> /tmp/outside` still
+ * looks repository-relative while ordinary filesystem calls follow it.
+ */
+function assertSafeDestination(
+  repositoryRoot: string,
+  relativePath: string,
+): void {
+  assertSafeRelativePath(relativePath);
+  const absolute = path.join(repositoryRoot, relativePath);
+  const parent = path.dirname(absolute);
+  let current = repositoryRoot;
+  const parentRelative = path.relative(repositoryRoot, parent);
+  for (const component of parentRelative.split(path.sep)) {
+    if (component === '') {
+      continue;
+    }
+    current = path.join(current, component);
+    try {
+      const stats = fs.lstatSync(current);
+      if (stats.isSymbolicLink()) {
+        throw new Error(
+          `Candidate path has a symbolic-link parent: ${relativePath}`,
+        );
+      }
+      if (!stats.isDirectory()) {
+        throw new Error(
+          `Candidate path has a non-directory parent: ${relativePath}`,
+        );
+      }
+    } catch (error) {
+      if (
+        error != null &&
+        typeof error === 'object' &&
+        'code' in error &&
+        error.code === 'ENOENT'
+      ) {
+        // The remaining components will be created below a validated ancestor.
+        break;
+      }
+      throw error;
+    }
+  }
+
+  try {
+    if (fs.lstatSync(absolute).isSymbolicLink()) {
+      throw new Error(
+        `Candidate destination is a symbolic link: ${relativePath}`,
+      );
+    }
+  } catch (error) {
+    if (
+      error == null ||
+      typeof error !== 'object' ||
+      !('code' in error) ||
+      error.code !== 'ENOENT'
+    ) {
+      throw error;
+    }
+  }
+
+  if (fs.existsSync(parent)) {
+    const resolvedParent = fs.realpathSync(parent);
+    if (!isInside(repositoryRoot, resolvedParent)) {
+      throw new Error(
+        `Candidate destination resolves outside the repository: ${relativePath}`,
+      );
+    }
+  }
+}
+
+function temporaryPathFor(absolute: string): string {
+  return path.join(
+    path.dirname(absolute),
+    `.${path.basename(absolute)}.stylex-migrate-${crypto
+      .randomBytes(12)
+      .toString('hex')}`,
+  );
+}
+
+function resultingMode(existing: number | null, candidateMode: string): number {
+  if (existing == null) {
+    return MODE_BITS[candidateMode] ?? 0o644;
+  }
+  const executable = candidateMode === '100755' ? 0o111 : 0;
+  return (existing & ~0o111) | executable;
 }
 
 function existingMode(absolute: string): number | null {
@@ -197,6 +302,12 @@ export function writeCandidate({
   +io?: WriteIO,
   +recoveryRoot?: string,
 }): WriteResult {
+  const candidateProblem = validateCandidatePatch(candidate, snapshot);
+  if (candidateProblem != null) {
+    throw new Error(
+      `Candidate ${candidate.id} is invalid: ${candidateProblem}`,
+    );
+  }
   if (snapshotHash(snapshot) !== candidate.baseSnapshotHash) {
     throw new Error(
       `Candidate ${candidate.id} is not bound to the given snapshot. ` +
@@ -212,7 +323,7 @@ export function writeCandidate({
   }
   const repositoryRoot = canonicalRoot(snapshot.repositoryRoot);
   for (const change of candidate.changes) {
-    assertSafeRelativePath(change.path);
+    assertSafeDestination(repositoryRoot, change.path);
   }
 
   const scope = validateScope(changedPaths(candidate), scopeRules);
@@ -251,14 +362,18 @@ export function writeCandidate({
         continue;
       }
       const absolute = path.join(repositoryRoot, change.path);
-      const temporary = `${absolute}${TEMP_SUFFIX}`;
+      const temporary = temporaryPathFor(absolute);
+      assertSafeDestination(repositoryRoot, change.path);
       fs.mkdirSync(path.dirname(absolute), { recursive: true });
+      // Validate again after creating missing parents. A symlink introduced in
+      // an absent component must not turn the temporary write into an escape.
+      assertSafeDestination(repositoryRoot, change.path);
       temporaries.push(temporary);
-      io.writeFileSync(temporary, change.content ?? '');
+      io.writeFileSync(temporary, change.content ?? '', { flag: 'wx' });
       // An existing file keeps the permissions it already had; a new one takes
       // the mode git recorded for it. Either way the result matches the
       // candidate that was checked.
-      const mode = modes.get(change.path) ?? MODE_BITS[change.mode] ?? 0o644;
+      const mode = resultingMode(modes.get(change.path) ?? null, change.mode);
       fs.chmodSync(temporary, mode);
       io.renameSync(temporary, absolute);
       temporaries.pop();
@@ -268,6 +383,7 @@ export function writeCandidate({
       if (change.status !== 'deleted') {
         continue;
       }
+      assertSafeDestination(repositoryRoot, change.path);
       fs.rmSync(path.join(repositoryRoot, change.path), { force: true });
       written.push(change.path);
     }
