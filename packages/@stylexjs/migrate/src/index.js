@@ -118,6 +118,8 @@ export type {
 export { evidence, packageVersion } from './evidence/claims';
 
 export { compileStyleX } from './evidence/compile';
+export { describeLintMessages, lintStyleX } from './evidence/lint';
+export type { LintMessage, LintResult } from './evidence/lint';
 export { stylexCssForKey } from './evidence/staticCss';
 
 export { emotionBaseline } from './adapters/emotion/baseline';

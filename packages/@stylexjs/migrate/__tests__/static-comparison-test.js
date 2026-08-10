@@ -105,6 +105,7 @@ describe('proposing a conversion', () => {
     expect(result.entries[0].classNames.length).toBe(2);
     expect(result.evidence.map((item) => item.check)).toEqual([
       'stylex-compile',
+      'stylex-lint',
       'binding-integrity',
       'static-css-comparison',
     ]);
@@ -225,6 +226,15 @@ describe('mutation testing the checker', () => {
     [
       'a site pointed at the wrong style key',
       (code) => code.replace('styles.div)', 'styles.span)'),
+    ],
+    [
+      // The CSS is identical either way, so only the lint gate can catch this.
+      'style keys emitted out of the order StyleX wants',
+      (code) =>
+        code.replace(
+          "    color: 'red',\n    fontSize: 12,",
+          "    fontSize: 12,\n    color: 'red',",
+        ),
     ],
     [
       'a site pointed at a registry that does not exist',

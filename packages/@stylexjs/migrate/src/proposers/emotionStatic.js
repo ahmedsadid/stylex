@@ -10,6 +10,7 @@
 import { convertSource } from '../adapters/emotion/convert';
 import { emotionBaseline } from '../adapters/emotion/baseline';
 import { compileStyleX } from '../evidence/compile';
+import { describeLintMessages, lintStyleX } from '../evidence/lint';
 import { stylexCssForKey } from '../evidence/staticCss';
 import { allPassed, evidence, packageVersion } from '../evidence/claims';
 import {
@@ -41,6 +42,7 @@ import type { ConvertedOutcome } from '../adapters/emotion/convert';
 
 const STYLEX_PROVIDER = '@stylexjs/babel-plugin';
 const EMOTION_PROVIDER = '@emotion/serialize';
+const STYLEX_LINT_PROVIDER = '@stylexjs/eslint-plugin';
 
 export type ProposedEntry = {
   +key: string,
@@ -210,7 +212,30 @@ export function verifyConversion({
     return { status: 'refused', reason: compiled.reason, evidence: results };
   }
 
-  // 2. The generated file wires its own pieces together.
+  // 2. The generated styles are in the form StyleX's own rules expect, with no
+  //    autofix left over.
+  const linted = lintStyleX(converted.code, filename);
+  results.push(
+    evidence({
+      check: 'stylex-lint',
+      provider: STYLEX_LINT_PROVIDER,
+      scope,
+      result: linted.ok ? 'pass' : 'fail',
+      ...(linted.ok ? {} : { detail: describeLintMessages(linted.messages) }),
+      limitations: [
+        'only @stylexjs rules were run; the repository lint setup was not',
+      ],
+    }),
+  );
+  if (!linted.ok) {
+    return {
+      status: 'refused',
+      reason: `StyleX lint rejected the output: ${describeLintMessages(linted.messages)}`,
+      evidence: results,
+    };
+  }
+
+  // 3. The generated file wires its own pieces together.
   const structure = readStructure(
     converted.code,
     filename,
@@ -231,7 +256,7 @@ export function verifyConversion({
     return { status: 'refused', reason: structure.reason, evidence: results };
   }
 
-  // 3. Per site: Emotion's CSS for the original object against StyleX's CSS
+  // 4. Per site: Emotion's CSS for the original object against StyleX's CSS
   //    for what replaced it.
   const entries: Array<ProposedEntry> = [];
   for (const entry of converted.entries) {
