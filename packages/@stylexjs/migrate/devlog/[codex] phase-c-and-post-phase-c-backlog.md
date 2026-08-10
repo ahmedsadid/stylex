@@ -24,13 +24,11 @@ manifest, policy version, end-to-end candidate test, and exit review.
       comparison.
 - [x] Flat `::before` and `::after` selector targets.
 - [x] One exact `@media` query per style object.
+- [x] One exact `@supports` query with at most one exact `@media` intersection,
+      authored in either wrapper order and bounded to two at-rule levels.
 
 ## Required before Phase C closes
 
-- [ ] Supports queries and bounded nesting.
-  - Define the independently comparable `@supports` grammar.
-  - Define the maximum nesting depth and allowed modifier combinations.
-  - Refuse unknown at-rules and rewritten conditions the model cannot compare.
 - [ ] Keyframes with generated-name alpha-renaming.
   - Compare frame selectors, declaration meaning, and animation references while
     ignoring generated identifier spelling only where binding is preserved.

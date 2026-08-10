@@ -109,7 +109,7 @@ element when the file has an exact Emotion JSX pragma and the style is an object
 literal containing supported camelCase longhands with string or finite numeric
 literal values.
 
-It admits two separate, bounded modifier capabilities:
+It admits separate, bounded modifier capabilities:
 
 - Sibling `:hover` and `:focus` objects. The verifier obtains source rules from
   Emotion and target rules and priorities from the StyleX compiler, then
@@ -121,6 +121,10 @@ It admits two separate, bounded modifier capabilities:
 - One `@media` object under model `media-query-referee-v1`. The query emitted by
   Emotion and StyleX must match exactly, and the default and query-active winner
   states are compared independently.
+- One exact `@supports` object, with at most one exact `@media` intersection,
+  under model `supports-nesting-referee-v1`. Either wrapper order may be
+  authored because the model compares the same boolean intersection and StyleX
+  canonicalizes its emitted wrapper order. Nesting stops after two at-rules.
 
 These are not general selector claims. A disagreement in any admitted state or
 target is a refusal. In particular, reversing two otherwise identical hover and
@@ -135,10 +139,11 @@ order. Media queries also cannot yet be mixed with pseudo-classes or
 pseudo-elements.
 
 Dynamic values, spreads, shorthands, `!important`, other pseudo-elements or
-pseudo-classes, other at-rules, nesting, keyframes, component `css` props, and
-sites that also have `className`, `style`, or a JSX spread remain outside this
-mechanical boundary. The comparison is local and static: it does not establish
-whole-page browser behavior, repository build success, or runtime equivalence.
+pseudo-classes, other at-rules, deeper nesting, keyframes, component `css`
+props, and sites that also have `className`, `style`, or a JSX spread remain
+outside this mechanical boundary. The comparison is local and static: it does
+not establish whole-page browser behavior, repository build success, or runtime
+equivalence.
 
 The candidate persistence API is available for deterministic integrations. The
 end-user contextual candidate creation protocol and agent skill arrive in a
