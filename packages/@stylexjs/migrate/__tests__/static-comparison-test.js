@@ -23,7 +23,10 @@ import {
   verifyConversion,
 } from '../src/proposers/emotionStatic';
 import { convertSource } from '../src/adapters/emotion/convert';
-import { REFEREE_MODEL } from '../src/referee/model';
+import {
+  PSEUDO_ELEMENT_REFEREE_MODEL,
+  REFEREE_MODEL,
+} from '../src/referee/model';
 
 const PRAGMA = '/** @jsxImportSource @emotion/react */\n';
 const FILENAME = 'Component.jsx';
@@ -148,7 +151,7 @@ describe('the Emotion baseline', () => {
 
   test('observes only the approved literal pseudo-element shape', () => {
     const result = emotionPseudoElementBaseline(
-      '{ color: \'black\', \'::before\': { content: \'"x"\' }, \'::after\': { opacity: 0.5 } }',
+      "{ color: 'black', '::before': { content: '\"x\"' }, '::after': { opacity: 0.5 } }",
     );
     expect(result.ok).toBe(true);
     if (result.ok) {
@@ -165,16 +168,16 @@ describe('the Emotion baseline', () => {
       ]);
     }
     expect(
-      emotionPseudoElementBaseline('{ \'::before\': { content: sideEffect() } }')
+      emotionPseudoElementBaseline("{ '::before': { content: sideEffect() } }")
         .ok,
     ).toBe(false);
     expect(
       emotionPseudoElementBaseline(
-        '{ \'::before\': { \':hover\': { color: \'red\' } } }',
+        "{ '::before': { ':hover': { color: 'red' } } }",
       ).ok,
     ).toBe(false);
     expect(
-      emotionPseudoElementBaseline('{ \'::placeholder\': { color: \'gray\' } }').ok,
+      emotionPseudoElementBaseline("{ '::placeholder': { color: 'gray' } }").ok,
     ).toBe(false);
   });
 });
@@ -251,6 +254,26 @@ describe('proposing a conversion', () => {
       result.evidence.find((item) => item.check === 'static-css-comparison')
         ?.result,
     ).toBe('fail');
+  });
+
+  test('approved before and after targets pass their own referee model', () => {
+    const result = proposeStaticConversion({
+      source: file(
+        '{ color: \'black\', \'::before\': { color: \'red\', content: \'"x"\' }, \'::after\': { color: \'blue\' } }',
+      ),
+      filename: FILENAME,
+    });
+    expect(result.status).toBe('proposed');
+    if (result.status !== 'proposed') return;
+    expect(result.model).toBe(PSEUDO_ELEMENT_REFEREE_MODEL);
+    const comparison = result.evidence.find(
+      (item) => item.check === 'static-css-comparison',
+    );
+    expect(comparison?.result).toBe('pass');
+    expect(comparison?.subject.model).toBe(PSEUDO_ELEMENT_REFEREE_MODEL);
+    expect(comparison?.limitations.join('\n')).toContain(
+      'root, ::before, and ::after selector targets',
+    );
   });
 
   test('values the two libraries print differently still compare equal', () => {

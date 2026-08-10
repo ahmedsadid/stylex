@@ -11,6 +11,7 @@ import { convertSource } from '../adapters/emotion/convert';
 import {
   emotionBaseline,
   emotionConditionalBaseline,
+  emotionPseudoElementBaseline,
 } from '../adapters/emotion/baseline';
 import { compileStyleX } from '../evidence/compile';
 import { describeLintMessages, lintStyleX } from '../evidence/lint';
@@ -25,8 +26,13 @@ import {
 import { parseSource } from '../static/parse';
 import { walk } from '../static/walk';
 import { STYLEX_MODULE } from '../static/emit';
-import { hasConditions } from '../static/ir';
-import { referee, REFEREE_MODEL } from '../referee/model';
+import { hasConditions, hasPseudoElements } from '../static/ir';
+import {
+  PSEUDO_ELEMENT_REFEREE_MODEL,
+  referee,
+  refereePseudoElements,
+  REFEREE_MODEL,
+} from '../referee/model';
 import type { EvidenceResult } from '../evidence/claims';
 import type { EmotionRefusal } from '../adapters/emotion/discover';
 import type { ConvertedOutcome } from '../adapters/emotion/convert';
@@ -54,6 +60,7 @@ function refereeDifferences(
   differences: $ReadOnlyArray<{
     +stateId: string,
     +property: string,
+    +pseudoElement: string | null,
     +sourceValue: string | null,
     +targetValue: string | null,
     ...
@@ -62,7 +69,7 @@ function refereeDifferences(
   return differences
     .map(
       (difference) =>
-        `${difference.property} in ${difference.stateId}: Emotion=${
+        `${difference.property}${difference.pseudoElement ?? ''} in ${difference.stateId}: Emotion=${
           difference.sourceValue ?? '(absent)'
         }, StyleX=${difference.targetValue ?? '(absent)'}`,
     )
@@ -345,14 +352,21 @@ export function verifyConversion({
       entry.site.objectStart,
       entry.site.objectEnd,
     );
-    if (hasConditions(entry.style)) {
-      const baseline = emotionConditionalBaseline(objectSource);
+    if (hasConditions(entry.style) || hasPseudoElements(entry.style)) {
+      const isPseudoElement = hasPseudoElements(entry.style);
+      const model = isPseudoElement
+        ? PSEUDO_ELEMENT_REFEREE_MODEL
+        : REFEREE_MODEL;
+      const capability = isPseudoElement ? 'pseudo-element' : 'conditional';
+      const baseline = isPseudoElement
+        ? emotionPseudoElementBaseline(objectSource)
+        : emotionConditionalBaseline(objectSource);
       if (!baseline.ok) {
         results.push(
           evidence({
             check: 'static-css-comparison',
             provider: EMOTION_PROVIDER,
-            subject: { ...subject, model: REFEREE_MODEL },
+            subject: { ...subject, model },
             scope: [`${filename}#${entry.key}`],
             result: 'unavailable',
             detail: baseline.reason,
@@ -360,7 +374,7 @@ export function verifyConversion({
         );
         return {
           status: 'refused',
-          reason: `no conditional Emotion baseline for ${entry.key}: ${baseline.reason}`,
+          reason: `no ${capability} Emotion baseline for ${entry.key}: ${baseline.reason}`,
           evidence: results,
         };
       }
@@ -376,7 +390,7 @@ export function verifyConversion({
           evidence({
             check: 'static-css-comparison',
             provider: STYLEX_PROVIDER,
-            subject: { ...subject, model: REFEREE_MODEL },
+            subject: { ...subject, model },
             scope: [`${filename}#${entry.key}`],
             result: 'unavailable',
             detail: target.reason,
@@ -384,11 +398,13 @@ export function verifyConversion({
         );
         return {
           status: 'refused',
-          reason: `no conditional StyleX result for ${entry.key}: ${target.reason}`,
+          reason: `no ${capability} StyleX result for ${entry.key}: ${target.reason}`,
           evidence: results,
         };
       }
-      const comparison = referee(baseline.declarations, target.declarations);
+      const comparison = isPseudoElement
+        ? refereePseudoElements(baseline.declarations, target.declarations)
+        : referee(baseline.declarations, target.declarations);
       const detail =
         comparison.status === 'unsupported'
           ? comparison.reasons.join('; ')
@@ -399,7 +415,7 @@ export function verifyConversion({
         evidence({
           check: 'static-css-comparison',
           provider: 'stylex-migrate',
-          subject: { ...subject, model: REFEREE_MODEL },
+          subject: { ...subject, model },
           scope: [`${filename}#${entry.key}`],
           result:
             comparison.status === 'equivalent'
@@ -409,10 +425,12 @@ export function verifyConversion({
                 : 'not-applicable',
           ...(detail == null ? {} : { detail }),
           limitations: [
-            `compared under model ${REFEREE_MODEL}`,
+            `compared under model ${model}`,
             `source CSS from ${EMOTION_PROVIDER} ${packageVersion(EMOTION_PROVIDER)}, ` +
               `target CSS and priority from ${STYLEX_PROVIDER} ${packageVersion(STYLEX_PROVIDER)}`,
-            'enumerated default, :hover, :focus, and simultaneous :hover/:focus states',
+            isPseudoElement
+              ? 'compared root, ::before, and ::after selector targets with no pseudo-class conditions'
+              : 'enumerated default, :hover, :focus, and simultaneous :hover/:focus states',
             'no runtime evidence and no CSS outside this local style object was compared',
           ],
         }),
@@ -420,11 +438,11 @@ export function verifyConversion({
       if (comparison.status !== 'equivalent') {
         return {
           status: 'refused',
-          reason: `conditional CSS differs for ${entry.key}: ${detail ?? 'unsupported'}`,
+          reason: `${capability} CSS differs for ${entry.key}: ${detail ?? 'unsupported'}`,
           evidence: results,
         };
       }
-      comparisonModels.add(REFEREE_MODEL);
+      comparisonModels.add(model);
       entries.push({
         key: entry.key,
         elementName: entry.site.elementName,
