@@ -183,6 +183,29 @@ describe('emotion discovery', () => {
     ]);
   });
 
+  test('duplicate media blocks use only the last object value', () => {
+    const result = read(`${PRAGMA}const App = () => (
+  <div css={{ '@media (min-width: 800px)': { color: 'discarded' }, '@media (min-width: 800px)': { opacity: 1 } }} />
+);`);
+    expect(result.sites[0].style.declarations).toEqual([
+      {
+        property: 'opacity',
+        value: 1,
+        mediaQuery: '@media (min-width: 800px)',
+      },
+    ]);
+  });
+
+  test('refuses an effectful value hidden by a later media block', () => {
+    const result = read(`${PRAGMA}const App = () => (
+  <div css={{ '@media (min-width: 800px)': { color: sideEffect() }, '@media (min-width: 800px)': { opacity: 1 } }} />
+);`);
+    expect(result.sites).toEqual([]);
+    expect(result.refusals.map((refusal) => refusal.reason)).toEqual([
+      'non-literal-value',
+    ]);
+  });
+
   test('refuses an effectful value hidden by a later duplicate property', () => {
     const result = read(`${PRAGMA}const App = () => (
   <div css={{ color: sideEffect(), color: 'red' }} />
@@ -278,6 +301,16 @@ describe('emotion discovery', () => {
         'a nested media query',
         `${PRAGMA}const App = () => <div css={{ '@media (min-width: 800px)': { '@media (orientation: landscape)': { color: 'red' } } }} />;`,
         'nested-style-object',
+      ],
+      [
+        'a spread inside a media query',
+        `${PRAGMA}const App = () => <div css={{ '@media (min-width: 800px)': { ...wide, color: 'red' } }} />;`,
+        'spread-in-style-object',
+      ],
+      [
+        'a dynamic value inside a media query',
+        `${PRAGMA}const App = () => <div css={{ '@media (min-width: 800px)': { color: theme.wide } }} />;`,
+        'non-literal-value',
       ],
       [
         'an unsupported pseudo-element target',
