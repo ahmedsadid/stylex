@@ -13,9 +13,11 @@ import { walk } from '../../static/walk';
 import { parseDeclarations } from '../../compare/model';
 import { observeEmotionSerialization } from '../../referee/observations';
 import { observeEmotionKeyframes } from '../../referee/keyframes';
+import { observeEmotionBoxShorthands } from '../../referee/shorthands';
 import type { CssDeclaration } from '../../compare/model';
 import type { CascadeObservation } from '../../referee/observations';
 import type { KeyframesObservationResult } from '../../referee/keyframes';
+import type { BoxShorthandObservation } from '../../referee/shorthands';
 
 /**
  * The independent Emotion baseline.
@@ -241,6 +243,23 @@ function isApprovedKeyframesObject(objectSource: string): boolean {
   return keyframes === 1;
 }
 
+function isApprovedBoxShorthandObject(objectSource: string): boolean {
+  const parsed = parseSource(
+    `(${objectSource})`,
+    'shorthand-baseline-guard.js',
+  );
+  if (!parsed.ok) return false;
+  const expression = parsed.ast.program?.body?.[0]?.expression;
+  if (expression?.type !== 'ObjectExpression') return false;
+  let shorthand = false;
+  for (const property of expression.properties ?? []) {
+    const name = staticKey(property);
+    if (name == null || !literalValue(property.value)) return false;
+    if (name === 'margin' || name === 'padding') shorthand = true;
+  }
+  return shorthand;
+}
+
 export function emotionBaseline(objectSource: string): BaselineResult {
   if (!isLiteralOnlyObject(objectSource)) {
     return {
@@ -406,4 +425,29 @@ export function emotionKeyframesBaseline(
     };
   }
   return observeEmotionKeyframes(styleValue);
+}
+
+export function emotionBoxShorthandBaseline(
+  objectSource: string,
+): BoxShorthandObservation {
+  if (!isApprovedBoxShorthandObject(objectSource)) {
+    return {
+      ok: false,
+      reason:
+        'refusing to evaluate a box shorthand outside the approved flat literal grammar',
+    };
+  }
+  let styleValue: mixed;
+  try {
+    // eslint-disable-next-line no-new-func
+    styleValue = new Function(`return (${objectSource});`)();
+  } catch (error) {
+    return {
+      ok: false,
+      reason: `could not evaluate the shorthand style object: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    };
+  }
+  return observeEmotionBoxShorthands(styleValue);
 }

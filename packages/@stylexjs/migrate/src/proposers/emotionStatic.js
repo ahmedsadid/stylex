@@ -11,6 +11,7 @@ import { convertSource } from '../adapters/emotion/convert';
 import {
   emotionBaseline,
   emotionConditionalBaseline,
+  emotionBoxShorthandBaseline,
   emotionKeyframesBaseline,
   emotionMediaQueryBaseline,
   emotionPseudoElementBaseline,
@@ -35,6 +36,7 @@ import { walk } from '../static/walk';
 import { STYLEX_MODULE } from '../static/emit';
 import {
   hasConditions,
+  hasBoxShorthands,
   hasKeyframes,
   hasMediaQueries,
   hasPseudoElements,
@@ -54,6 +56,10 @@ import {
   KEYFRAMES_REFEREE_MODEL,
   refereeKeyframes,
 } from '../referee/keyframes';
+import {
+  BOX_SHORTHAND_REFEREE_MODEL,
+  refereeBoxShorthands,
+} from '../referee/shorthands';
 import type { EvidenceResult } from '../evidence/claims';
 import type { EmotionRefusal } from '../adapters/emotion/discover';
 import type { ConvertedOutcome } from '../adapters/emotion/convert';
@@ -453,6 +459,85 @@ export function verifyConversion({
         };
       }
       comparisonModels.add(KEYFRAMES_REFEREE_MODEL);
+      entries.push({
+        key: entry.key,
+        elementName: entry.site.elementName,
+        classNames: target.classNames,
+      });
+      continue;
+    }
+    if (hasBoxShorthands(entry.style)) {
+      const baseline = emotionBoxShorthandBaseline(objectSource);
+      if (!baseline.ok) {
+        results.push(
+          evidence({
+            check: 'static-css-comparison',
+            provider: EMOTION_PROVIDER,
+            subject: { ...subject, model: BOX_SHORTHAND_REFEREE_MODEL },
+            scope: [`${filename}#${entry.key}`],
+            result: 'unavailable',
+            detail: baseline.reason,
+          }),
+        );
+        return {
+          status: 'refused',
+          reason: `no shorthand Emotion baseline for ${entry.key}: ${baseline.reason}`,
+          evidence: results,
+        };
+      }
+      const target = stylexCssForKey({
+        importText: structure.structure.importText,
+        registryName: converted.registryName,
+        createCallText: structure.structure.createCallText,
+        namespace: converted.namespace,
+        key: entry.key,
+      });
+      if (!target.ok) {
+        results.push(
+          evidence({
+            check: 'static-css-comparison',
+            provider: STYLEX_PROVIDER,
+            subject: { ...subject, model: BOX_SHORTHAND_REFEREE_MODEL },
+            scope: [`${filename}#${entry.key}`],
+            result: 'unavailable',
+            detail: target.reason,
+          }),
+        );
+        return {
+          status: 'refused',
+          reason: `no shorthand StyleX result for ${entry.key}: ${target.reason}`,
+          evidence: results,
+        };
+      }
+      const comparison = refereeBoxShorthands(
+        baseline.declarations,
+        target.declarations,
+      );
+      const detail = describeDifferences(comparison.differences);
+      results.push(
+        evidence({
+          check: 'static-css-comparison',
+          provider: 'stylex-migrate',
+          subject: { ...subject, model: BOX_SHORTHAND_REFEREE_MODEL },
+          scope: [`${filename}#${entry.key}`],
+          result: comparison.status === 'equivalent' ? 'pass' : 'fail',
+          ...(comparison.status === 'equivalent' ? {} : { detail }),
+          limitations: [
+            `compared under model ${BOX_SHORTHAND_REFEREE_MODEL}`,
+            'expanded only physical margin and padding with one to four simple static components',
+            'modifier combinations, other shorthand families, and logical properties are refused',
+            'no runtime evidence and no CSS outside this local style object was compared',
+          ],
+        }),
+      );
+      if (comparison.status !== 'equivalent') {
+        return {
+          status: 'refused',
+          reason: `shorthand CSS differs for ${entry.key}: ${detail}`,
+          evidence: results,
+        };
+      }
+      comparisonModels.add(BOX_SHORTHAND_REFEREE_MODEL);
       entries.push({
         key: entry.key,
         elementName: entry.site.elementName,

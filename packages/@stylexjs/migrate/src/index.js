@@ -356,6 +356,7 @@ export {
 export {
   emotionBaseline,
   emotionConditionalBaseline,
+  emotionBoxShorthandBaseline,
   emotionKeyframesBaseline,
   emotionMediaQueryBaseline,
   emotionPseudoElementBaseline,

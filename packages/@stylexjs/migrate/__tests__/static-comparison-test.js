@@ -31,6 +31,7 @@ import {
   REFEREE_MODEL,
 } from '../src/referee/model';
 import { KEYFRAMES_REFEREE_MODEL } from '../src/referee/keyframes';
+import { BOX_SHORTHAND_REFEREE_MODEL } from '../src/referee/shorthands';
 
 const PRAGMA = '/** @jsxImportSource @emotion/react */\n';
 const FILENAME = 'Component.jsx';
@@ -409,6 +410,25 @@ describe('proposing a conversion', () => {
     ).toMatchObject({
       result: 'pass',
       subject: { model: KEYFRAMES_REFEREE_MODEL },
+    });
+  });
+
+  test.each([
+    "{ marginTop: 20, margin: '4px 8px' }",
+    "{ padding: '4px 8px 12px', paddingLeft: 20 }",
+  ])('physical box shorthand passes expanded comparison: %s', (object) => {
+    const result = proposeStaticConversion({
+      source: file(object),
+      filename: FILENAME,
+    });
+    expect(result.status).toBe('proposed');
+    if (result.status !== 'proposed') return;
+    expect(result.model).toBe(BOX_SHORTHAND_REFEREE_MODEL);
+    expect(
+      result.evidence.find((item) => item.check === 'static-css-comparison'),
+    ).toMatchObject({
+      result: 'pass',
+      subject: { model: BOX_SHORTHAND_REFEREE_MODEL },
     });
   });
 
