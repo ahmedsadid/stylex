@@ -383,6 +383,19 @@ export {
   observeStyleXRules,
 } from './referee/observations';
 export type { CascadeObservation } from './referee/observations';
+export {
+  KEYFRAMES_REFEREE_MODEL,
+  observeEmotionKeyframes,
+  observeStyleXKeyframes,
+  refereeKeyframes,
+} from './referee/keyframes';
+export type {
+  KeyframesDeclaration,
+  KeyframesFrame,
+  KeyframesObservation,
+  KeyframesObservationResult,
+  KeyframesRefereeResult,
+} from './referee/keyframes';
 export { CONDITIONAL_MUTATION_MANIFEST } from './referee/mutations';
 export type {
   ConditionalMutationGate,
