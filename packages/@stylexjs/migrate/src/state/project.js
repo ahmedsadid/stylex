@@ -32,13 +32,13 @@ export const RECORD_COLLECTIONS: $ReadOnlyArray<string> = Object.freeze([
   'decisions',
   'applications',
   'indexes',
+  'reports',
 ]);
 
 const DIRECTORIES: $ReadOnlyArray<string> = Object.freeze([
   'events',
   ...RECORD_COLLECTIONS,
   'artifacts',
-  'reports',
   'backups',
 ]);
 

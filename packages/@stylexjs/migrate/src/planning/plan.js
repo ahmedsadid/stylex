@@ -269,6 +269,16 @@ function planCounts(clusters: $ReadOnlyArray<Cluster>): PlanCounts {
   });
 }
 
+export function planIdentity(plan: {
+  +inventoryId: string,
+  +clusters: $ReadOnlyArray<Cluster>,
+  +conflicts: $ReadOnlyArray<ClusterConflict>,
+  +counts: PlanCounts,
+  +diagnosticCount: number,
+}): string {
+  return identity(plan);
+}
+
 export function createPlan({
   inventory,
   now = () => new Date().toISOString(),
@@ -290,7 +300,7 @@ export function createPlan({
     diagnosticCount: inventory.diagnostics.length,
   };
   return Object.freeze({
-    id: identity(stable),
+    id: planIdentity(stable),
     ...stable,
     generatedAt: now(),
   });

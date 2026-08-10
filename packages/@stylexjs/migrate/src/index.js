@@ -73,8 +73,18 @@ export type { LocalDependency } from './inventory/model';
 export {
   createPlan,
   detectClusterConflicts,
+  planIdentity,
   suggestClusters,
 } from './planning/plan';
+export {
+  inventoryCounts,
+  loadCurrentInventory,
+  loadCurrentPlan,
+  loadInventory,
+  loadPlan,
+  saveInventory,
+  savePlan,
+} from './planning/reports';
 
 export {
   hashFields,
