@@ -381,7 +381,13 @@ export type {
   ConditionalMutationGate,
   ConditionalMutation,
   ConditionalMutationId,
+  MutationGate,
 } from './referee/mutations';
+export { PSEUDO_ELEMENT_MUTATION_MANIFEST } from './referee/pseudoElementMutations';
+export type {
+  PseudoElementMutation,
+  PseudoElementMutationId,
+} from './referee/pseudoElementMutations';
 export type {
   CompilerProbe,
   ObservedCompilerProbe,

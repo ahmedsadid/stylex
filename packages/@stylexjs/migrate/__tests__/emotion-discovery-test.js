@@ -236,6 +236,16 @@ describe('emotion discovery', () => {
         'nested-style-object',
       ],
       [
+        'a spread inside a pseudo-element',
+        `${PRAGMA}const App = () => <div css={{ '::before': { ...before, color: 'red' } }} />;`,
+        'spread-in-style-object',
+      ],
+      [
+        'a dynamic value inside a pseudo-element',
+        `${PRAGMA}const App = () => <div css={{ '::after': { color: theme.accent } }} />;`,
+        'non-literal-value',
+      ],
+      [
         'a nested condition',
         `${PRAGMA}const App = () => <div css={{ ':hover': { ':focus': { color: 'red' } } }} />;`,
         'nested-style-object',
