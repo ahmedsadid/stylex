@@ -56,7 +56,7 @@ export type KeyframesRefereeResult =
 function declarations(
   nodes: $ReadOnlyArray<$FlowFixMe>,
 ): KeyframesDeclaration[] | null {
-  const result = [];
+  const result: Array<KeyframesDeclaration> = [];
   for (const node of nodes) {
     if (node.type !== 'decl') return null;
     result.push({
@@ -220,8 +220,15 @@ export function refereeKeyframes(
   ) {
     differences.push('animation declarations differ after alpha-renaming');
   }
+  if (differences.length === 0) {
+    return {
+      status: 'equivalent',
+      model: KEYFRAMES_REFEREE_MODEL,
+      differences: Object.freeze([]),
+    };
+  }
   return {
-    status: differences.length === 0 ? 'equivalent' : 'mismatch',
+    status: 'mismatch',
     model: KEYFRAMES_REFEREE_MODEL,
     differences: Object.freeze(differences),
   };
