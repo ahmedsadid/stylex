@@ -16,6 +16,7 @@ import {
 } from '../src/compare/model';
 import {
   emotionBaseline,
+  emotionMediaQueryBaseline,
   emotionPseudoElementBaseline,
 } from '../src/adapters/emotion/baseline';
 import {
@@ -24,6 +25,7 @@ import {
 } from '../src/proposers/emotionStatic';
 import { convertSource } from '../src/adapters/emotion/convert';
 import {
+  MEDIA_QUERY_REFEREE_MODEL,
   PSEUDO_ELEMENT_REFEREE_MODEL,
   REFEREE_MODEL,
 } from '../src/referee/model';
@@ -180,6 +182,37 @@ describe('the Emotion baseline', () => {
       emotionPseudoElementBaseline("{ '::placeholder': { color: 'gray' } }").ok,
     ).toBe(false);
   });
+
+  test('observes only one literal media-query block', () => {
+    const result = emotionMediaQueryBaseline(
+      '{ color: \'black\', \'@media (min-width: 800px)\': { color: \'blue\' } }',
+    );
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.declarations).toEqual([
+        expect.objectContaining({
+          property: 'color',
+          value: 'black',
+          conditions: [],
+        }),
+        expect.objectContaining({
+          property: 'color',
+          value: 'blue',
+          conditions: ['@media (min-width: 800px)'],
+        }),
+      ]);
+    }
+    expect(
+      emotionMediaQueryBaseline(
+        '{ \'@media (min-width: 800px)\': { color: sideEffect() } }',
+      ).ok,
+    ).toBe(false);
+    expect(
+      emotionMediaQueryBaseline(
+        '{ \'@media (min-width: 800px)\': { color: \'red\' }, \'@media (min-width: 1200px)\': { color: \'blue\' } }',
+      ).ok,
+    ).toBe(false);
+  });
 });
 
 describe('proposing a conversion', () => {
@@ -259,7 +292,7 @@ describe('proposing a conversion', () => {
   test('approved before and after targets pass their own referee model', () => {
     const result = proposeStaticConversion({
       source: file(
-        '{ color: \'black\', \'::before\': { color: \'red\', content: \'"x"\' }, \'::after\': { color: \'blue\' } }',
+        "{ color: 'black', '::before': { color: 'red', content: '\"x\"' }, '::after': { color: 'blue' } }",
       ),
       filename: FILENAME,
     });
@@ -274,6 +307,43 @@ describe('proposing a conversion', () => {
     expect(comparison?.limitations.join('\n')).toContain(
       'root, ::before, and ::after selector targets',
     );
+  });
+
+  test('one exact media query passes its own referee model', () => {
+    const result = proposeStaticConversion({
+      source: file(
+        '{ color: \'black\', \'@media (min-width: 800px)\': { color: \'blue\', opacity: 0.5 } }',
+      ),
+      filename: FILENAME,
+    });
+    expect(result.status).toBe('proposed');
+    if (result.status !== 'proposed') return;
+    expect(result.model).toBe(MEDIA_QUERY_REFEREE_MODEL);
+    const comparison = result.evidence.find(
+      (item) => item.check === 'static-css-comparison',
+    );
+    expect(comparison?.result).toBe('pass');
+    expect(comparison?.subject.model).toBe(MEDIA_QUERY_REFEREE_MODEL);
+    expect(comparison?.limitations.join('\n')).toContain(
+      'one exact @media activation state',
+    );
+  });
+
+  test('a default authored after its media block is refused', () => {
+    const result = proposeStaticConversion({
+      source: file(
+        '{ \'@media (min-width: 800px)\': { color: \'blue\' }, color: \'black\' }',
+      ),
+      filename: FILENAME,
+    });
+    expect(result.status).toBe('refused');
+    if (result.status !== 'refused') return;
+    expect(result.reason).toContain('media-query CSS differs');
+    expect(result.reason).toContain('@media (min-width: 800px)');
+    expect(
+      result.evidence.find((item) => item.check === 'static-css-comparison')
+        ?.result,
+    ).toBe('fail');
   });
 
   test('values the two libraries print differently still compare equal', () => {

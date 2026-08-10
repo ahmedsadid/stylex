@@ -11,6 +11,7 @@ import { convertSource } from '../adapters/emotion/convert';
 import {
   emotionBaseline,
   emotionConditionalBaseline,
+  emotionMediaQueryBaseline,
   emotionPseudoElementBaseline,
 } from '../adapters/emotion/baseline';
 import { compileStyleX } from '../evidence/compile';
@@ -26,10 +27,16 @@ import {
 import { parseSource } from '../static/parse';
 import { walk } from '../static/walk';
 import { STYLEX_MODULE } from '../static/emit';
-import { hasConditions, hasPseudoElements } from '../static/ir';
 import {
+  hasConditions,
+  hasMediaQueries,
+  hasPseudoElements,
+} from '../static/ir';
+import {
+  MEDIA_QUERY_REFEREE_MODEL,
   PSEUDO_ELEMENT_REFEREE_MODEL,
   referee,
+  refereeMediaQueries,
   refereePseudoElements,
   REFEREE_MODEL,
 } from '../referee/model';
@@ -352,15 +359,28 @@ export function verifyConversion({
       entry.site.objectStart,
       entry.site.objectEnd,
     );
-    if (hasConditions(entry.style) || hasPseudoElements(entry.style)) {
+    if (
+      hasConditions(entry.style) ||
+      hasPseudoElements(entry.style) ||
+      hasMediaQueries(entry.style)
+    ) {
+      const isMediaQuery = hasMediaQueries(entry.style);
       const isPseudoElement = hasPseudoElements(entry.style);
-      const model = isPseudoElement
-        ? PSEUDO_ELEMENT_REFEREE_MODEL
-        : REFEREE_MODEL;
-      const capability = isPseudoElement ? 'pseudo-element' : 'conditional';
-      const baseline = isPseudoElement
-        ? emotionPseudoElementBaseline(objectSource)
-        : emotionConditionalBaseline(objectSource);
+      const model = isMediaQuery
+        ? MEDIA_QUERY_REFEREE_MODEL
+        : isPseudoElement
+          ? PSEUDO_ELEMENT_REFEREE_MODEL
+          : REFEREE_MODEL;
+      const capability = isMediaQuery
+        ? 'media-query'
+        : isPseudoElement
+          ? 'pseudo-element'
+          : 'conditional';
+      const baseline = isMediaQuery
+        ? emotionMediaQueryBaseline(objectSource)
+        : isPseudoElement
+          ? emotionPseudoElementBaseline(objectSource)
+          : emotionConditionalBaseline(objectSource);
       if (!baseline.ok) {
         results.push(
           evidence({
@@ -402,9 +422,11 @@ export function verifyConversion({
           evidence: results,
         };
       }
-      const comparison = isPseudoElement
-        ? refereePseudoElements(baseline.declarations, target.declarations)
-        : referee(baseline.declarations, target.declarations);
+      const comparison = isMediaQuery
+        ? refereeMediaQueries(baseline.declarations, target.declarations)
+        : isPseudoElement
+          ? refereePseudoElements(baseline.declarations, target.declarations)
+          : referee(baseline.declarations, target.declarations);
       const detail =
         comparison.status === 'unsupported'
           ? comparison.reasons.join('; ')
@@ -428,9 +450,11 @@ export function verifyConversion({
             `compared under model ${model}`,
             `source CSS from ${EMOTION_PROVIDER} ${packageVersion(EMOTION_PROVIDER)}, ` +
               `target CSS and priority from ${STYLEX_PROVIDER} ${packageVersion(STYLEX_PROVIDER)}`,
-            isPseudoElement
-              ? 'compared root, ::before, and ::after selector targets with no pseudo-class conditions'
-              : 'enumerated default, :hover, :focus, and simultaneous :hover/:focus states',
+            isMediaQuery
+              ? 'compared default and one exact @media activation state; multiple or rewritten queries are refused'
+              : isPseudoElement
+                ? 'compared root, ::before, and ::after selector targets with no pseudo-class conditions'
+                : 'enumerated default, :hover, :focus, and simultaneous :hover/:focus states',
             'no runtime evidence and no CSS outside this local style object was compared',
           ],
         }),

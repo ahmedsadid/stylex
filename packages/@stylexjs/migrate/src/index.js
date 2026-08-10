@@ -348,6 +348,7 @@ export { stylexCascadeForKey, stylexCssForKey } from './evidence/staticCss';
 export {
   emotionBaseline,
   emotionConditionalBaseline,
+  emotionMediaQueryBaseline,
   emotionPseudoElementBaseline,
 } from './adapters/emotion/baseline';
 

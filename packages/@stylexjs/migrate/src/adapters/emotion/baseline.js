@@ -130,6 +130,32 @@ function isApprovedPseudoElementObject(objectSource: string): boolean {
   return true;
 }
 
+function isApprovedMediaQueryObject(objectSource: string): boolean {
+  const parsed = parseSource(`(${objectSource})`, 'media-baseline-guard.js');
+  if (!parsed.ok) return false;
+  const expression = parsed.ast.program?.body?.[0]?.expression;
+  if (expression?.type !== 'ObjectExpression') return false;
+  const mediaQueries = new Set<string>();
+  for (const property of expression.properties ?? []) {
+    const name = staticKey(property);
+    if (name == null) return false;
+    if (literalValue(property.value)) continue;
+    if (
+      property.value?.type !== 'ObjectExpression' ||
+      !/^@media [^\r\n{}]+$/.test(name)
+    ) {
+      return false;
+    }
+    mediaQueries.add(name);
+    for (const nested of property.value.properties ?? []) {
+      if (staticKey(nested) == null || !literalValue(nested.value)) {
+        return false;
+      }
+    }
+  }
+  return mediaQueries.size === 1;
+}
+
 export function emotionBaseline(objectSource: string): BaselineResult {
   if (!isLiteralOnlyObject(objectSource)) {
     return {
@@ -215,6 +241,31 @@ export function emotionPseudoElementBaseline(
     return {
       ok: false,
       reason: `could not evaluate the pseudo-element style object: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    };
+  }
+  return observeEmotionSerialization(styleValue);
+}
+
+export function emotionMediaQueryBaseline(
+  objectSource: string,
+): CascadeObservation {
+  if (!isApprovedMediaQueryObject(objectSource)) {
+    return {
+      ok: false,
+      reason:
+        'refusing to evaluate a media-query style outside the approved literal grammar',
+    };
+  }
+  let styleValue: mixed;
+  try {
+    // eslint-disable-next-line no-new-func
+    styleValue = new Function(`return (${objectSource});`)();
+  } catch (error) {
+    return {
+      ok: false,
+      reason: `could not evaluate the media-query style object: ${
         error instanceof Error ? error.message : String(error)
       }`,
     };

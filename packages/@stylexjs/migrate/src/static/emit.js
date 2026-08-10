@@ -122,15 +122,16 @@ function declarationLines(
       [':hover', 1],
       [':focus', 2],
     ]);
+    const modifier = (declaration: Declaration): string =>
+      declaration.condition ?? declaration.mediaQuery ?? 'default';
     const values = [...declarations]
       .sort(
         (first, second) =>
-          (conditionOrder.get(first.condition ?? 'default') ?? 99) -
-          (conditionOrder.get(second.condition ?? 'default') ?? 99),
+          (conditionOrder.get(modifier(first)) ?? 99) -
+          (conditionOrder.get(modifier(second)) ?? 99),
       )
       .map((declaration) => {
-        const condition =
-          declaration.condition ?? declaration.mediaQuery ?? 'default';
+        const condition = modifier(declaration);
         const key =
           condition === 'default' ? condition : serializeValue(condition);
         return `${indent}    ${key}: ${serializeValue(declaration.value)},`;
