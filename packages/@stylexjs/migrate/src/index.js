@@ -400,6 +400,11 @@ export type {
   MediaQueryMutation,
   MediaQueryMutationId,
 } from './referee/mediaQueryMutations';
+export { SUPPORTS_NESTING_MUTATION_MANIFEST } from './referee/supportsNestingMutations';
+export type {
+  SupportsNestingMutation,
+  SupportsNestingMutationId,
+} from './referee/supportsNestingMutations';
 export type {
   CompilerProbe,
   ObservedCompilerProbe,
