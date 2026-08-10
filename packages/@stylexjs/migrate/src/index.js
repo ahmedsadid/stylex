@@ -51,12 +51,17 @@ export { redact, redactText } from './state/redact';
 export { createFact, inventoryIdentity, siteIdentity } from './inventory/model';
 export type {
   Classification,
+  Cluster,
+  ClusterConflict,
+  ClusterSuggestion,
   Fact,
   FactProvenance,
   FactStatus,
   Inventory,
   InventoryDiagnostic,
   InventoryFile,
+  Plan,
+  PlanCounts,
   Site,
   SourceSpan,
 } from './inventory/model';
@@ -65,6 +70,11 @@ export { analyzeProjectActivation } from './inventory/activation';
 export type { ProjectActivation } from './inventory/activation';
 export { analyzeLocalDependencies } from './inventory/resolve';
 export type { LocalDependency } from './inventory/model';
+export {
+  createPlan,
+  detectClusterConflicts,
+  suggestClusters,
+} from './planning/plan';
 
 export {
   hashFields,

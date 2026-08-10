@@ -88,6 +88,51 @@ export type Inventory = {
   +scannedAt: string,
 };
 
+export type ClusterSuggestion = {
+  +id: string,
+  +siteIds: $ReadOnlyArray<string>,
+  +changeFiles: $ReadOnlyArray<string>,
+  +couplingFiles: $ReadOnlyArray<string>,
+  +declaredInputs: $ReadOnlyArray<string>,
+  +factIds: $ReadOnlyArray<string>,
+  +classification: Classification,
+  +routingReasons: $ReadOnlyArray<string>,
+  +blockedReasons: $ReadOnlyArray<string>,
+};
+
+export type Cluster = {
+  +id: string,
+  +siteIds: $ReadOnlyArray<string>,
+  +changeFiles: $ReadOnlyArray<string>,
+  +couplingFiles: $ReadOnlyArray<string>,
+  +declaredInputs: $ReadOnlyArray<string>,
+  +factIds: $ReadOnlyArray<string>,
+  +classification: Classification,
+  +routingReasons: $ReadOnlyArray<string>,
+  +state: 'planned' | 'blocked',
+  +blockedReasons: $ReadOnlyArray<string>,
+};
+
+export type ClusterConflict = {
+  +path: string,
+  +clusterIds: $ReadOnlyArray<string>,
+};
+
+export type PlanCounts = {
+  +classification: { +[Classification]: number },
+  +state: { +planned: number, +blocked: number },
+};
+
+export type Plan = {
+  +id: string,
+  +inventoryId: string,
+  +clusters: $ReadOnlyArray<Cluster>,
+  +conflicts: $ReadOnlyArray<ClusterConflict>,
+  +counts: PlanCounts,
+  +diagnosticCount: number,
+  +generatedAt: string,
+};
+
 export function createFact({
   kind,
   status,
