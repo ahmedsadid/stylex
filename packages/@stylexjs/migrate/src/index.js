@@ -392,6 +392,11 @@ export type {
   PseudoElementMutation,
   PseudoElementMutationId,
 } from './referee/pseudoElementMutations';
+export { MEDIA_QUERY_MUTATION_MANIFEST } from './referee/mediaQueryMutations';
+export type {
+  MediaQueryMutation,
+  MediaQueryMutationId,
+} from './referee/mediaQueryMutations';
 export type {
   CompilerProbe,
   ObservedCompilerProbe,
