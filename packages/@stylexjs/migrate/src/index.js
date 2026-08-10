@@ -351,6 +351,11 @@ export type {
   Specificity,
   WinnerDifference,
 } from './referee/model';
+export {
+  observeEmotionSerialization,
+  observeStyleXCompilation,
+} from './referee/observations';
+export type { CascadeObservation } from './referee/observations';
 export type {
   CompilerProbe,
   ObservedCompilerProbe,
