@@ -11,13 +11,18 @@ import { convertSource } from '../adapters/emotion/convert';
 import {
   emotionBaseline,
   emotionConditionalBaseline,
+  emotionKeyframesBaseline,
   emotionMediaQueryBaseline,
   emotionPseudoElementBaseline,
   emotionSupportsNestingBaseline,
 } from '../adapters/emotion/baseline';
 import { compileStyleX } from '../evidence/compile';
 import { describeLintMessages, lintStyleX } from '../evidence/lint';
-import { stylexCascadeForKey, stylexCssForKey } from '../evidence/staticCss';
+import {
+  stylexCascadeForKey,
+  stylexCssForKey,
+  stylexKeyframesForKey,
+} from '../evidence/staticCss';
 import { allPassed, evidence, packageVersion } from '../evidence/claims';
 import { hashString } from '../kernel/hash';
 import {
@@ -30,6 +35,7 @@ import { walk } from '../static/walk';
 import { STYLEX_MODULE } from '../static/emit';
 import {
   hasConditions,
+  hasKeyframes,
   hasMediaQueries,
   hasPseudoElements,
   hasSupportsQueries,
@@ -44,6 +50,10 @@ import {
   REFEREE_MODEL,
   SUPPORTS_NESTING_REFEREE_MODEL,
 } from '../referee/model';
+import {
+  KEYFRAMES_REFEREE_MODEL,
+  refereeKeyframes,
+} from '../referee/keyframes';
 import type { EvidenceResult } from '../evidence/claims';
 import type { EmotionRefusal } from '../adapters/emotion/discover';
 import type { ConvertedOutcome } from '../adapters/emotion/convert';
@@ -363,6 +373,93 @@ export function verifyConversion({
       entry.site.objectStart,
       entry.site.objectEnd,
     );
+    if (hasKeyframes(entry.style)) {
+      const baseline = emotionKeyframesBaseline(objectSource);
+      if (!baseline.ok) {
+        results.push(
+          evidence({
+            check: 'static-css-comparison',
+            provider: EMOTION_PROVIDER,
+            subject: { ...subject, model: KEYFRAMES_REFEREE_MODEL },
+            scope: [`${filename}#${entry.key}`],
+            result: 'unavailable',
+            detail: baseline.reason,
+          }),
+        );
+        return {
+          status: 'refused',
+          reason: `no keyframes Emotion baseline for ${entry.key}: ${baseline.reason}`,
+          evidence: results,
+        };
+      }
+      const target = stylexKeyframesForKey({
+        importText: structure.structure.importText,
+        registryName: converted.registryName,
+        createCallText: structure.structure.createCallText,
+        namespace: converted.namespace,
+        key: entry.key,
+      });
+      if (!target.ok) {
+        results.push(
+          evidence({
+            check: 'static-css-comparison',
+            provider: STYLEX_PROVIDER,
+            subject: { ...subject, model: KEYFRAMES_REFEREE_MODEL },
+            scope: [`${filename}#${entry.key}`],
+            result: 'unavailable',
+            detail: target.reason,
+          }),
+        );
+        return {
+          status: 'refused',
+          reason: `no keyframes StyleX result for ${entry.key}: ${target.reason}`,
+          evidence: results,
+        };
+      }
+      const comparison = refereeKeyframes(
+        baseline.observation,
+        target.observation,
+      );
+      const detail =
+        comparison.status === 'unsupported'
+          ? comparison.reasons.join('; ')
+          : comparison.differences.join('; ');
+      results.push(
+        evidence({
+          check: 'static-css-comparison',
+          provider: 'stylex-migrate',
+          subject: { ...subject, model: KEYFRAMES_REFEREE_MODEL },
+          scope: [`${filename}#${entry.key}`],
+          result:
+            comparison.status === 'equivalent'
+              ? 'pass'
+              : comparison.status === 'mismatch'
+                ? 'fail'
+                : 'not-applicable',
+          ...(detail === '' ? {} : { detail }),
+          limitations: [
+            `compared under model ${KEYFRAMES_REFEREE_MODEL}`,
+            'alpha-renamed exactly one generated keyframes identifier and compared its animation-name reference',
+            'only literal from/to frames are included; percentage frames and multiple animations are refused',
+            'no runtime evidence and no CSS outside this local style object was compared',
+          ],
+        }),
+      );
+      if (comparison.status !== 'equivalent') {
+        return {
+          status: 'refused',
+          reason: `keyframes CSS differs for ${entry.key}: ${detail || 'unsupported'}`,
+          evidence: results,
+        };
+      }
+      comparisonModels.add(KEYFRAMES_REFEREE_MODEL);
+      entries.push({
+        key: entry.key,
+        elementName: entry.site.elementName,
+        classNames: target.classNames,
+      });
+      continue;
+    }
     if (
       hasConditions(entry.style) ||
       hasPseudoElements(entry.style) ||

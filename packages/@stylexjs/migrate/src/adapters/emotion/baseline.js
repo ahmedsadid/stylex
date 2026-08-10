@@ -12,8 +12,10 @@ import { parseSource } from '../../static/parse';
 import { walk } from '../../static/walk';
 import { parseDeclarations } from '../../compare/model';
 import { observeEmotionSerialization } from '../../referee/observations';
+import { observeEmotionKeyframes } from '../../referee/keyframes';
 import type { CssDeclaration } from '../../compare/model';
 import type { CascadeObservation } from '../../referee/observations';
+import type { KeyframesObservationResult } from '../../referee/keyframes';
 
 /**
  * The independent Emotion baseline.
@@ -195,6 +197,50 @@ function isApprovedSupportsNestingObject(objectSource: string): boolean {
   return visit(expression, []) && supports.size === 1 && media.size <= 1;
 }
 
+function isApprovedKeyframesObject(objectSource: string): boolean {
+  const parsed = parseSource(
+    `(${objectSource})`,
+    'keyframes-baseline-guard.js',
+  );
+  if (!parsed.ok) return false;
+  const expression = parsed.ast.program?.body?.[0]?.expression;
+  if (expression?.type !== 'ObjectExpression') return false;
+  let keyframes = 0;
+  for (const property of expression.properties ?? []) {
+    const name = staticKey(property);
+    if (name == null) return false;
+    if (literalValue(property.value)) continue;
+    if (
+      property.value?.type !== 'ObjectExpression' ||
+      !/^@keyframes [A-Za-z_][A-Za-z0-9_-]*$/.test(name)
+    ) {
+      return false;
+    }
+    keyframes++;
+    const selectors = new Set<string>();
+    for (const frame of property.value.properties ?? []) {
+      const selector = staticKey(frame);
+      if (
+        (selector !== 'from' && selector !== 'to') ||
+        frame.value?.type !== 'ObjectExpression'
+      ) {
+        return false;
+      }
+      selectors.add(selector);
+      for (const declaration of frame.value.properties ?? []) {
+        if (
+          staticKey(declaration) == null ||
+          !literalValue(declaration.value)
+        ) {
+          return false;
+        }
+      }
+    }
+    if (selectors.size !== 2) return false;
+  }
+  return keyframes === 1;
+}
+
 export function emotionBaseline(objectSource: string): BaselineResult {
   if (!isLiteralOnlyObject(objectSource)) {
     return {
@@ -335,4 +381,29 @@ export function emotionSupportsNestingBaseline(
     };
   }
   return observeEmotionSerialization(styleValue);
+}
+
+export function emotionKeyframesBaseline(
+  objectSource: string,
+): KeyframesObservationResult {
+  if (!isApprovedKeyframesObject(objectSource)) {
+    return {
+      ok: false,
+      reason:
+        'refusing to evaluate keyframes outside the approved literal from/to grammar',
+    };
+  }
+  let styleValue: mixed;
+  try {
+    // eslint-disable-next-line no-new-func
+    styleValue = new Function(`return (${objectSource});`)();
+  } catch (error) {
+    return {
+      ok: false,
+      reason: `could not evaluate the keyframes style object: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    };
+  }
+  return observeEmotionKeyframes(styleValue);
 }

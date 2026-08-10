@@ -12,8 +12,10 @@ import { parseSource } from '../static/parse';
 import { walk } from '../static/walk';
 import { parseRule } from '../compare/model';
 import { observeStyleXRules } from '../referee/observations';
+import { observeStyleXKeyframes } from '../referee/keyframes';
 import type { CssDeclaration } from '../compare/model';
 import type { CascadeObservation } from '../referee/observations';
+import type { KeyframesObservation } from '../referee/keyframes';
 
 /**
  * The CSS StyleX actually produces for one style key.
@@ -169,4 +171,41 @@ export function stylexCascadeForKey({
     selected.push(rule);
   }
   return observeStyleXRules(selected);
+}
+
+export function stylexKeyframesForKey({
+  importText,
+  registryName,
+  createCallText,
+  namespace,
+  key,
+}: {
+  +importText: string,
+  +registryName: string,
+  +createCallText: string,
+  +namespace: string,
+  +key: string,
+}):
+  | {
+      +ok: true,
+      +classNames: $ReadOnlyArray<string>,
+      +observation: KeyframesObservation,
+    }
+  | { +ok: false, +reason: string } {
+  const probe = [
+    importText,
+    `const ${registryName} = ${createCallText};`,
+    `export const probe = ${namespace}.props(${registryName}.${key});`,
+    '',
+  ].join('\n');
+  const compiled = compileStyleX(probe, 'keyframes-probe.js');
+  if (!compiled.ok) return compiled;
+  const classNames = probeClassNames(compiled.code);
+  if (classNames == null) {
+    return { ok: false, reason: 'could not read compiled keyframes classes' };
+  }
+  const observed = observeStyleXKeyframes(probe, 'keyframes-probe.js');
+  return observed.ok
+    ? { ok: true, classNames, observation: observed.observation }
+    : observed;
 }

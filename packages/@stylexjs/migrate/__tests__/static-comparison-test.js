@@ -30,6 +30,7 @@ import {
   SUPPORTS_NESTING_REFEREE_MODEL,
   REFEREE_MODEL,
 } from '../src/referee/model';
+import { KEYFRAMES_REFEREE_MODEL } from '../src/referee/keyframes';
 
 const PRAGMA = '/** @jsxImportSource @emotion/react */\n';
 const FILENAME = 'Component.jsx';
@@ -391,6 +392,24 @@ describe('proposing a conversion', () => {
     if (result.status === 'refused') {
       expect(result.reason).toContain('supports-nesting CSS differs');
     }
+  });
+
+  test('one referenced from/to keyframes rule passes alpha-renamed comparison', () => {
+    const result = proposeStaticConversion({
+      source: file(
+        "{ animationName: 'fade', animationDuration: '1s', '@keyframes fade': { from: { opacity: 0 }, to: { opacity: 1 } } }",
+      ),
+      filename: FILENAME,
+    });
+    expect(result.status).toBe('proposed');
+    if (result.status !== 'proposed') return;
+    expect(result.model).toBe(KEYFRAMES_REFEREE_MODEL);
+    expect(
+      result.evidence.find((item) => item.check === 'static-css-comparison'),
+    ).toMatchObject({
+      result: 'pass',
+      subject: { model: KEYFRAMES_REFEREE_MODEL },
+    });
   });
 
   test('values the two libraries print differently still compare equal', () => {

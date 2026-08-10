@@ -347,11 +347,16 @@ export { compileStyleX } from './evidence/compile';
 export type { CompiledStyleXRule, CompileResult } from './evidence/compile';
 export { describeLintMessages, lintStyleX } from './evidence/lint';
 export type { LintMessage, LintResult } from './evidence/lint';
-export { stylexCascadeForKey, stylexCssForKey } from './evidence/staticCss';
+export {
+  stylexCascadeForKey,
+  stylexCssForKey,
+  stylexKeyframesForKey,
+} from './evidence/staticCss';
 
 export {
   emotionBaseline,
   emotionConditionalBaseline,
+  emotionKeyframesBaseline,
   emotionMediaQueryBaseline,
   emotionPseudoElementBaseline,
   emotionSupportsNestingBaseline,
