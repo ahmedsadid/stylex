@@ -29,6 +29,14 @@ type SelectorFacts = {
   +specificity: Specificity,
 };
 
+function atRuleCondition(node: $FlowFixMe): string | null {
+  const name = String(node.name);
+  const params = String(node.params);
+  return (name === 'media' || name === 'supports') && params !== ''
+    ? `@${name} ${params}`
+    : null;
+}
+
 function selectorFacts(
   selector: string,
   className?: string,
@@ -115,86 +123,69 @@ export function observeEmotionSerialization(style: mixed): CascadeObservation {
   }
   const declarations = [];
   let sourceOrder = 0;
-  for (const node of root.nodes ?? []) {
-    if (node.type === 'decl') {
-      const declaration = declarationFacts({
-        node,
-        selector: 'default',
-        id: `emotion-${sourceOrder}`,
-        sourceOrder,
-        stylexPriority: null,
-      });
-      if (declaration != null) declarations.push(declaration);
-      sourceOrder++;
-      continue;
-    }
-    if (node.type !== 'rule') {
-      if (
-        node.type !== 'atrule' ||
-        String(node.name) !== 'media' ||
-        String(node.params) === ''
-      ) {
-        return {
-          ok: false,
-          reason: `Emotion emitted unsupported ${String(node.type)} node`,
-        };
-      }
-      const condition = `@media ${String(node.params)}`;
-      for (const child of node.nodes ?? []) {
-        if (child.type !== 'decl') {
-          return {
-            ok: false,
-            reason: `Emotion emitted nested ${String(child.type)} media node`,
-          };
-        }
+  const visit = (
+    nodes: $ReadOnlyArray<$FlowFixMe>,
+    conditions: $ReadOnlyArray<string>,
+  ): string | null => {
+    for (const node of nodes) {
+      if (node.type === 'decl') {
         const declaration = declarationFacts({
-          node: child,
+          node,
           selector: 'default',
           id: `emotion-${sourceOrder}`,
           sourceOrder,
           stylexPriority: null,
-          factsOverride: {
-            conditions: [condition],
-            pseudoElement: null,
-            specificity: [0, 1, 0],
-          },
+          factsOverride:
+            conditions.length === 0
+              ? undefined
+              : {
+                  conditions,
+                  pseudoElement: null,
+                  specificity: [0, 1, 0],
+                },
         });
         if (declaration != null) declarations.push(declaration);
         sourceOrder++;
+        continue;
       }
-      continue;
-    }
-    const selector = String(node.selector);
-    if (selectorFacts(selector) == null) {
-      return {
-        ok: false,
-        reason: `Emotion emitted unsupported selector ${selector}`,
-      };
-    }
-    for (const child of node.nodes ?? []) {
-      if (child.type !== 'decl') {
-        return {
-          ok: false,
-          reason: `Emotion emitted nested ${String(child.type)} node`,
-        };
+      if (node.type === 'atrule') {
+        const condition = atRuleCondition(node);
+        if (condition == null || conditions.length >= 2) {
+          return 'Emotion emitted unsupported at-rule shape';
+        }
+        const reason = visit(node.nodes ?? [], [...conditions, condition]);
+        if (reason != null) return reason;
+        continue;
       }
-      const declaration = declarationFacts({
-        node: child,
-        selector,
-        id: `emotion-${sourceOrder}`,
-        sourceOrder,
-        stylexPriority: null,
-      });
-      if (declaration == null) {
-        return {
-          ok: false,
-          reason: `Emotion emitted unsupported selector ${selector}`,
-        };
+      if (node.type !== 'rule' || conditions.length > 0) {
+        return `Emotion emitted unsupported ${String(node.type)} node`;
       }
-      declarations.push(declaration);
-      sourceOrder++;
+      const selector = String(node.selector);
+      if (selectorFacts(selector) == null) {
+        return `Emotion emitted unsupported selector ${selector}`;
+      }
+      for (const child of node.nodes ?? []) {
+        if (child.type !== 'decl') {
+          return `Emotion emitted nested ${String(child.type)} node`;
+        }
+        const declaration = declarationFacts({
+          node: child,
+          selector,
+          id: `emotion-${sourceOrder}`,
+          sourceOrder,
+          stylexPriority: null,
+        });
+        if (declaration == null) {
+          return `Emotion emitted unsupported selector ${selector}`;
+        }
+        declarations.push(declaration);
+        sourceOrder++;
+      }
     }
-  }
+    return null;
+  };
+  const failure = visit(root.nodes ?? [], []);
+  if (failure != null) return { ok: false, reason: failure };
   return Object.freeze({
     ok: true,
     css,
@@ -227,31 +218,42 @@ export function observeStyleXRules(
     }
     let ruleNode = nodes[0];
     let factsOverride;
-    if (ruleNode.type === 'atrule') {
+    const conditions = [];
+    while (ruleNode.type === 'atrule') {
+      const condition = atRuleCondition(ruleNode);
       if (
-        String(ruleNode.name) !== 'media' ||
-        String(ruleNode.params) === '' ||
-        (ruleNode.nodes ?? []).length !== 1 ||
-        ruleNode.nodes[0].type !== 'rule'
+        condition == null ||
+        conditions.length >= 2 ||
+        (ruleNode.nodes ?? []).length !== 1
       ) {
         return {
           ok: false,
           reason: 'StyleX emitted an unsupported at-rule shape',
         };
       }
-      const condition = `@media ${String(ruleNode.params)}`;
+      conditions.push(condition);
       ruleNode = ruleNode.nodes[0];
-      const expectedSelector = `.${rule.className}.${rule.className}`;
+    }
+    if (conditions.length > 0) {
+      if (ruleNode.type !== 'rule') {
+        return {
+          ok: false,
+          reason: 'StyleX emitted an unsupported at-rule shape',
+        };
+      }
+      const expectedSelector = Array(conditions.length + 1)
+        .fill(`.${rule.className}`)
+        .join('');
       if (String(ruleNode.selector) !== expectedSelector) {
         return {
           ok: false,
-          reason: `StyleX emitted unsupported media selector ${String(ruleNode.selector)}`,
+          reason: `StyleX emitted unsupported at-rule selector ${String(ruleNode.selector)}`,
         };
       }
       factsOverride = {
-        conditions: [condition],
+        conditions,
         pseudoElement: null,
-        specificity: [0, 2, 0],
+        specificity: [0, conditions.length + 1, 0],
       };
     }
     if (ruleNode.type !== 'rule') {

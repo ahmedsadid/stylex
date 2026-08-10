@@ -364,8 +364,10 @@ export {
   PSEUDO_ELEMENT_REFEREE_MODEL,
   referee,
   refereeMediaQueries,
+  refereeSupportsNesting,
   refereePseudoElements,
   REFEREE_MODEL,
+  SUPPORTS_NESTING_REFEREE_MODEL,
 } from './referee/model';
 export type {
   ActivationState,

@@ -12,6 +12,8 @@ import { canonicalProperty, canonicalValue } from '../compare/model';
 export const REFEREE_MODEL: string = 'cascade-referee-v1';
 export const PSEUDO_ELEMENT_REFEREE_MODEL: string = 'pseudo-element-referee-v1';
 export const MEDIA_QUERY_REFEREE_MODEL: string = 'media-query-referee-v1';
+export const SUPPORTS_NESTING_REFEREE_MODEL: string =
+  'supports-nesting-referee-v1';
 
 export type Specificity = $ReadOnly<[number, number, number]>;
 
@@ -400,6 +402,50 @@ export function refereeMediaQueries(
       pseudoElements: new Set(),
       // Emotion's eventual class selector remains single-specificity inside
       // its at-rule. StyleX deliberately emits `.class.class` for media rules.
+      conditionSpecificity: { source: 0, target: 1 },
+    }),
+  );
+}
+
+/**
+ * Compare one exact supports condition, optionally intersected with one exact
+ * media query. Wrapper order is not part of the identity: both nesting orders
+ * activate under the same boolean state, and StyleX canonicalizes the output.
+ */
+export function refereeSupportsNesting(
+  source: $ReadOnlyArray<RefereeDeclaration>,
+  target: $ReadOnlyArray<RefereeDeclaration>,
+): RefereeResult {
+  const conditions = new Set(
+    [...source, ...target].flatMap((declaration) => declaration.conditions),
+  );
+  const supports = [...conditions].filter((condition) =>
+    /^@supports [^\r\n{}]+$/.test(condition),
+  );
+  const media = [...conditions].filter((condition) =>
+    /^@media [^\r\n{}]+$/.test(condition),
+  );
+  if (
+    supports.length !== 1 ||
+    media.length > 1 ||
+    conditions.size !== supports.length + media.length
+  ) {
+    return Object.freeze({
+      status: 'unsupported',
+      model: SUPPORTS_NESTING_REFEREE_MODEL,
+      reasons: Object.freeze([
+        'supports grammar requires one exact @supports condition and at most one exact nested @media condition',
+      ]),
+    });
+  }
+  return compareWithGrammar(
+    source,
+    target,
+    Object.freeze({
+      model: SUPPORTS_NESTING_REFEREE_MODEL,
+      conditions,
+      maximumConditions: 2,
+      pseudoElements: new Set(),
       conditionSpecificity: { source: 0, target: 1 },
     }),
   );
