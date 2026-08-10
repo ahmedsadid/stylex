@@ -19,10 +19,16 @@ export type ConditionalMutationId =
   | 'pseudo-element-target-changed'
   | 'style-key-wiring-changed';
 
+export type ConditionalMutationGate =
+  | 'observer'
+  | 'binding-integrity'
+  | 'grammar'
+  | 'referee';
+
 export type ConditionalMutation = {
   +id: ConditionalMutationId,
   +field: string,
-  +expectedGate: string,
+  +expectedGate: ConditionalMutationGate,
 };
 
 export const CONDITIONAL_MUTATION_MANIFEST: $ReadOnlyArray<ConditionalMutation> =

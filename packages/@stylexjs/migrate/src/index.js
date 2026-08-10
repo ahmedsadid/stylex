@@ -369,6 +369,7 @@ export {
 export type { CascadeObservation } from './referee/observations';
 export { CONDITIONAL_MUTATION_MANIFEST } from './referee/mutations';
 export type {
+  ConditionalMutationGate,
   ConditionalMutation,
   ConditionalMutationId,
 } from './referee/mutations';
