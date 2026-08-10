@@ -33,6 +33,23 @@ _safe_, _verified_, and _equivalent_ are never used unqualified.
 
 A check that could not run reports `unavailable`. That never counts as a pass.
 
+## Local project state
+
+M3 stores durable migration records under `.stylex-migrate/`. The directory is
+added to `.git/info/exclude`; the tool does not edit the repository's tracked
+`.gitignore` or create commits.
+
+```sh
+stylex-migrate init
+stylex-migrate status
+stylex-migrate state rebuild
+stylex-migrate schema migrate --dry-run
+stylex-migrate cleanup             # preview
+stylex-migrate cleanup --confirm   # remove unreferenced local artifacts
+```
+
+Every command also accepts `--json`.
+
 ## Development
 
 ```sh

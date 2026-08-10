@@ -3,6 +3,9 @@
   "version": "0.19.0",
   "description": "A migration kit for moving styling libraries (Emotion first) to StyleX",
   "main": "./lib/index.js",
+  "bin": {
+    "stylex-migrate": "./lib/cli.js"
+  },
   "repository": "https://www.github.com/facebook/stylex",
   "license": "MIT",
   "private": true,
