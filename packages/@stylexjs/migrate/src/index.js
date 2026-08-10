@@ -260,7 +260,9 @@ export {
   approve,
   bundleEvidence,
   applyPlan,
+  isMechanicalComparisonModel,
   MECHANICAL_COMPARISON_MODEL,
+  MECHANICAL_COMPARISON_MODELS,
   MECHANICAL_POLICY_ID,
 } from './kernel/applyPlan';
 export type {

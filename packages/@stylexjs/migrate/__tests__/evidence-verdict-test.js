@@ -72,10 +72,12 @@ describe('M5 evidence bundles and policy verdicts', () => {
     proposer,
     classification,
     includeStatic,
+    comparisonModel = 'static-css-v3',
   }: {
     +proposer: Proposer,
     +classification: Classification,
     +includeStatic: boolean,
+    +comparisonModel?: string,
   }): VerificationCandidate {
     const workspace = createCandidateWorkspace({
       repositoryRoot: repo,
@@ -120,7 +122,7 @@ describe('M5 evidence bundles and policy verdicts', () => {
             providerVersion: 'fixture-v1',
             subject:
               check === 'static-css-comparison'
-                ? { ...subject, model: 'static-css-v3' }
+                ? { ...subject, model: comparisonModel }
                 : subject,
             scope: [change.path],
             result: 'pass',
@@ -310,6 +312,25 @@ describe('M5 evidence bundles and policy verdicts', () => {
       'checks-passed',
     ]);
     expect(verdict.missingRequirements).toHaveLength(4);
+  });
+
+  test('the repository verdict accepts the approved cascade referee model', () => {
+    const candidate = record({
+      proposer: { kind: 'deterministic', version: 'fixture-v1' },
+      classification: 'mechanical',
+      includeStatic: true,
+      comparisonModel: 'cascade-referee-v1',
+    });
+    const evidence = inputs(candidate);
+    const verdict = evaluateRepositoryEvidence({
+      bundle: createRepositoryEvidenceBundle({
+        ...evidence,
+        candidates: [candidate],
+      }),
+      candidates: [candidate],
+    });
+    expect(verdict.outcome).toBe('auto-eligible');
+    expect(verdict.policyId).toBe('mechanical-repository-v2');
   });
 
   test('unavailable is not pass, and contextual review carries the runtime warning', () => {

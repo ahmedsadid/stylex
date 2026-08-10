@@ -81,8 +81,16 @@ export type ApplyPlanResult =
       +writes: $ReadOnlyArray<WriteResult>,
     };
 
-export const MECHANICAL_POLICY_ID: string = 'mechanical-static-v1';
+export const MECHANICAL_POLICY_ID: string = 'mechanical-static-v2';
 export const MECHANICAL_COMPARISON_MODEL: string = 'static-css-v3';
+export const MECHANICAL_COMPARISON_MODELS: $ReadOnlyArray<string> =
+  Object.freeze([MECHANICAL_COMPARISON_MODEL, 'cascade-referee-v1']);
+
+export function isMechanicalComparisonModel(model: mixed): boolean {
+  return (
+    typeof model === 'string' && MECHANICAL_COMPARISON_MODELS.includes(model)
+  );
+}
 
 const REQUIRED_MECHANICAL_CHECKS: $ReadOnlyArray<{
   +check: string,
@@ -247,9 +255,12 @@ function validateEvidenceBundle(
     }
     if (
       result.check === 'static-css-comparison' &&
-      result.subject.model !== MECHANICAL_COMPARISON_MODEL
+      !isMechanicalComparisonModel(result.subject.model)
     ) {
-      return `static CSS evidence for ${result.subject.file} must use comparison model ${MECHANICAL_COMPARISON_MODEL}`;
+      return (
+        `static CSS evidence for ${result.subject.file} must use one of ` +
+        MECHANICAL_COMPARISON_MODELS.join(', ')
+      );
     }
   }
 

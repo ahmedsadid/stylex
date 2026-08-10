@@ -10,7 +10,10 @@
 import { hashString, shortHash } from '../kernel/hash';
 import { canonicalJson } from '../state/json';
 import { readRecord, writeRecord } from '../state/project';
-import { MECHANICAL_COMPARISON_MODEL } from '../kernel/applyPlan';
+import {
+  isMechanicalComparisonModel,
+  MECHANICAL_COMPARISON_MODELS,
+} from '../kernel/applyPlan';
 import { validateCandidatePatch } from '../candidate/patch';
 import { validateRepositoryEvidenceBundle } from './bundle';
 import {
@@ -155,20 +158,19 @@ function staticRequirements(
           );
         }
       }
-      const comparison = staticEvidence.find(
+      const comparisons = staticEvidence.filter(
         (result) =>
           result.subject.file === change.path &&
           result.check === 'static-css-comparison' &&
           result.provider === 'stylex-migrate' &&
           result.result === 'pass',
       );
-      if (
-        comparison != null &&
-        comparison.subject.model !== MECHANICAL_COMPARISON_MODEL
-      ) {
-        failed.add(
-          `${change.path} static comparison used ${comparison.subject.model ?? 'no model'}`,
-        );
+      for (const comparison of comparisons) {
+        if (!isMechanicalComparisonModel(comparison.subject.model)) {
+          failed.add(
+            `${change.path} static comparison used ${comparison.subject.model ?? 'no model'}`,
+          );
+        }
       }
     }
   }
@@ -244,7 +246,7 @@ export function evaluateRepositoryEvidence({
   const classification = strongest(candidates);
   const policyId =
     classification === 'mechanical'
-      ? 'mechanical-repository-v1'
+      ? 'mechanical-repository-v2'
       : 'contextual-repository-v1';
   const failures = new Set<string>();
   const missing = new Set<string>();
@@ -296,7 +298,9 @@ export function evaluateRepositoryEvidence({
           scope: Object.freeze(
             bundle.subject.changes.map((change) => change.path),
           ),
-          detail: `all changed files passed ${MECHANICAL_COMPARISON_MODEL} and the mechanical check set`,
+          detail:
+            'all changed files passed an approved mechanical comparison ' +
+            `model (${MECHANICAL_COMPARISON_MODELS.join(', ')}) and the mechanical check set`,
         }),
       );
     }
