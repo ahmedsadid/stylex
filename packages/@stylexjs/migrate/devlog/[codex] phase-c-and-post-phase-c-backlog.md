@@ -28,12 +28,12 @@ manifest, policy version, end-to-end candidate test, and exit review.
       authored in either wrapper order and bounded to two at-rule levels.
 - [x] One referenced `@keyframes` rule with literal `from` and `to` frames,
       compared through generated-name alpha-renaming without adding a binding.
+- [x] Physical `margin` and `padding` shorthands with one to four simple static
+      components, independently expanded and compared with longhand conflicts
+      resolved in authored order.
 
 ## Required before Phase C closes
 
-- [ ] Shorthands after explicit expansion and cascade modeling.
-  - Expand through an independently tested CSS model.
-  - Compare reset behavior, order, importance, and longhand conflicts.
 - [ ] Logical/physical properties after conflict modeling.
   - Account for direction and writing mode rather than comparing only LTR rule
     text.

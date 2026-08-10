@@ -130,6 +130,11 @@ It admits separate, bounded modifier capabilities:
   The referee alpha-renames only StyleX's generated CSS identifier and still
   compares both frames, their declarations, and the animation reference.
   `stylex.keyframes(...)` stays inline, so no binding is introduced or moved.
+- Physical `margin` and `padding` shorthands with one to four simple static
+  components under model `box-shorthand-referee-v1`. Discovery expands the
+  authored value for StyleX; the verifier separately expands Emotion's emitted
+  CSS and compares all four longhand winners, including shorthand/longhand reset
+  order.
 
 These are not general selector claims. A disagreement in any admitted state or
 target is a refusal. In particular, reversing two otherwise identical hover and
@@ -143,12 +148,12 @@ compares the rewritten activation regions rather than relying on authored key
 order. Media queries also cannot yet be mixed with pseudo-classes or
 pseudo-elements.
 
-Dynamic values, spreads, shorthands, `!important`, other pseudo-elements or
-pseudo-classes, other at-rules, deeper nesting, percentage or multiple
-keyframes, component `css` props, and sites that also have `className`, `style`,
-or a JSX spread remain outside this mechanical boundary. The comparison is local
-and static: it does not establish whole-page browser behavior, repository build
-success, or runtime equivalence.
+Dynamic values, spreads, other shorthand families, `!important`, other
+pseudo-elements or pseudo-classes, other at-rules, deeper nesting, percentage or
+multiple keyframes, component `css` props, and sites that also have `className`,
+`style`, or a JSX spread remain outside this mechanical boundary. The comparison
+is local and static: it does not establish whole-page browser behavior,
+repository build success, or runtime equivalence.
 
 The candidate persistence API is available for deterministic integrations. The
 end-user contextual candidate creation protocol and agent skill arrive in a
