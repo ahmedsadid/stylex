@@ -82,7 +82,7 @@ export function convertSource(
     return { status: 'refused', reason: parsed.reason };
   }
   const ast = parsed.ast;
-  const discovered = discover(ast, source);
+  const discovered = discover(ast);
 
   if (!discovered.usesEmotion) {
     return {

@@ -20,7 +20,7 @@ function read(
   if (!parsed.ok) {
     throw new Error(`fixture failed to parse: ${parsed.reason}`);
   }
-  return discover(parsed.ast, source);
+  return discover(parsed.ast);
 }
 
 function reasons(result: DiscoveryResult): $ReadOnlyArray<string> {

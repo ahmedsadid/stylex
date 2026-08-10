@@ -10,7 +10,6 @@
 export { VERSION } from './version';
 
 export {
-  hashBytes,
   hashFields,
   hashString,
   shortHash,
@@ -36,14 +35,6 @@ export {
   transition,
 } from './kernel/state';
 export type { Actor, MigrationState } from './kernel/state';
-
-export { allPassed, makeEvidence } from './kernel/evidence';
-export type {
-  Claim,
-  CheckOutcome,
-  EvidenceResult,
-  EvidenceSubject,
-} from './kernel/evidence';
 
 export {
   assertCleanWorktree,
@@ -93,6 +84,7 @@ export type {
   CommitPlanResult,
   EvidenceBundle,
 } from './kernel/commitPlan';
+
 export { parseSource, pluginsForFilename } from './static/parse';
 export type { ParseResult } from './static/parse';
 
@@ -100,6 +92,28 @@ export { isEmptyStyle, styleObject } from './static/ir';
 export type { Declaration, StaticValue, StyleObject } from './static/ir';
 
 export { walk } from './static/walk';
+
+export {
+  STYLEX_MODULE,
+  allocateKeys,
+  emitCreateCall,
+  emitImport,
+  emitPropsSpread,
+  emitStyleObject,
+  sanitizeKey,
+  serializeValue,
+} from './static/emit';
+export type { StyleEntry } from './static/emit';
+
+export { applyEdits } from './static/rewrite';
+export type { Edit } from './static/rewrite';
+
+export {
+  collectUsedNames,
+  freeName,
+  resolveModuleBinding,
+} from './static/bindings';
+export type { ModuleBinding } from './static/bindings';
 
 export {
   COMPARISON_MODEL,
@@ -114,6 +128,14 @@ export type {
   CssDeclaration,
   Difference,
 } from './compare/model';
+
+export { allPassed, makeEvidence } from './kernel/evidence';
+export type {
+  Claim,
+  CheckOutcome,
+  EvidenceResult,
+  EvidenceSubject,
+} from './kernel/evidence';
 
 export { evidence, packageVersion } from './evidence/claims';
 
@@ -134,7 +156,11 @@ export {
 } from './proposers/emotionStatic';
 export type { Proposal, ProposedEntry } from './proposers/emotionStatic';
 
-export { discover, usesEmotion } from './adapters/emotion/discover';
+export {
+  discover,
+  isShorthandProperty,
+  usesEmotion,
+} from './adapters/emotion/discover';
 export type {
   DiscoveryResult,
   EmotionRefusal,

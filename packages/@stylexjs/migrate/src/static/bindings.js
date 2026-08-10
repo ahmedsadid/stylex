@@ -57,13 +57,26 @@ export function freeName(base: string, used: $ReadOnlySet<string>): string {
   return `${base}${suffix}`;
 }
 
+function isTypeOnly(importKind: mixed): boolean {
+  return importKind === 'type' || importKind === 'typeof';
+}
+
+/**
+ * The local name a module is bound to at runtime, if any.
+ *
+ * Type-only imports are skipped. `import type * as stylex from '...'` binds
+ * nothing once types are stripped, so reusing that name would emit calls to an
+ * identifier that does not exist in the compiled output — code that typechecks
+ * and then fails at runtime.
+ */
 function importedLocalName(ast: $FlowFixMe, moduleName: string): string | null {
   let localName = null;
   walk(ast, (node) => {
     if (
       node.type !== 'ImportDeclaration' ||
       node.source == null ||
-      node.source.value !== moduleName
+      node.source.value !== moduleName ||
+      isTypeOnly(node.importKind)
     ) {
       return;
     }
@@ -71,6 +84,7 @@ function importedLocalName(ast: $FlowFixMe, moduleName: string): string | null {
       if (
         (specifier.type === 'ImportNamespaceSpecifier' ||
           specifier.type === 'ImportDefaultSpecifier') &&
+        !isTypeOnly(specifier.importKind) &&
         specifier.local != null &&
         typeof specifier.local.name === 'string'
       ) {

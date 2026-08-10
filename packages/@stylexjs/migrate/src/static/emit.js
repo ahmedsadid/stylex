@@ -28,11 +28,51 @@ export type StyleEntry = {
 
 export const STYLEX_MODULE: string = '@stylexjs/stylex';
 
+const SHORT_ESCAPES: { +[string]: string } = {
+  '\\': '\\\\',
+  "'": "\\'",
+  '\n': '\\n',
+  '\r': '\\r',
+  '\t': '\\t',
+  '\b': '\\b',
+  '\f': '\\f',
+  '\v': '\\v',
+};
+
+// Control characters, quote, backslash, and the two line separators that are
+// legal in a string but not in every consumer of one. Matching control
+// characters is the entire point here, so the rule against it does not apply.
+// eslint-disable-next-line no-control-regex
+const NEEDS_ESCAPE = /[\\'\u0000-\u001f\u007f\u2028\u2029]/g;
+
+/**
+ * Serialize a value as JavaScript source.
+ *
+ * A style value is arbitrary text from the user's code, so this has to produce
+ * a valid literal for anything a string can hold. Escaping only quotes and
+ * backslashes was not enough: `content: "a\nb"` is a perfectly ordinary style,
+ * and emitting its newline raw produces source that does not parse.
+ *
+ * `\0` is deliberately not used as a short escape, because `\0` followed by a
+ * digit is a legacy octal escape and would change the value.
+ */
 export function serializeValue(value: StaticValue): string {
   if (typeof value === 'number') {
+    if (!Number.isFinite(value)) {
+      throw new Error(
+        `Cannot emit the non-finite number ${String(value)} as a style value.`,
+      );
+    }
     return String(value);
   }
-  const escaped = value.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+  const escaped = value.replace(NEEDS_ESCAPE, (character) => {
+    const short = SHORT_ESCAPES[character];
+    if (short != null) {
+      return short;
+    }
+    const code = character.charCodeAt(0).toString(16).padStart(4, '0');
+    return `\\u${code}`;
+  });
   return `'${escaped}'`;
 }
 
@@ -83,18 +123,56 @@ export function emitImport(namespace: string): string {
   return `import * as ${namespace} from '${STYLEX_MODULE}';`;
 }
 
+const IDENTIFIER = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
+
+/**
+ * Turn a JSX tag name into something that can be an object key and a property
+ * access.
+ *
+ * A tag is not an identifier. `my-button` is a valid custom element and would
+ * emit `styles.my-button`, which is a subtraction. Dots and dashes are folded
+ * into camelCase, anything else is dropped, and a name that survives as
+ * nothing falls back to a fixed prefix.
+ */
+export function sanitizeKey(elementName: string): string {
+  const camel = elementName
+    .split(/[^A-Za-z0-9_$]+/)
+    .filter((part) => part !== '')
+    .map((part, index) =>
+      index === 0 ? part : part.charAt(0).toUpperCase() + part.slice(1),
+    )
+    .join('');
+  if (camel === '' || !IDENTIFIER.test(camel)) {
+    return `style${camel.replace(/^[^A-Za-z_$]+/, '')}`;
+  }
+  return camel;
+}
+
 /**
  * Style keys are named after the element they came from, so a reviewer reading
- * `styles.button` can tell what it belongs to. Collisions get a numeric suffix
- * in source order, which keeps the naming stable between runs.
+ * `styles.button` can tell what it belongs to.
+ *
+ * Suffixes are allocated against every key already handed out, not against a
+ * per-name counter. Counting per name collides: `div`, `div2`, `div` used to
+ * produce `div`, `div2`, `div2`, where the second entry silently replaced the
+ * first in the registry and two elements shared one style.
  */
 export function allocateKeys(
   elementNames: $ReadOnlyArray<string>,
 ): $ReadOnlyArray<string> {
-  const counts = new Map<string, number>();
+  const used = new Set<string>();
   return elementNames.map((name) => {
-    const seen = counts.get(name) ?? 0;
-    counts.set(name, seen + 1);
-    return seen === 0 ? name : `${name}${seen + 1}`;
+    const base = sanitizeKey(name);
+    if (!used.has(base)) {
+      used.add(base);
+      return base;
+    }
+    let suffix = 2;
+    while (used.has(`${base}${suffix}`)) {
+      suffix++;
+    }
+    const key = `${base}${suffix}`;
+    used.add(key);
+    return key;
   });
 }

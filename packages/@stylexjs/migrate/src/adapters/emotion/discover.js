@@ -7,6 +7,7 @@
  * @flow strict
  */
 
+import { getPriority } from '@stylexjs/shared';
 import { walk } from '../../static/walk';
 import { styleObject } from '../../static/ir';
 import type { Declaration, StyleObject } from '../../static/ir';
@@ -33,7 +34,9 @@ export type RefusalReason =
   | 'css-with-class-or-style-prop'
   | 'duplicate-css-prop'
   | 'unsupported-property-name'
-  | 'shorthand-property';
+  | 'shorthand-property'
+  | 'non-finite-number'
+  | 'css-with-jsx-spread';
 
 export type EmotionSite = {
   // Span of the whole `css={{...}}` attribute, for replacement.
@@ -59,8 +62,18 @@ export type DiscoveryResult = {
   +refusals: $ReadOnlyArray<EmotionRefusal>,
 };
 
-const EMOTION_MODULE_PREFIX = '@emotion/';
+/**
+ * Only these modules put Emotion's JSX runtime in play for a `css` prop.
+ * `@emotion/styled` alone does not: a file can import it, use it, and still
+ * have no Emotion handling for a `css` prop on a host element.
+ */
+const CSS_PROP_MODULES: $ReadOnlySet<string> = new Set([
+  '@emotion/react',
+  '@emotion/core',
+]);
+
 const JSX_IMPORT_SOURCE_PRAGMA = '@jsxImportSource @emotion/react';
+const CLASSIC_JSX_PRAGMA = '@jsx jsx';
 
 // Emotion accepts `fontSize` and `'font-size'` alike; StyleX takes the
 // camelCase form. Rather than translate between them here — which would be this
@@ -79,63 +92,26 @@ const SUPPORTED_PROPERTY_NAME = /^[a-zA-Z][a-zA-Z0-9]*$/;
  * comparison that comes down to a set of declarations would call this a match
  * and be wrong.
  *
- * M3 admits shorthands with a comparison model that understands that
+ * Which properties those are is asked of StyleX itself rather than kept in a
+ * list here. StyleX assigns a lower priority to a property precisely when it
+ * can be reset by something more specific, so its priority table *is* the
+ * shorthand boundary — and unlike a hand-maintained list it does not fall
+ * behind as CSS grows. `getPriority` expects kebab-case; a camelCase name it
+ * does not recognise silently returns the default, which is why the name is
+ * converted first.
+ *
+ * M3 admits shorthands with a comparison model that understands the
  * interaction. Until then the honest answer is a refusal.
  */
-const SHORTHAND_PROPERTIES: $ReadOnlySet<string> = new Set([
-  'all',
-  'animation',
-  'background',
-  'border',
-  'borderBlock',
-  'borderBlockEnd',
-  'borderBlockStart',
-  'borderBottom',
-  'borderColor',
-  'borderImage',
-  'borderInline',
-  'borderInlineEnd',
-  'borderInlineStart',
-  'borderLeft',
-  'borderRadius',
-  'borderRight',
-  'borderStyle',
-  'borderTop',
-  'borderWidth',
-  'columnRule',
-  'columns',
-  'containIntrinsicSize',
-  'flex',
-  'flexFlow',
-  'font',
-  'gap',
-  'grid',
-  'gridArea',
-  'gridColumn',
-  'gridRow',
-  'gridTemplate',
-  'inset',
-  'insetBlock',
-  'insetInline',
-  'listStyle',
-  'margin',
-  'marginBlock',
-  'marginInline',
-  'mask',
-  'offset',
-  'outline',
-  'overflow',
-  'padding',
-  'paddingBlock',
-  'paddingInline',
-  'placeContent',
-  'placeItems',
-  'placeSelf',
-  'scrollMargin',
-  'scrollPadding',
-  'textDecoration',
-  'transition',
-]);
+const LONGHAND_PRIORITY = 3000;
+
+function toKebabCase(property: string): string {
+  return property.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`);
+}
+
+export function isShorthandProperty(property: string): boolean {
+  return getPriority(toKebabCase(property)) < LONGHAND_PRIORITY;
+}
 
 function isHostElementName(name: string): boolean {
   const first = name[0];
@@ -153,9 +129,29 @@ function elementNameOf(opening: $FlowFixMe): string | null {
   return null;
 }
 
-export function usesEmotion(ast: $FlowFixMe, source: string): boolean {
-  if (source.includes(JSX_IMPORT_SOURCE_PRAGMA)) {
-    return true;
+/**
+ * Whether this file's `css` props are handled by Emotion.
+ *
+ * The pragma is read from parsed comments rather than searched for in the raw
+ * text, because the same characters inside a string or an unrelated sentence
+ * prove nothing.
+ *
+ * This is evidence, not proof, and it errs toward doing nothing. A project can
+ * configure the Emotion JSX runtime globally, in which case a file with neither
+ * pragma nor import still has Emotion semantics and will be reported as having
+ * nothing to convert. Reading build configuration is a later, project-wide
+ * concern; being wrong in that direction costs coverage, while the opposite
+ * would rewrite files whose `css` prop means something else entirely.
+ */
+export function usesEmotion(ast: $FlowFixMe): boolean {
+  for (const comment of ast.comments ?? []) {
+    const value = String(comment.value ?? '');
+    if (
+      value.includes(JSX_IMPORT_SOURCE_PRAGMA) ||
+      value.includes(CLASSIC_JSX_PRAGMA)
+    ) {
+      return true;
+    }
   }
   let found = false;
   walk(ast, (node) => {
@@ -163,7 +159,7 @@ export function usesEmotion(ast: $FlowFixMe, source: string): boolean {
       node.type === 'ImportDeclaration' &&
       node.source != null &&
       typeof node.source.value === 'string' &&
-      node.source.value.startsWith(EMOTION_MODULE_PREFIX)
+      CSS_PROP_MODULES.has(node.source.value)
     ) {
       found = true;
     }
@@ -207,8 +203,13 @@ function readDeclarations(
       if (!SUPPORTED_PROPERTY_NAME.test(name)) {
         return { ok: false, reason: 'unsupported-property-name' };
       }
-      if (SHORTHAND_PROPERTIES.has(name)) {
+      if (isShorthandProperty(name)) {
         return { ok: false, reason: 'shorthand-property' };
+      }
+      // `1e999` is a numeric literal that parses to Infinity, which has no
+      // style meaning and cannot be emitted back as source.
+      if (typeof value.value === 'number' && !Number.isFinite(value.value)) {
+        return { ok: false, reason: 'non-finite-number' };
       }
       declarations.push({ property: name, value: value.value });
     } else if (value.type === 'ObjectExpression') {
@@ -247,8 +248,8 @@ function lastWins(
   return result;
 }
 
-export function discover(ast: $FlowFixMe, source: string): DiscoveryResult {
-  const emotion = usesEmotion(ast, source);
+export function discover(ast: $FlowFixMe): DiscoveryResult {
+  const emotion = usesEmotion(ast);
   const sites: Array<EmotionSite> = [];
   const refusals: Array<EmotionRefusal> = [];
 
@@ -316,6 +317,22 @@ export function discover(ast: $FlowFixMe, source: string): DiscoveryResult {
         end: attribute.end,
         elementName,
         reason: 'css-with-class-or-style-prop',
+      });
+      return;
+    }
+
+    // A sibling spread can carry `className` or `style` whose values are only
+    // known at runtime. Emotion's JSX runtime merges those with the `css` prop;
+    // `stylex.props` would overwrite them. Whether that changes the result
+    // depends on what the spread contains, which makes the site contextual
+    // rather than mechanical — and a CSS comparison cannot establish
+    // prop-merging equivalence.
+    if (attributes.some((other) => other.type === 'JSXSpreadAttribute')) {
+      refusals.push({
+        start: attribute.start,
+        end: attribute.end,
+        elementName,
+        reason: 'css-with-jsx-spread',
       });
       return;
     }
