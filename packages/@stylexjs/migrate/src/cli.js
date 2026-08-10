@@ -30,6 +30,17 @@ import {
 import type { JsonValue } from './state/json';
 import type { Inventory, Plan } from './inventory/model';
 import type { ProjectState } from './state/project';
+import { loadVerificationCandidate } from './evidence/candidates';
+import { createCandidateEvidenceSubject } from './evidence/subject';
+import {
+  loadLatestRepositoryEvidenceBundle,
+  loadRepositoryEvidenceBundle,
+} from './evidence/bundle';
+import {
+  loadLatestRepositoryEvidenceVerdict,
+  loadRepositoryEvidenceVerdict,
+} from './evidence/verdict';
+import { verifyPersistedCandidates } from './evidence/verify';
 
 type WriteOutput = (text: string) => mixed;
 
@@ -45,8 +56,10 @@ Commands:
   init                    initialize local project state
   scan                    inventory configured source files
   plan                    form migration clusters from the latest inventory
+  verify <candidate...>   run checks against exact persisted candidate bytes
+  review <id>             show a verdict, coverage, claims, and limitations
   status                  summarize inventory, plan, and replayed state
-  explain <id>            show a site's, fact's, cluster's, or plan's reasons
+  explain <id>            explain an inventory, candidate, evidence, or verdict id
   state rebuild           rebuild indexes from append-only events
   schema migrate          migrate local state, with a backup
   cleanup                 find unused local artifacts
@@ -136,12 +149,119 @@ function explain(
     return { kind: 'inventory', detail: inventory as $FlowFixMe };
   }
   if (/^[a-f0-9]{16}$/.test(id)) {
+    const candidate = loadVerificationCandidate(project, id);
+    if (candidate != null) {
+      const subject = createCandidateEvidenceSubject({
+        candidate: candidate.candidate,
+        snapshot: candidate.snapshot,
+        siteIdsByFile: candidate.siteIdsByFile,
+      });
+      return {
+        kind: 'candidate',
+        detail: {
+          id: candidate.candidate.id,
+          subjectId: subject.id,
+          classification: candidate.classification,
+          proposer: candidate.candidate.proposer as $FlowFixMe,
+          files: candidate.candidate.touchedFiles,
+          clusters: candidate.candidate.clusterIds,
+          latestVerdict: loadLatestRepositoryEvidenceVerdict(
+            project,
+            subject.id,
+          ) as $FlowFixMe,
+        },
+      };
+    }
+    const verdict = loadRepositoryEvidenceVerdict(project, id);
+    if (verdict != null) {
+      return { kind: 'verdict', detail: verdict as $FlowFixMe };
+    }
+    const bundle = loadRepositoryEvidenceBundle(project, id);
+    if (bundle != null) {
+      return { kind: 'evidence-bundle', detail: bundle as $FlowFixMe };
+    }
+    const latestVerdict = loadLatestRepositoryEvidenceVerdict(project, id);
+    if (latestVerdict != null) {
+      return {
+        kind: 'evidence-subject',
+        detail: {
+          subjectId: id,
+          verdict: latestVerdict as $FlowFixMe,
+          evidence: loadLatestRepositoryEvidenceBundle(
+            project,
+            id,
+          ) as $FlowFixMe,
+        },
+      };
+    }
     const storedPlan = loadPlan(project, id);
     if (storedPlan != null) {
       return { kind: 'plan', detail: storedPlan as $FlowFixMe };
     }
   }
   return null;
+}
+
+function review(
+  project: ProjectState,
+  id: string,
+): {
+  +verdict: JsonValue,
+  +evidence: JsonValue,
+  +candidates: JsonValue,
+} | null {
+  let verdict = loadRepositoryEvidenceVerdict(project, id);
+  let bundle = loadRepositoryEvidenceBundle(project, id);
+  const candidate = loadVerificationCandidate(project, id);
+  if (candidate != null) {
+    const subject = createCandidateEvidenceSubject({
+      candidate: candidate.candidate,
+      snapshot: candidate.snapshot,
+      siteIdsByFile: candidate.siteIdsByFile,
+    });
+    verdict = loadLatestRepositoryEvidenceVerdict(project, subject.id);
+    bundle = loadLatestRepositoryEvidenceBundle(project, subject.id);
+  } else if (verdict == null && bundle == null) {
+    verdict = loadLatestRepositoryEvidenceVerdict(project, id);
+    bundle = loadLatestRepositoryEvidenceBundle(project, id);
+  }
+  if (verdict != null && bundle == null) {
+    bundle = loadRepositoryEvidenceBundle(project, verdict.evidenceBundleId);
+  }
+  if (bundle != null && verdict == null) {
+    verdict = loadLatestRepositoryEvidenceVerdict(project, bundle.subject.id);
+  }
+  if (verdict == null || bundle == null) {
+    return null;
+  }
+  return {
+    verdict: verdict as $FlowFixMe,
+    evidence: {
+      id: bundle.id,
+      subject: bundle.subject as $FlowFixMe,
+      coverage: bundle.coverage as $FlowFixMe,
+      repositoryChecks: bundle.repositoryEntries.map((entry) => ({
+        provider: entry.providerId,
+        check: entry.evidence.check,
+        result: entry.evidence.result,
+        detail: entry.evidence.detail ?? null,
+        outputPreview: entry.evidence.outputPreview,
+        outputArtifact: entry.outputArtifact,
+      })) as $FlowFixMe,
+      skippedProviderIds: bundle.skippedProviderIds,
+    },
+    candidates: bundle.candidateIds.map((candidateId) => {
+      const record = loadVerificationCandidate(project, candidateId);
+      return record == null
+        ? { id: candidateId, missing: true }
+        : {
+            id: candidateId,
+            classification: record.classification,
+            proposer: record.candidate.proposer,
+            files: record.candidate.touchedFiles,
+          };
+    }) as $FlowFixMe,
+  };
 }
 
 export function runCli(
@@ -229,6 +349,30 @@ export function runCli(
       );
       return 0;
     }
+    if (args[0] === 'review' && args.length === 2) {
+      const result = review(openProject(cwd), args[1]);
+      if (result == null) {
+        const message = `No evidence review found for ${args[1]}`;
+        if (json) {
+          present({ error: message, id: args[1] }, true, stdout);
+        } else {
+          stderr(`${message}\n`);
+        }
+        return 2;
+      }
+      present(
+        {
+          command: 'review',
+          id: args[1],
+          verdict: result.verdict,
+          evidence: result.evidence,
+          candidates: result.candidates,
+        },
+        json,
+        stdout,
+      );
+      return 0;
+    }
     if (args[0] === 'explain' && args.length === 2) {
       const result = explain(openProject(cwd), args[1]);
       if (result == null) {
@@ -298,6 +442,70 @@ export function runCli(
   }
 }
 
+export async function runCliAsync(
+  argv: $ReadOnlyArray<string>,
+  options?: CliOptions,
+): Promise<number> {
+  const args = argv.filter((argument) => !argument.startsWith('--'));
+  if (args[0] !== 'verify') {
+    return runCli(argv, options);
+  }
+  const cwd = options?.cwd ?? process.cwd();
+  const stdout = options?.writeStdout ?? ((text) => process.stdout.write(text));
+  const stderr = options?.writeStderr ?? ((text) => process.stderr.write(text));
+  const json = argv.includes('--json');
+  try {
+    if (args.length < 2) {
+      stderr(redactText(`Unknown command.\n${HELP}`));
+      return 64;
+    }
+    const result = await verifyPersistedCandidates({
+      project: openProject(cwd),
+      candidateIds: args.slice(1),
+    });
+    present(
+      {
+        command: 'verify',
+        subject: result.subject as $FlowFixMe,
+        schedule: {
+          id: result.schedule.schedule.id,
+          estimatedCommandRuns: result.schedule.schedule.estimatedCommandRuns,
+          estimatedDurationMs: result.schedule.schedule.estimatedDurationMs,
+          actualDurationMs: result.schedule.actualDurationMs,
+          checks: result.schedule.entries.map((entry) => ({
+            provider: entry.providerId,
+            result: entry.evidence.result,
+            cacheHit: entry.cacheHit,
+            durationMs: entry.evidence.durationMs,
+            outputArtifact: entry.outputArtifact,
+          })),
+          skippedProviderIds: result.schedule.skippedProviderIds,
+        } as $FlowFixMe,
+        coverage: result.coverage as $FlowFixMe,
+        evidenceBundleId: result.bundle.id,
+        verdict: result.verdict as $FlowFixMe,
+      },
+      json,
+      stdout,
+    );
+    return result.verdict.outcome === 'rejected'
+      ? 4
+      : result.verdict.outcome === 'blocked'
+        ? 3
+        : 0;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (json) {
+      present({ error: redactText(message) }, true, stdout);
+    } else {
+      stderr(`${redactText(message)}\n`);
+    }
+    return 1;
+  }
+}
+
 if (require.main === module) {
-  process.exitCode = runCli(process.argv.slice(2));
+  runCliAsync(process.argv.slice(2)).then((code) => {
+    process.exitCode = code;
+  });
 }

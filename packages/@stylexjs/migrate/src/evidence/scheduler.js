@@ -232,8 +232,18 @@ export function createEvidenceSchedule({
     estimatedCommandRuns: items.length,
     estimatedDurationMs: estimatedWallTime(items, config.concurrency),
   };
+  const identity = {
+    subjectId: stable.subjectId,
+    configHash: stable.configHash,
+    concurrency: stable.concurrency,
+    providers: items.map((item) => ({
+      providerId: item.providerId,
+      cost: item.cost,
+    })),
+    ignoredProviderIds,
+  };
   return Object.freeze({
-    id: shortHash(hashString(canonicalJson(stable as $FlowFixMe))),
+    id: shortHash(hashString(canonicalJson(identity as $FlowFixMe))),
     ...stable,
   });
 }

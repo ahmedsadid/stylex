@@ -97,6 +97,8 @@ export {
   loadRepositoryEvidenceVerdict,
   saveRepositoryEvidenceVerdict,
 } from './evidence/verdict';
+export { verifyPersistedCandidates } from './evidence/verify';
+export type { VerificationResult } from './evidence/verify';
 export type {
   ClaimRecord,
   RepositoryEvidenceVerdict,

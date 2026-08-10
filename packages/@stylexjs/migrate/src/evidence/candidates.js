@@ -21,7 +21,7 @@ export type VerificationCandidate = {
   +candidate: CandidatePatch,
   +snapshot: WorkspaceSnapshot,
   +classification: Classification,
-  +siteIds: $ReadOnlyArray<string>,
+  +siteIdsByFile: { +[path: string]: $ReadOnlyArray<string> },
   +staticEvidence: $ReadOnlyArray<EvidenceResult>,
 };
 
@@ -70,7 +70,10 @@ function parseCandidate(
     !object(record.snapshot.fileHashes) ||
     !object(record.snapshot.fileModes) ||
     !CLASSIFICATIONS.has(record.classification) ||
-    !strings(record.siteIds) ||
+    !object(record.siteIdsByFile) ||
+    Object.keys(record.siteIdsByFile).some(
+      (file) => !strings(record.siteIdsByFile[file]),
+    ) ||
     !Array.isArray(record.staticEvidence)
   ) {
     throw new Error(`Invalid verification candidate record ${expectedId}`);
@@ -79,7 +82,16 @@ function parseCandidate(
     candidate: record.candidate,
     snapshot: record.snapshot,
     classification: record.classification,
-    siteIds: Object.freeze([...record.siteIds]),
+    siteIdsByFile: Object.freeze(
+      Object.fromEntries(
+        Object.keys(record.siteIdsByFile)
+          .sort()
+          .map((file) => [
+            file,
+            Object.freeze([...record.siteIdsByFile[file]]),
+          ]),
+      ),
+    ),
     staticEvidence: Object.freeze([...record.staticEvidence]),
   });
   if (
@@ -115,7 +127,21 @@ export function saveVerificationCandidate(
     candidate: input.candidate,
     snapshot: input.snapshot,
     classification: input.classification,
-    siteIds: Object.freeze([...new Set(input.siteIds)].sort()),
+    siteIdsByFile: Object.freeze(
+      Object.fromEntries(
+        Object.keys(input.siteIdsByFile)
+          .sort()
+          .map((file) => {
+            if (!input.candidate.touchedFiles.includes(file)) {
+              throw new Error(`Site coverage names unchanged path ${file}`);
+            }
+            return [
+              file,
+              Object.freeze([...new Set(input.siteIdsByFile[file])].sort()),
+            ];
+          }),
+      ),
+    ),
     staticEvidence: Object.freeze([...input.staticEvidence]),
   });
   const payload = {

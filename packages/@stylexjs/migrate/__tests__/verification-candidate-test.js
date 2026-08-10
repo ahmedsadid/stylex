@@ -80,7 +80,7 @@ describe('M5 persisted candidates and verification workspaces', () => {
       candidate: result.candidate,
       snapshot: result.snapshot,
       classification: 'repeatable-contextual',
-      siteIds: [`site-${path.basename(file)}`],
+      siteIdsByFile: { [file]: [`site-${path.basename(file)}`] },
       staticEvidence: [],
     };
   }
@@ -94,7 +94,7 @@ describe('M5 persisted candidates and verification workspaces', () => {
     );
     expect(loaded).toEqual({
       ...record,
-      siteIds: ['site-A.js'],
+      siteIdsByFile: { 'src/A.js': ['site-A.js'] },
       staticEvidence: [],
     });
     if (loaded == null) {

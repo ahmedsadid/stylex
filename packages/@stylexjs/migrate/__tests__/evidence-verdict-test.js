@@ -129,7 +129,7 @@ describe('M5 evidence bundles and policy verdicts', () => {
       candidate: result.candidate,
       snapshot: result.snapshot,
       classification,
-      siteIds: ['site-a'],
+      siteIdsByFile: { 'src/A.js': ['site-a'] },
       staticEvidence,
     };
   }
@@ -183,7 +183,7 @@ describe('M5 evidence bundles and policy verdicts', () => {
     const subject = createCandidateEvidenceSubject({
       candidate: candidate.candidate,
       snapshot: candidate.snapshot,
-      siteIdsByFile: { 'src/A.js': candidate.siteIds },
+      siteIdsByFile: candidate.siteIdsByFile,
     });
     const repository = repositoryEvidence(subject, outcome);
     const artifact = writeArtifact(project, repository.output);
