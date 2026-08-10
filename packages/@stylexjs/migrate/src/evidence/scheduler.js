@@ -31,6 +31,7 @@ export type EvidenceScheduleItem = {
 export type EvidenceSchedule = {
   +id: string,
   +subjectId: string,
+  +configHash: string,
   +concurrency: number,
   +items: $ReadOnlyArray<EvidenceScheduleItem>,
   +ignoredProviderIds: $ReadOnlyArray<string>,
@@ -224,6 +225,7 @@ export function createEvidenceSchedule({
   );
   const stable = {
     subjectId: subject.id,
+    configHash: hashString(canonicalJson(config as $FlowFixMe)),
     concurrency: config.concurrency,
     items,
     ignoredProviderIds,

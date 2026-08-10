@@ -79,6 +79,29 @@ export {
 } from './evidence/candidates';
 export type { VerificationCandidate } from './evidence/candidates';
 export { createVerificationWorkspace } from './evidence/workspace';
+export {
+  createRepositoryEvidenceBundle,
+  evidenceBundleLimitationsHash,
+  loadLatestRepositoryEvidenceBundle,
+  loadRepositoryEvidenceBundle,
+  saveRepositoryEvidenceBundle,
+} from './evidence/bundle';
+export type {
+  BundleRepositoryEntry,
+  BundleStaticEntry,
+  RepositoryEvidenceBundle,
+} from './evidence/bundle';
+export {
+  evaluateRepositoryEvidence,
+  loadLatestRepositoryEvidenceVerdict,
+  loadRepositoryEvidenceVerdict,
+  saveRepositoryEvidenceVerdict,
+} from './evidence/verdict';
+export type {
+  ClaimRecord,
+  RepositoryEvidenceVerdict,
+  VerdictOutcome,
+} from './evidence/verdict';
 export { createEvidenceProviderRegistry } from './evidence/registry';
 export type {
   EvidenceProviderRegistry,
@@ -161,6 +184,7 @@ export {
 } from './planning/reports';
 
 export {
+  hashBytes,
   hashFields,
   hashString,
   shortHash,
