@@ -16,9 +16,10 @@
  * representation that pretended to hold them would invite the mechanical lane
  * to convert things it cannot check.
  *
- * M2 covers the smallest useful shape: a flat list of declarations with
- * literal values. Conditions, keyframes and shorthands arrive in M3, each with
- * its own comparison-model version.
+ * The representation grows only with independently versioned comparison
+ * models. It currently admits flat literals, the first hover/focus condition
+ * grammar, and flat before/after selector targets. Keyframes, shorthands, and
+ * combinations of conditions with pseudo-elements remain outside it.
  */
 
 export type StaticValue = string | number;

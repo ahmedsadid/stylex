@@ -109,16 +109,23 @@ element when the file has an exact Emotion JSX pragma and the style is an object
 literal containing supported camelCase longhands with string or finite numeric
 literal values.
 
-It also admits sibling `:hover` and `:focus` objects. This is not a general
-selector claim. For each conditional site, the verifier obtains source rules
-from Emotion and target rules and priorities from the StyleX compiler, then
-compares the winning declaration in the default, hover-only, focus-only, and
-simultaneous hover/focus states under model `cascade-referee-v1`. A disagreement
-in any state is a refusal. In particular, reversing two otherwise identical
-hover and focus branches can be refused because Emotion and StyleX may then
-choose different winners when both states are active.
+It admits two separate, bounded modifier capabilities:
 
-Dynamic values, spreads, shorthands, `!important`, pseudo-elements, other
+- Sibling `:hover` and `:focus` objects. The verifier obtains source rules from
+  Emotion and target rules and priorities from the StyleX compiler, then
+  compares the winning declaration in the default, hover-only, focus-only, and
+  simultaneous hover/focus states under model `cascade-referee-v1`.
+- Flat `::before` and `::after` objects under model `pseudo-element-referee-v1`.
+  Declarations are compared by their exact root, before, or after selector
+  target.
+
+These are not general selector claims. A disagreement in any admitted state or
+target is a refusal. In particular, reversing two otherwise identical hover and
+focus branches can be refused because Emotion and StyleX may then choose
+different winners when both states are active. Pseudo-elements cannot yet be
+combined with pseudo-class conditions in one style object.
+
+Dynamic values, spreads, shorthands, `!important`, other pseudo-elements or
 pseudo-classes, at-rules, nesting, keyframes, component `css` props, and sites
 that also have `className`, `style`, or a JSX spread remain outside this
 mechanical boundary. The comparison is local and static: it does not establish

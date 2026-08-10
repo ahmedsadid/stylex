@@ -20,9 +20,9 @@ import type {
 /**
  * Emotion discovery for the mechanical lane.
  *
- * The supported shape in M2 is intentionally the least interesting one that
- * exists: a `css` prop holding an object literal, on a plain HTML element, with
- * literal keys and literal values. Everything else is refused with a reason.
+ * The mechanical lane began with a `css` prop holding an object literal on a
+ * plain HTML element, with literal keys and literal values. Later capabilities
+ * extend that shape only after an independent comparison model exists.
  *
  * Refusing is not failure. A refusal with a precise reason is a useful result;
  * a conversion we cannot independently confirm is not.
@@ -100,7 +100,7 @@ const SUPPORTED_PSEUDO_ELEMENTS: $ReadOnlySet<string> = new Set([
 ]);
 
 /**
- * Shorthands are refused wholesale in M2.
+ * Shorthands are refused wholesale.
  *
  * A shorthand and a longhand for the same box interact through the cascade:
  * in Emotion `{marginTop: 20, margin: 4}` ends up with every margin at 4,
@@ -118,8 +118,8 @@ const SUPPORTED_PSEUDO_ELEMENTS: $ReadOnlySet<string> = new Set([
  * does not recognise silently returns the default, which is why the name is
  * converted first.
  *
- * M3 admits shorthands with a comparison model that understands the
- * interaction. Until then the honest answer is a refusal.
+ * A later capability can admit shorthands with a comparison model that
+ * understands the interaction. Until then the honest answer is a refusal.
  */
 const LONGHAND_PRIORITY = 3000;
 
