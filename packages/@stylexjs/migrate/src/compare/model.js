@@ -7,8 +7,10 @@
  * @flow strict
  */
 
+import postcss from 'postcss';
+
 /**
- * Comparison model `static-css-v1`.
+ * Comparison model `static-css-v2`.
  *
  * This module decides whether two stylesheets say the same thing. It is
  * comparison-only: it never produces CSS, and neither the Emotion side nor the
@@ -16,29 +18,45 @@
  * their own library, and this model's whole job is to strip differences that
  * are known to carry no meaning.
  *
- * What it canonicalises, and why each is safe:
+ * Parsing is delegated to postcss. The previous version split declarations on
+ * `;` and canonicalised values with plain string replacement, which is wrong
+ * the moment a value contains one: `content: "a;b"` and `content: "a;c"` both
+ * reduced to `content: "a` and compared equal. Getting CSS syntax right is not
+ * this project's contribution, and a hand-rolled splitter is exactly the sort
+ * of thing that diverges quietly.
  *
- *   - Surrounding and repeated whitespace.
- *   - Whitespace around commas, so `rgb(1, 2, 3)` and `rgb(1,2,3)` agree.
- *   - A missing leading zero, so `.5` and `0.5` agree. The two libraries
- *     genuinely differ here: Emotion prints `opacity:0.5` and StyleX prints
- *     `opacity:.5`.
+ * What canonicalisation does, and why each step is safe:
+ *
+ *   - Collapses whitespace runs **outside strings and `url()`**.
+ *   - Removes whitespace around commas, outside strings, so `rgb(1, 2, 3)` and
+ *     `rgb(1,2,3)` agree.
+ *   - Adds a missing leading zero, outside strings, so `.5` and `0.5` agree.
+ *     The two libraries genuinely differ here: Emotion prints `opacity:0.5`
+ *     and StyleX prints `opacity:.5`.
+ *
+ * Everything inside a quoted string or a `url()` is copied verbatim, because a
+ * space or a leading zero there is content rather than formatting.
  *
  * What it does NOT do, deliberately: it does not reorder or merge
  * declarations, resolve shorthands, convert units, or lowercase values. Every
- * one of those would let a real difference through, and the supported subset
- * is drawn so that none of them is needed.
+ * one of those would let a real difference through, and the supported subset is
+ * drawn so that none of them is needed.
  *
- * The model is versioned because admitting a new construct means changing what
- * counts as equal, and a claim that does not name its model is not a claim.
+ * The model is versioned because admitting a new construct — or fixing what
+ * counts as equal, as this version does — changes the meaning of the claim,
+ * and a claim that does not name its model is not a claim.
  */
 
-export const COMPARISON_MODEL: string = 'static-css-v1';
+export const COMPARISON_MODEL: string = 'static-css-v2';
 
 export type CssDeclaration = {
   +property: string,
   +value: string,
 };
+
+export type ParsedCss =
+  | { +ok: true, +declarations: $ReadOnlyArray<CssDeclaration> }
+  | { +ok: false, +reason: string };
 
 export type Difference = {
   +property: string,
@@ -52,52 +70,153 @@ export type ComparisonResult = {
   +differences: $ReadOnlyArray<Difference>,
 };
 
+const QUOTES = new Set(["'", '"']);
+
+/**
+ * Canonicalise a declaration value without touching the inside of strings or
+ * `url()`.
+ */
 export function canonicalValue(value: string): string {
-  return value
-    .trim()
-    .replace(/\s+/g, ' ')
-    .replace(/\s*,\s*/g, ',')
-    .replace(/(^|[\s(,:])(-?)\.(\d)/g, '$1$20.$3');
+  let result = '';
+  let index = 0;
+
+  const copyQuoted = (quote: string) => {
+    result += value[index];
+    index++;
+    while (index < value.length) {
+      const character = value[index];
+      result += character;
+      index++;
+      if (character === '\\' && index < value.length) {
+        // An escaped character cannot end the string.
+        result += value[index];
+        index++;
+        continue;
+      }
+      if (character === quote) {
+        return;
+      }
+    }
+  };
+
+  while (index < value.length) {
+    const character = value[index];
+
+    if (QUOTES.has(character)) {
+      copyQuoted(character);
+      continue;
+    }
+
+    if (value.startsWith('url(', index)) {
+      const close = value.indexOf(')', index);
+      const end = close === -1 ? value.length : close + 1;
+      result += value.slice(index, end);
+      index = end;
+      continue;
+    }
+
+    if (/\s/.test(character)) {
+      // Collapse a run of whitespace, and drop it entirely next to a comma.
+      let lookahead = index;
+      while (lookahead < value.length && /\s/.test(value[lookahead])) {
+        lookahead++;
+      }
+      const previous = result[result.length - 1];
+      const next = value[lookahead];
+      if (
+        previous !== ',' &&
+        next !== ',' &&
+        previous != null &&
+        next != null
+      ) {
+        result += ' ';
+      }
+      index = lookahead;
+      continue;
+    }
+
+    if (character === ',') {
+      // Drop whitespace already emitted before the comma.
+      result = result.replace(/\s+$/, '');
+      result += ',';
+      index++;
+      continue;
+    }
+
+    if (
+      character === '.' &&
+      /\d/.test(value[index + 1] ?? '') &&
+      !/[\d.]/.test(result[result.length - 1] ?? '')
+    ) {
+      result += '0.';
+      index++;
+      continue;
+    }
+
+    result += character;
+    index++;
+  }
+
+  return result.trim();
 }
 
 export function canonicalProperty(property: string): string {
   return property.trim().toLowerCase();
 }
 
+function collect(root: $FlowFixMe): ParsedCss {
+  const declarations = [];
+  for (const node of root.nodes ?? []) {
+    if (node.type !== 'decl') {
+      // Anything that is not a plain declaration is outside what this model
+      // claims to understand. Silently dropping it would let real CSS go
+      // uncompared while the result still read as a match.
+      return {
+        ok: false,
+        reason: `unsupported CSS node of type "${String(node.type)}"`,
+      };
+    }
+    declarations.push({
+      property: canonicalProperty(String(node.prop)),
+      value: canonicalValue(String(node.value)),
+    });
+  }
+  return { ok: true, declarations };
+}
+
 /**
  * Parse a declaration list such as `color:red;font-size:12px;`.
  */
-export function parseDeclarations(
-  cssText: string,
-): $ReadOnlyArray<CssDeclaration> {
-  const declarations = [];
-  for (const chunk of cssText.split(';')) {
-    const text = chunk.trim();
-    if (text === '') {
-      continue;
-    }
-    const separator = text.indexOf(':');
-    if (separator === -1) {
-      continue;
-    }
-    declarations.push({
-      property: canonicalProperty(text.slice(0, separator)),
-      value: canonicalValue(text.slice(separator + 1)),
-    });
+export function parseDeclarations(cssText: string): ParsedCss {
+  let root;
+  try {
+    root = postcss.parse(cssText);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return { ok: false, reason: `could not parse CSS: ${message}` };
   }
-  return declarations;
+  return collect(root);
 }
 
 /**
  * Parse the body of a single rule such as `.x1abc{color:red}`.
  */
-export function parseRule(rule: string): $ReadOnlyArray<CssDeclaration> {
-  const open = rule.indexOf('{');
-  const close = rule.lastIndexOf('}');
-  if (open === -1 || close === -1 || close < open) {
-    return [];
+export function parseRule(rule: string): ParsedCss {
+  let root;
+  try {
+    root = postcss.parse(rule);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return { ok: false, reason: `could not parse CSS rule: ${message}` };
   }
-  return parseDeclarations(rule.slice(open + 1, close));
+  const nodes = root.nodes ?? [];
+  if (nodes.length !== 1 || nodes[0].type !== 'rule') {
+    return {
+      ok: false,
+      reason: 'expected exactly one CSS rule',
+    };
+  }
+  return collect(nodes[0]);
 }
 
 function toMap(

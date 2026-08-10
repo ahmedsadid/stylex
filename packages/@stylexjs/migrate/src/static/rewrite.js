@@ -22,10 +22,25 @@ export type Edit = {
   +text: string,
 };
 
+export type EditResult = {
+  +code: string,
+  // Where each edit's text begins in the output, indexed as the edits were
+  // given. Callers use this to check that a specific source site received a
+  // specific replacement, which scanning the output cannot establish.
+  +placements: $ReadOnlyArray<number>,
+};
+
 export function applyEdits(
   source: string,
   edits: $ReadOnlyArray<Edit>,
 ): string {
+  return applyEditsWithPlacements(source, edits).code;
+}
+
+export function applyEditsWithPlacements(
+  source: string,
+  edits: $ReadOnlyArray<Edit>,
+): EditResult {
   const ordered = edits
     .map((edit, index) => ({ edit, index }))
     .sort((a, b) =>
@@ -47,13 +62,15 @@ export function applyEdits(
     }
   }
 
+  const placements: Array<number> = edits.map(() => -1);
   let result = '';
   let cursor = 0;
-  for (const { edit } of ordered) {
+  for (const { edit, index } of ordered) {
     result += source.slice(cursor, edit.start);
+    placements[index] = result.length;
     result += edit.text;
     cursor = edit.end;
   }
   result += source.slice(cursor);
-  return result;
+  return { code: result, placements };
 }

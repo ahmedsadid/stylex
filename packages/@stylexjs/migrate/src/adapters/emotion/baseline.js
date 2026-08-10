@@ -89,7 +89,14 @@ export function emotionBaseline(objectSource: string): BaselineResult {
   try {
     const serialized = serializeStyles([styleValue]);
     const css = String(serialized.styles);
-    return { ok: true, css, declarations: parseDeclarations(css) };
+    const parsed = parseDeclarations(css);
+    if (!parsed.ok) {
+      return {
+        ok: false,
+        reason: `could not read the CSS Emotion produced: ${parsed.reason}`,
+      };
+    }
+    return { ok: true, css, declarations: parsed.declarations };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     return {

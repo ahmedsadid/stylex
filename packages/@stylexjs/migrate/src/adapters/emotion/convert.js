@@ -20,7 +20,7 @@ import {
   emitImport,
   emitPropsSpread,
 } from '../../static/emit';
-import { applyEdits } from '../../static/rewrite';
+import { applyEditsWithPlacements } from '../../static/rewrite';
 import { discover } from './discover';
 import type { Edit } from '../../static/rewrite';
 import type { EmotionRefusal, EmotionSite } from './discover';
@@ -44,6 +44,14 @@ export type ConvertedEntry = {
   +key: string,
   +style: StyleObject,
   +site: EmotionSite,
+  // Where this site's replacement text begins in the generated code.
+  //
+  // Verification uses this to check that *this* source site received *this*
+  // style, rather than scanning the output for a set of references. A set
+  // cannot tell two sites apart: swapping the keys of two sites leaves the same
+  // set of references and the same per-key CSS, so every check passes while the
+  // page renders differently.
+  +outputStart: number,
 };
 
 export type ConvertedOutcome = {
@@ -104,9 +112,11 @@ export function convertSource(
   const registryName = freeName('styles', used);
 
   const keys = allocateKeys(discovered.sites.map((site) => site.elementName));
-  const entries: $ReadOnlyArray<ConvertedEntry> = discovered.sites.map(
-    (site, index) => ({ key: keys[index], style: site.style, site }),
-  );
+  const styleEntries = discovered.sites.map((site, index) => ({
+    key: keys[index],
+    style: site.style,
+    site,
+  }));
 
   const edits: Array<Edit> = [];
 
@@ -139,20 +149,33 @@ export function convertSource(
   edits.push({
     start: registryOffset,
     end: registryOffset,
-    text: `${emitCreateCall(binding.localName, registryName, entries)}\n\n`,
+    text: `${emitCreateCall(binding.localName, registryName, styleEntries)}\n\n`,
   });
 
-  for (const entry of entries) {
+  // Remember which edit belongs to which site, so the site's position in the
+  // output can be recovered exactly.
+  const siteEditIndex = styleEntries.map((entry) => {
+    const index = edits.length;
     edits.push({
       start: entry.site.start,
       end: entry.site.end,
       text: emitPropsSpread(binding.localName, registryName, entry.key),
     });
-  }
+    return index;
+  });
+
+  const { code, placements } = applyEditsWithPlacements(source, edits);
+
+  const entries: $ReadOnlyArray<ConvertedEntry> = styleEntries.map(
+    (entry, index) => ({
+      ...entry,
+      outputStart: placements[siteEditIndex[index]],
+    }),
+  );
 
   return {
     status: 'converted',
-    code: applyEdits(source, edits),
+    code,
     entries,
     registryName,
     namespace: binding.localName,

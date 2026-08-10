@@ -44,13 +44,51 @@ describe('the comparison model', () => {
   });
 
   test('reads declaration lists and rule bodies', () => {
-    expect(parseDeclarations('color:red;font-size:12px;')).toEqual([
-      { property: 'color', value: 'red' },
-      { property: 'font-size', value: '12px' },
-    ]);
-    expect(parseRule('.x1abc{color:red}')).toEqual([
-      { property: 'color', value: 'red' },
-    ]);
+    expect(parseDeclarations('color:red;font-size:12px;')).toEqual({
+      ok: true,
+      declarations: [
+        { property: 'color', value: 'red' },
+        { property: 'font-size', value: '12px' },
+      ],
+    });
+    expect(parseRule('.x1abc{color:red}')).toEqual({
+      ok: true,
+      declarations: [{ property: 'color', value: 'red' }],
+    });
+  });
+
+  test('a semicolon inside a quoted value does not split the declaration', () => {
+    // Splitting on `;` reduced both of these to `content: "a` and called them
+    // equal, which let a changed value through the whole verifier.
+    const first = parseDeclarations('content:"a;b";');
+    const second = parseDeclarations('content:"a;c";');
+    expect(first.ok && second.ok).toBe(true);
+    if (first.ok && second.ok) {
+      expect(first.declarations).toEqual([
+        { property: 'content', value: '"a;b"' },
+      ]);
+      expect(
+        compareDeclarations(first.declarations, second.declarations).equal,
+      ).toBe(false);
+    }
+  });
+
+  test('string contents are never canonicalised', () => {
+    expect(canonicalValue('"a  b"')).toBe('"a  b"');
+    expect(canonicalValue('"a, b"')).toBe('"a, b"');
+    expect(canonicalValue('"a .5"')).toBe('"a .5"');
+    expect(canonicalValue("'a  b'")).toBe("'a  b'");
+    expect(canonicalValue('url(a  b)')).toBe('url(a  b)');
+    // ...but formatting outside the string still is.
+    expect(canonicalValue('  "a  b"  ')).toBe('"a  b"');
+    expect(canonicalValue('0 , "a, b"')).toBe('0,"a, b"');
+  });
+
+  test('CSS it cannot model is a failure, not a silent drop', () => {
+    const nested = parseDeclarations('@media screen { color: red }');
+    expect(nested.ok).toBe(false);
+    const notARule = parseRule('color:red');
+    expect(notARule.ok).toBe(false);
   });
 
   test('reports what differs, in both directions', () => {
@@ -104,7 +142,7 @@ describe('proposing a conversion', () => {
     expect(result.model).toBe(COMPARISON_MODEL);
     expect(result.entries[0].classNames.length).toBe(2);
     expect(result.evidence.map((item) => item.check)).toEqual([
-      'stylex-compile',
+      'stylex-plugin-transform',
       'stylex-lint',
       'binding-integrity',
       'static-css-comparison',
@@ -190,6 +228,39 @@ describe('mutation testing the checker', () => {
 
   test('the unmutated fixture passes, so the suite is not vacuous', () => {
     expect(verifyMutated((code) => `${code}\n`).status).toBe('proposed');
+  });
+
+  test('swapping the styles of two sites is caught', () => {
+    // Both keys are still referenced and each key's CSS is still correct, so a
+    // check that compares an unordered set of references passes. Only a
+    // site-by-site binding catches the swap.
+    const result = verifyMutated((code) =>
+      code
+        .replace('styles.div)', 'styles.__TMP__)')
+        .replace('styles.span)', 'styles.div)')
+        .replace('styles.__TMP__)', 'styles.span)'),
+    );
+    expect(result.status).toBe('refused');
+    if (result.status === 'refused') {
+      expect(result.reason).toContain('instead');
+    }
+  });
+
+  test('a changed value inside a quoted string is caught', () => {
+    const quoted = `${PRAGMA}const A = () => <div css={{ content: '"a;b"' }} />;\n`;
+    const converted = convertSource(quoted, FILENAME);
+    if (converted.status !== 'converted') {
+      throw new Error('fixture did not convert');
+    }
+    const result = verifyConversion({
+      source: quoted,
+      filename: FILENAME,
+      converted: {
+        ...converted,
+        code: converted.code.replace('"a;b"', '"a;c"'),
+      },
+    });
+    expect(result.status).toBe('refused');
   });
 
   const mutations: $ReadOnlyArray<[string, (string) => string]> = [

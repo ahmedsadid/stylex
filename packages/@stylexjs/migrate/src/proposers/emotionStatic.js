@@ -13,6 +13,7 @@ import { compileStyleX } from '../evidence/compile';
 import { describeLintMessages, lintStyleX } from '../evidence/lint';
 import { stylexCssForKey } from '../evidence/staticCss';
 import { allPassed, evidence, packageVersion } from '../evidence/claims';
+import { hashString } from '../kernel/hash';
 import {
   COMPARISON_MODEL,
   compareDeclarations,
@@ -56,6 +57,11 @@ export type Proposal =
       +code: string,
       +claim: Claim,
       +model: string,
+      // The exact bytes this claim is about. A candidate built from this
+      // proposal must contain `generatedHash`, or the evidence belongs to
+      // something else.
+      +sourceHash: string,
+      +generatedHash: string,
       +entries: $ReadOnlyArray<ProposedEntry>,
       +refusals: $ReadOnlyArray<EmotionRefusal>,
       +evidence: $ReadOnlyArray<EvidenceResult>,
@@ -89,7 +95,7 @@ function readStructure(
   filename: string,
   namespace: string,
   registryName: string,
-  expectedKeys: $ReadOnlyArray<string>,
+  expected: $ReadOnlyArray<{ +key: string, +outputStart: number }>,
 ): { +ok: true, +structure: Structure } | { +ok: false, +reason: string } {
   const parsed = parseSource(code, filename);
   if (!parsed.ok) {
@@ -101,7 +107,10 @@ function readStructure(
 
   let importText = null;
   let createCallText = null;
-  const referencedKeys: Array<string> = [];
+  // Keyed by the offset the spread starts at, so a site can be looked up by
+  // position rather than matched against an unordered collection.
+  const keyByOffset = new Map<number, string>();
+  let spreadCount = 0;
 
   walk(parsed.ast, (node) => {
     if (
@@ -137,6 +146,7 @@ function readStructure(
       node.argument.callee.object?.name === namespace &&
       node.argument.callee.property?.name === 'props'
     ) {
+      spreadCount++;
       const argument = (node.argument.arguments ?? [])[0];
       if (
         argument != null &&
@@ -144,7 +154,7 @@ function readStructure(
         argument.object?.name === registryName &&
         typeof argument.property?.name === 'string'
       ) {
-        referencedKeys.push(argument.property.name);
+        keyByOffset.set(node.start, argument.property.name);
       }
     }
   });
@@ -161,19 +171,50 @@ function readStructure(
       reason: `generated code has no "${registryName} = ${namespace}.create(...)" registry`,
     };
   }
+  // Captured now: the walk closure above assigns these, so any later call
+  // invalidates the refinement that they are non-null.
+  const resolvedImport: string = importText;
+  const resolvedCreateCall: string = createCallText;
 
-  const expected = [...expectedKeys].sort();
-  const referenced = [...referencedKeys].sort();
-  if (expected.join(',') !== referenced.join(',')) {
+  // Each converted site is checked at the exact offset its replacement was
+  // written to. Comparing an unordered collection of references is not enough:
+  // swapping the keys of two sites leaves the same references and the same
+  // per-key CSS, so every other check passes while the two elements trade
+  // appearances.
+  for (const entry of expected) {
+    const found = keyByOffset.get(entry.outputStart);
+    if (found == null) {
+      return {
+        ok: false,
+        reason:
+          `generated code has no ${namespace}.props(${registryName}.…) at the ` +
+          `position written for "${entry.key}"`,
+      };
+    }
+    if (found !== entry.key) {
+      return {
+        ok: false,
+        reason: `the site written for "${entry.key}" reads "${registryName}.${found}" instead`,
+      };
+    }
+  }
+
+  if (spreadCount !== expected.length) {
     return {
       ok: false,
       reason:
-        'generated code does not reference the styles it defines ' +
-        `(expected ${expected.join(', ')}; found ${referenced.join(', ') || 'none'})`,
+        `generated code has ${spreadCount} ${namespace}.props spreads but ` +
+        `${expected.length} sites were converted`,
     };
   }
 
-  return { ok: true, structure: { importText, createCallText } };
+  return {
+    ok: true,
+    structure: {
+      importText: resolvedImport,
+      createCallText: resolvedCreateCall,
+    },
+  };
 }
 
 /**
@@ -196,16 +237,27 @@ export function verifyConversion({
 }): Proposal {
   const results: Array<EvidenceResult> = [];
   const scope = [filename];
+  // Every result records the exact bytes it examined, so a candidate can later
+  // be required to contain precisely the code these checks passed on.
+  const sourceHash = hashString(source);
+  const targetHash = hashString(converted.code);
+  const subject = { sourceHash, targetHash };
 
   // 1. The generated file compiles through StyleX's own compiler.
   const compiled = compileStyleX(converted.code, filename);
   results.push(
     evidence({
-      check: 'stylex-compile',
+      check: 'stylex-plugin-transform',
       provider: STYLEX_PROVIDER,
+      subject,
       scope,
       result: compiled.ok ? 'pass' : 'fail',
       ...(compiled.ok ? {} : { detail: compiled.reason }),
+      limitations: [
+        'the StyleX babel plugin was run on its own: no repository babel ' +
+          'configuration, no type stripping, no typecheck, no module ' +
+          'resolution, and no repository build',
+      ],
     }),
   );
   if (!compiled.ok) {
@@ -219,6 +271,7 @@ export function verifyConversion({
     evidence({
       check: 'stylex-lint',
       provider: STYLEX_LINT_PROVIDER,
+      subject,
       scope,
       result: linted.ok ? 'pass' : 'fail',
       ...(linted.ok ? {} : { detail: describeLintMessages(linted.messages) }),
@@ -241,12 +294,16 @@ export function verifyConversion({
     filename,
     converted.namespace,
     converted.registryName,
-    converted.entries.map((entry) => entry.key),
+    converted.entries.map((entry) => ({
+      key: entry.key,
+      outputStart: entry.outputStart,
+    })),
   );
   results.push(
     evidence({
       check: 'binding-integrity',
       provider: 'stylex-migrate',
+      subject,
       scope,
       result: structure.ok ? 'pass' : 'fail',
       ...(structure.ok ? {} : { detail: structure.reason }),
@@ -270,6 +327,7 @@ export function verifyConversion({
         evidence({
           check: 'static-css-comparison',
           provider: EMOTION_PROVIDER,
+          subject: { ...subject, model: COMPARISON_MODEL },
           scope: [`${filename}#${entry.key}`],
           result: 'unavailable',
           detail: baseline.reason,
@@ -294,6 +352,7 @@ export function verifyConversion({
         evidence({
           check: 'static-css-comparison',
           provider: STYLEX_PROVIDER,
+          subject: { ...subject, model: COMPARISON_MODEL },
           scope: [`${filename}#${entry.key}`],
           result: 'unavailable',
           detail: target.reason,
@@ -314,6 +373,7 @@ export function verifyConversion({
       evidence({
         check: 'static-css-comparison',
         provider: 'stylex-migrate',
+        subject: { ...subject, model: COMPARISON_MODEL },
         scope: [`${filename}#${entry.key}`],
         result: comparison.equal ? 'pass' : 'fail',
         ...(comparison.equal
@@ -352,15 +412,20 @@ export function verifyConversion({
     };
   }
 
-  return {
+  // Frozen: the claim and the evidence describe these exact bytes, and a
+  // proposal whose `code` could be replaced afterwards would carry a
+  // `static-equivalent` claim for something nothing ever checked.
+  return Object.freeze({
     status: 'proposed',
     code: converted.code,
     claim: 'static-equivalent',
     model: COMPARISON_MODEL,
-    entries,
+    sourceHash,
+    generatedHash: targetHash,
+    entries: Object.freeze(entries),
     refusals: converted.refusals,
-    evidence: results,
-    uncovered: [
+    evidence: Object.freeze(results),
+    uncovered: Object.freeze([
       'no runtime evidence: nothing was rendered',
       'the source styling library import and JSX pragma were left in place and were not exercised',
       ...(converted.refusals.length > 0
@@ -368,8 +433,8 @@ export function verifyConversion({
             `${converted.refusals.length} site(s) in this file were not converted`,
           ]
         : []),
-    ],
-  };
+    ]),
+  });
 }
 
 /**

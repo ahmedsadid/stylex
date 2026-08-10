@@ -110,7 +110,16 @@ export function stylexCssForKey({
         reason: `StyleX referenced class ${className} but generated no rule for it`,
       };
     }
-    for (const declaration of parseRule(rule)) {
+    const parsed = parseRule(rule);
+    if (!parsed.ok) {
+      // CSS the comparison model cannot represent must stop the comparison
+      // rather than contribute nothing to it.
+      return {
+        ok: false,
+        reason: `could not read the rule StyleX generated for ${className}: ${parsed.reason}`,
+      };
+    }
+    for (const declaration of parsed.declarations) {
       declarations.push(declaration);
     }
   }

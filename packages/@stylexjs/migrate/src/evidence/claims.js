@@ -7,52 +7,29 @@
  * @flow strict
  */
 
-/**
- * The claims vocabulary.
- *
- * Every result names exactly one of these, and nothing in this package is
- * allowed to describe output as proven, safe, verified, or equivalent without
- * one. A claim that does not say what was checked is not a claim, and the last
- * generation of this tool shipped a README that promised checks its own write
- * path never ran.
- */
-
 import { VERSION } from '../version';
+import { makeEvidence } from '../kernel/evidence';
+import type {
+  CheckOutcome,
+  EvidenceResult,
+  EvidenceSubject,
+} from '../kernel/evidence';
 
-export type Claim =
-  // Source and generated CSS are equal under a named, versioned model.
-  | 'static-equivalent'
-  // The listed commands passed, at the listed versions.
-  | 'checks-passed'
-  // Named runtime cases matched, for named states, in a recorded environment.
-  | 'runtime-matched'
-  // A human accepted one candidate hash and its stated limitations.
-  | 'approved'
-  // Information, support, or evidence that policy requires is missing.
-  | 'blocked';
-
-export type CheckOutcome = 'pass' | 'fail' | 'unavailable' | 'not-applicable';
-
-export type EvidenceResult = {
-  +check: string,
-  +provider: string,
-  +providerVersion: string,
-  +scope: $ReadOnlyArray<string>,
-  +result: CheckOutcome,
-  +detail?: string,
-  +limitations: $ReadOnlyArray<string>,
-};
+/**
+ * Who produced a piece of evidence, and at what version.
+ *
+ * The contract itself lives in the kernel; this layer knows the actual tools.
+ * Versions are read from the packages that ran rather than written down here,
+ * because a result that does not say which version produced it cannot be
+ * reproduced — and a version recorded as `unknown` is a gap in the same
+ * promise.
+ */
 
 function versionOf(manifest: $FlowFixMe): string {
   const version = manifest?.version;
   return typeof version === 'string' ? version : 'unknown';
 }
 
-/**
- * Provider versions are read from the packages themselves, so evidence records
- * what actually ran rather than what this package was written against. A
- * result that does not say which version produced it cannot be reproduced.
- */
 const PROVIDER_VERSIONS: { +[string]: string } = {
   'stylex-migrate': VERSION,
   // $FlowFixMe[cannot-resolve-module] Manifests are read for provenance only.
@@ -61,15 +38,32 @@ const PROVIDER_VERSIONS: { +[string]: string } = {
   ),
   // $FlowFixMe[cannot-resolve-module] Manifests are read for provenance only.
   '@emotion/serialize': versionOf(require('@emotion/serialize/package.json')),
+  // $FlowFixMe[cannot-resolve-module] Manifests are read for provenance only.
+  '@stylexjs/eslint-plugin': versionOf(
+    require('@stylexjs/eslint-plugin/package.json'),
+  ),
+  // $FlowFixMe[cannot-resolve-module] Manifests are read for provenance only.
+  eslint: versionOf(require('eslint/package.json')),
+  // $FlowFixMe[cannot-resolve-module] Manifests are read for provenance only.
+  'hermes-eslint': versionOf(require('hermes-eslint/package.json')),
+  // $FlowFixMe[cannot-resolve-module] Manifests are read for provenance only.
+  '@typescript-eslint/parser': versionOf(
+    require('@typescript-eslint/parser/package.json'),
+  ),
+  postcss: versionOf(require('postcss/package.json')),
 };
 
 export function packageVersion(name: string): string {
   return PROVIDER_VERSIONS[name] ?? 'unknown';
 }
 
+/**
+ * Record a result, filling in the provider's version from what is installed.
+ */
 export function evidence({
   check,
   provider,
+  subject,
   scope,
   result,
   detail,
@@ -77,24 +71,28 @@ export function evidence({
 }: {
   +check: string,
   +provider: string,
+  +subject: EvidenceSubject,
   +scope: $ReadOnlyArray<string>,
   +result: CheckOutcome,
   +detail?: string,
   +limitations?: $ReadOnlyArray<string>,
 }): EvidenceResult {
-  return Object.freeze({
+  return makeEvidence({
     check,
     provider,
     providerVersion: packageVersion(provider),
-    scope: Object.freeze([...scope]),
+    subject,
+    scope,
     result,
     ...(detail == null ? {} : { detail }),
-    limitations: Object.freeze([...limitations]),
+    limitations,
   });
 }
 
-export function allPassed(results: $ReadOnlyArray<EvidenceResult>): boolean {
-  return results.every(
-    (result) => result.result === 'pass' || result.result === 'not-applicable',
-  );
-}
+export { allPassed, makeEvidence } from '../kernel/evidence';
+export type {
+  Claim,
+  CheckOutcome,
+  EvidenceResult,
+  EvidenceSubject,
+} from '../kernel/evidence';
