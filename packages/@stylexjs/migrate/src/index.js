@@ -101,6 +101,37 @@ export type { Declaration, StaticValue, StyleObject } from './static/ir';
 
 export { walk } from './static/walk';
 
+export {
+  COMPARISON_MODEL,
+  canonicalValue,
+  compareDeclarations,
+  describeDifferences,
+  parseDeclarations,
+  parseRule,
+} from './compare/model';
+export type {
+  ComparisonResult,
+  CssDeclaration,
+  Difference,
+} from './compare/model';
+
+export { evidence, packageVersion } from './evidence/claims';
+
+export { compileStyleX } from './evidence/compile';
+export { stylexCssForKey } from './evidence/staticCss';
+
+export { emotionBaseline } from './adapters/emotion/baseline';
+
+/**
+ * The supported way to convert an Emotion file. It runs the checks itself and
+ * cannot return code that failed them.
+ */
+export {
+  proposeStaticConversion,
+  verifyConversion,
+} from './proposers/emotionStatic';
+export type { Proposal, ProposedEntry } from './proposers/emotionStatic';
+
 export { discover, usesEmotion } from './adapters/emotion/discover';
 export type {
   DiscoveryResult,

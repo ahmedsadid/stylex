@@ -46,15 +46,17 @@ export type ConvertedEntry = {
   +site: EmotionSite,
 };
 
+export type ConvertedOutcome = {
+  +status: 'converted',
+  +code: string,
+  +entries: $ReadOnlyArray<ConvertedEntry>,
+  +registryName: string,
+  +namespace: string,
+  +refusals: $ReadOnlyArray<EmotionRefusal>,
+};
+
 export type ConversionOutcome =
-  | {
-      +status: 'converted',
-      +code: string,
-      +entries: $ReadOnlyArray<ConvertedEntry>,
-      +registryName: string,
-      +namespace: string,
-      +refusals: $ReadOnlyArray<EmotionRefusal>,
-    }
+  | ConvertedOutcome
   | {
       +status: 'unchanged',
       +reason: 'not-emotion' | 'no-supported-sites',
