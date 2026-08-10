@@ -879,6 +879,59 @@ export const Button = () => <button css={{ color: 'base', ':hover': { color: 'ho
       expect(readFile(repo, 'src/Button.js')).toBe(proposal.code);
     });
 
+    test('approved pseudo-element evidence is eligible under the versioned mechanical policy', () => {
+      const source = `/** @jsxImportSource @emotion/react */
+export const Button = () => <button css={{ color: 'black', '::before': { content: '"x"', color: 'red' }, '::after': { color: 'blue' } }} />;
+`;
+      writeFiles(repo, { 'src/Button.js': source });
+      execFileSync('git', ['add', '-A'], { cwd: repo });
+      execFileSync(
+        'git',
+        ['commit', '--quiet', '--no-verify', '-m', 'pseudo-element source'],
+        { cwd: repo },
+      );
+      const proposal = proposeStaticConversion({
+        source,
+        filename: 'src/Button.js',
+      });
+      if (proposal.status !== 'proposed') {
+        throw new Error(`expected a proposal, got ${proposal.status}`);
+      }
+      const workspace = openWorkspace(['src/**']);
+      writeFiles(workspace.path, { 'src/Button.js': proposal.code });
+      const snapshot = createSnapshot({
+        repositoryRoot: repo,
+        files: ['src/Button.js'],
+      });
+      const built = createCandidatePatch({
+        workspace,
+        snapshot,
+        proposer: { kind: 'deterministic', version: 'm6-pseudo-test' },
+        expectedContent: { 'src/Button.js': proposal.generatedHash },
+      });
+      if (!built.ok) throw new Error(built.reason);
+      const evidence = bundleEvidence(
+        built.candidate,
+        built.snapshot,
+        proposal.evidence,
+      );
+      const result = applyPlan(
+        {
+          entries: [
+            {
+              candidate: built.candidate,
+              snapshot: built.snapshot,
+              evidence,
+              scopeRules: { allowedPaths: ['src/**'] },
+            },
+          ],
+        },
+        { recoveryRoot },
+      );
+      expect(result.status).toBe('applied');
+      expect(readFile(repo, 'src/Button.js')).toBe(proposal.code);
+    });
+
     test('an approved candidate with passing evidence is applied', () => {
       const { candidate, snapshot, scopeRules } = planFor();
       const evidence = bundleEvidence(
@@ -1070,7 +1123,7 @@ export const Button = () => <button css={{ color: 'base', ':hover': { color: 'ho
       expect(readFile(repo, 'src/Button.js')).toBe(INITIAL['src/Button.js']);
     });
 
-    test('an unrecognized comparison model is not admitted by policy v2', () => {
+    test('an unrecognized comparison model is not admitted by policy v3', () => {
       const { candidate, snapshot, scopeRules } = planFor();
       const results = passingEvidence(candidate, snapshot).map((item) =>
         item.check === 'static-css-comparison'
