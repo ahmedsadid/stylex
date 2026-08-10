@@ -168,9 +168,34 @@ describe('emotion discovery', () => {
         'unsupported-condition',
       ],
       [
+        'a focus-visible condition pending separate priority review',
+        `${PRAGMA}const App = () => <div css={{ ':focus-visible': { color: 'red' } }} />;`,
+        'unsupported-condition',
+      ],
+      [
+        'an at-rule condition',
+        `${PRAGMA}const App = () => <div css={{ '@media (min-width: 1px)': { color: 'red' } }} />;`,
+        'unsupported-condition',
+      ],
+      [
+        'a pseudo-element target',
+        `${PRAGMA}const App = () => <div css={{ '::before': { content: 'x' } }} />;`,
+        'unsupported-condition',
+      ],
+      [
         'a nested condition',
         `${PRAGMA}const App = () => <div css={{ ':hover': { ':focus': { color: 'red' } } }} />;`,
         'nested-style-object',
+      ],
+      [
+        'a spread inside an approved condition',
+        `${PRAGMA}const App = () => <div css={{ ':hover': { ...hover, color: 'red' } }} />;`,
+        'spread-in-style-object',
+      ],
+      [
+        'a dynamic value inside an approved condition',
+        `${PRAGMA}const App = () => <div css={{ ':hover': { color: theme.hover } }} />;`,
+        'non-literal-value',
       ],
       [
         'a template literal value',
