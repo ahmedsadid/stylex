@@ -131,6 +131,36 @@ describe('emotion discovery', () => {
     ]);
   });
 
+  test('refuses an effectful value hidden by a later duplicate property', () => {
+    const result = read(`${PRAGMA}const App = () => (
+  <div css={{ color: sideEffect(), color: 'red' }} />
+);`);
+    expect(result.sites).toEqual([]);
+    expect(result.refusals.map((refusal) => refusal.reason)).toEqual([
+      'non-literal-value',
+    ]);
+  });
+
+  test('refuses an effectful value hidden inside one condition object', () => {
+    const result = read(`${PRAGMA}const App = () => (
+  <div css={{ ':hover': { color: sideEffect(), color: 'red' } }} />
+);`);
+    expect(result.sites).toEqual([]);
+    expect(result.refusals.map((refusal) => refusal.reason)).toEqual([
+      'non-literal-value',
+    ]);
+  });
+
+  test('refuses an effectful value hidden by a later condition object', () => {
+    const result = read(`${PRAGMA}const App = () => (
+  <div css={{ ':hover': { color: sideEffect() }, ':hover': { opacity: 1 } }} />
+);`);
+    expect(result.sites).toEqual([]);
+    expect(result.refusals.map((refusal) => refusal.reason)).toEqual([
+      'non-literal-value',
+    ]);
+  });
+
   test('string keys are accepted when they are already camelCase', () => {
     const result = read(
       `${PRAGMA}const App = () => <div css={{ 'fontSize': 12 }} />;`,

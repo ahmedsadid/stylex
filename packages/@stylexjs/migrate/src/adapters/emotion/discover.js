@@ -184,20 +184,33 @@ function propertyName(property: $FlowFixMe): string | null {
   return null;
 }
 
-/** Match JavaScript object semantics: a later static key replaces an earlier one. */
-function survivingProperties(
+/** Return the authored positions whose static keys survive object construction. */
+function lastPropertyIndexes(
   properties: $ReadOnlyArray<$FlowFixMe>,
-): $ReadOnlyArray<$FlowFixMe> {
+): $ReadOnlySet<number> {
   const seen = new Set<string>();
-  const result: Array<$FlowFixMe> = [];
+  const result = new Set<number>();
   for (let index = properties.length - 1; index >= 0; index--) {
     const property = properties[index];
     const name = propertyName(property);
-    if (name != null) {
-      if (seen.has(name)) continue;
-      seen.add(name);
-    }
-    result.unshift(property);
+    if (name == null || seen.has(name)) continue;
+    seen.add(name);
+    result.add(index);
+  }
+  return result;
+}
+
+/** Apply last-key-wins only after every authored value has been inspected. */
+function lastDeclarations(
+  declarations: $ReadOnlyArray<Declaration>,
+): $ReadOnlyArray<Declaration> {
+  const seen = new Set<string>();
+  const result: Array<Declaration> = [];
+  for (let index = declarations.length - 1; index >= 0; index--) {
+    const declaration = declarations[index];
+    if (seen.has(declaration.property)) continue;
+    seen.add(declaration.property);
+    result.unshift(declaration);
   }
   return result;
 }
@@ -209,7 +222,10 @@ function readLiteralDeclarations(
   | { +ok: true, +declarations: $ReadOnlyArray<Declaration> }
   | { +ok: false, +reason: RefusalReason } {
   const declarations = [];
-  for (const property of survivingProperties(objectExpression.properties)) {
+  // JavaScript evaluates every object value, including a value overwritten by
+  // a duplicate key. Validate them all before retaining only the winner, or a
+  // conversion could silently erase an effectful expression.
+  for (const property of objectExpression.properties) {
     if (property.type === 'SpreadElement') {
       return { ok: false, reason: 'spread-in-style-object' };
     }
@@ -250,14 +266,19 @@ function readLiteralDeclarations(
       return { ok: false, reason: 'non-literal-value' };
     }
   }
-  return { ok: true, declarations: Object.freeze(declarations) };
+  return {
+    ok: true,
+    declarations: Object.freeze(lastDeclarations(declarations)),
+  };
 }
 
 function readDeclarations(
   objectExpression: $FlowFixMe,
 ): { +ok: true, +style: StyleObject } | { +ok: false, +reason: RefusalReason } {
   const declarations: Array<Declaration> = [];
-  for (const property of survivingProperties(objectExpression.properties)) {
+  const lastIndexes = lastPropertyIndexes(objectExpression.properties);
+  for (let index = 0; index < objectExpression.properties.length; index++) {
+    const property = objectExpression.properties[index];
     if (property.type === 'SpreadElement') {
       return { ok: false, reason: 'spread-in-style-object' };
     }
@@ -278,12 +299,19 @@ function readDeclarations(
       const condition: Condition = name === ':hover' ? ':hover' : ':focus';
       const conditional = readLiteralDeclarations(property.value, condition);
       if (!conditional.ok) return conditional;
-      declarations.push(...conditional.declarations);
+      // A later duplicate condition key replaces this entire object. The
+      // earlier object was still evaluated, so it was validated above even
+      // though none of its declarations survive.
+      if (lastIndexes.has(index)) {
+        declarations.push(...conditional.declarations);
+      }
       continue;
     }
     const ordinary = readLiteralDeclarations({ properties: [property] });
     if (!ordinary.ok) return ordinary;
-    declarations.push(...ordinary.declarations);
+    if (lastIndexes.has(index)) {
+      declarations.push(...ordinary.declarations);
+    }
   }
   return { ok: true, style: styleObject(declarations) };
 }
