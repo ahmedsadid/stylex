@@ -43,6 +43,10 @@ Migration records live under `.stylex-migrate/`. The directory is added to
 stylex-migrate init
 stylex-migrate scan
 stylex-migrate plan
+stylex-migrate config set ./stylex-migrate.config.json
+stylex-migrate config show
+stylex-migrate verify <candidate-id> [candidate-id...]
+stylex-migrate review <candidate-or-subject-or-verdict-id>
 stylex-migrate status
 stylex-migrate explain <site-or-cluster-or-plan-id>
 stylex-migrate state rebuild
@@ -59,6 +63,49 @@ conversion percentage. `explain` makes routing and blocking reasons available
 after restarting the process.
 
 Every command also accepts `--json`. Run `init` before the other commands.
+
+Repository checks are configured as argv arrays; shell command strings are
+rejected. Each provider declares whether it applies to one candidate or an exact
+multi-candidate apply plan, the environment keys it may receive, relevant file
+globs, a version command, cost tier, timeout, and known limitations.
+
+```json
+{
+  "sourceGlobs": ["src/**/*.{js,jsx,ts,tsx}"],
+  "evidence": {
+    "concurrency": 2,
+    "outputPreviewBytes": 8192,
+    "providers": [
+      {
+        "id": "repo-typecheck",
+        "kind": "command",
+        "check": "typecheck",
+        "checkVersion": "flow-selection-v1",
+        "subject": "apply-plan",
+        "cost": "standard",
+        "argv": ["yarn", "flow", "check"],
+        "versionArgv": ["yarn", "flow", "version"],
+        "cwd": ".",
+        "allowedEnv": ["PATH", "CI"],
+        "fileGlobs": ["src/**/*.{js,jsx,ts,tsx}"],
+        "limitations": ["does not exercise rendered behavior"],
+        "timeoutMs": 120000
+      }
+    ]
+  }
+}
+```
+
+`verify` reconstructs the frozen candidate in a detached temporary worktree,
+runs applicable checks there, stores full logs by content hash, computes path
+and site coverage, and persists an evidence-bound verdict. It returns exit code
+3 for blocked evidence and 4 for a rejected result. A passing repository test
+cannot replace the required static comparison for a mechanical candidate.
+
+The candidate persistence API is available for deterministic integrations. The
+end-user contextual candidate creation protocol and agent skill arrive in a
+later milestone; this early-development package does not yet present `verify` as
+a complete standalone migration workflow.
 
 ## Development
 
