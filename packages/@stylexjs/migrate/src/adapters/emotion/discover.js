@@ -32,7 +32,8 @@ export type RefusalReason =
   | 'non-literal-value'
   | 'css-with-class-or-style-prop'
   | 'duplicate-css-prop'
-  | 'unsupported-property-name';
+  | 'unsupported-property-name'
+  | 'shorthand-property';
 
 export type EmotionSite = {
   // Span of the whole `css={{...}}` attribute, for replacement.
@@ -66,6 +67,75 @@ const JSX_IMPORT_SOURCE_PRAGMA = '@jsxImportSource @emotion/react';
 // module deciding what a declaration means — the mechanical lane handles only
 // names that are already in the shape StyleX wants.
 const SUPPORTED_PROPERTY_NAME = /^[a-zA-Z][a-zA-Z0-9]*$/;
+
+/**
+ * Shorthands are refused wholesale in M2.
+ *
+ * A shorthand and a longhand for the same box interact through the cascade:
+ * in Emotion `{marginTop: 20, margin: 4}` ends up with every margin at 4,
+ * because the later shorthand resets them. StyleX resolves the same pair by
+ * fixed priority, where the longhand outranks the shorthand, and margin-top
+ * stays 20. Both stylesheets then contain the same two declarations, so a
+ * comparison that comes down to a set of declarations would call this a match
+ * and be wrong.
+ *
+ * M3 admits shorthands with a comparison model that understands that
+ * interaction. Until then the honest answer is a refusal.
+ */
+const SHORTHAND_PROPERTIES: $ReadOnlySet<string> = new Set([
+  'all',
+  'animation',
+  'background',
+  'border',
+  'borderBlock',
+  'borderBlockEnd',
+  'borderBlockStart',
+  'borderBottom',
+  'borderColor',
+  'borderImage',
+  'borderInline',
+  'borderInlineEnd',
+  'borderInlineStart',
+  'borderLeft',
+  'borderRadius',
+  'borderRight',
+  'borderStyle',
+  'borderTop',
+  'borderWidth',
+  'columnRule',
+  'columns',
+  'containIntrinsicSize',
+  'flex',
+  'flexFlow',
+  'font',
+  'gap',
+  'grid',
+  'gridArea',
+  'gridColumn',
+  'gridRow',
+  'gridTemplate',
+  'inset',
+  'insetBlock',
+  'insetInline',
+  'listStyle',
+  'margin',
+  'marginBlock',
+  'marginInline',
+  'mask',
+  'offset',
+  'outline',
+  'overflow',
+  'padding',
+  'paddingBlock',
+  'paddingInline',
+  'placeContent',
+  'placeItems',
+  'placeSelf',
+  'scrollMargin',
+  'scrollPadding',
+  'textDecoration',
+  'transition',
+]);
 
 function isHostElementName(name: string): boolean {
   const first = name[0];
@@ -137,6 +207,9 @@ function readDeclarations(
       if (!SUPPORTED_PROPERTY_NAME.test(name)) {
         return { ok: false, reason: 'unsupported-property-name' };
       }
+      if (SHORTHAND_PROPERTIES.has(name)) {
+        return { ok: false, reason: 'shorthand-property' };
+      }
       declarations.push({ property: name, value: value.value });
     } else if (value.type === 'ObjectExpression') {
       return { ok: false, reason: 'nested-style-object' };
@@ -149,7 +222,29 @@ function readDeclarations(
       return { ok: false, reason: 'non-literal-value' };
     }
   }
-  return { ok: true, style: styleObject(declarations) };
+  return { ok: true, style: styleObject(lastWins(declarations)) };
+}
+
+/**
+ * `{color: 'red', color: 'blue'}` is a single-property object by the time any
+ * styling library sees it — the engine resolves the duplicate before Emotion is
+ * called. Keeping only the last occurrence reproduces that, rather than
+ * inventing a second declaration that never existed at runtime.
+ */
+function lastWins(
+  declarations: $ReadOnlyArray<Declaration>,
+): $ReadOnlyArray<Declaration> {
+  const seenLater = new Set<string>();
+  const result: Array<Declaration> = [];
+  for (let i = declarations.length - 1; i >= 0; i--) {
+    const declaration = declarations[i];
+    if (seenLater.has(declaration.property)) {
+      continue;
+    }
+    seenLater.add(declaration.property);
+    result.unshift(declaration);
+  }
+  return result;
 }
 
 export function discover(ast: $FlowFixMe, source: string): DiscoveryResult {
