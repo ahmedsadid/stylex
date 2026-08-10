@@ -264,12 +264,13 @@ function readLiteralDeclarations(
       if (typeof value.value === 'number' && !Number.isFinite(value.value)) {
         return { ok: false, reason: 'non-finite-number' };
       }
-      declarations.push({
-        property: name,
-        value: value.value,
-        ...(condition == null ? {} : { condition }),
-        ...(pseudoElement == null ? {} : { pseudoElement }),
-      });
+      const declaration: Declaration =
+        condition != null
+          ? { property: name, value: value.value, condition }
+          : pseudoElement != null
+            ? { property: name, value: value.value, pseudoElement }
+            : { property: name, value: value.value };
+      declarations.push(declaration);
     } else if (value.type === 'ObjectExpression') {
       return { ok: false, reason: 'nested-style-object' };
     } else if (value.type === 'TemplateLiteral') {

@@ -183,14 +183,12 @@ function grammarReasons(
     if (declaration.important) {
       reasons.add(`${side}: !important is outside the first grammar`);
     }
-    if (
-      declaration.pseudoElement != null &&
-      !grammar.pseudoElements.has(declaration.pseudoElement)
-    ) {
+    const pseudoElement = declaration.pseudoElement;
+    if (pseudoElement != null && !grammar.pseudoElements.has(pseudoElement)) {
       reasons.add(
         grammar.pseudoElements.size === 0
           ? `${side}: pseudo-elements are outside ${grammar.model}`
-          : `${side}: unsupported pseudo-element ${declaration.pseudoElement}`,
+          : `${side}: unsupported pseudo-element ${pseudoElement}`,
       );
     }
     if (
