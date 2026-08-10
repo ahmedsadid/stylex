@@ -443,6 +443,11 @@ export type {
   KeyframesMutation,
   KeyframesMutationId,
 } from './referee/keyframesMutations';
+export { SHORTHAND_MUTATION_MANIFEST } from './referee/shorthandMutations';
+export type {
+  ShorthandMutation,
+  ShorthandMutationId,
+} from './referee/shorthandMutations';
 export type {
   CompilerProbe,
   ObservedCompilerProbe,
