@@ -9,8 +9,14 @@
 
 import { matchesGlob } from '../candidate/scope';
 import type { EvidenceProviderConfig } from './config';
-import type { EvidenceRunEntry } from './scheduler';
+import type { RepositoryEvidenceResult } from './command';
 import type { RepositoryEvidenceSubject } from './subject';
+
+type CoverageEvidenceEntry = {
+  +providerId: string,
+  +evidence: RepositoryEvidenceResult,
+  ...
+};
 
 export type CoverageStatus = 'covered' | 'partially-covered' | 'uncovered';
 
@@ -56,7 +62,7 @@ export function aggregateRepositoryCoverage({
 }: {
   +subject: RepositoryEvidenceSubject,
   +providers: $ReadOnlyArray<EvidenceProviderConfig>,
-  +entries: $ReadOnlyArray<EvidenceRunEntry>,
+  +entries: $ReadOnlyArray<CoverageEvidenceEntry>,
 }): CoverageSummary {
   const results = new Map(entries.map((entry) => [entry.providerId, entry]));
   const coverage = subject.changes.map((change) => {

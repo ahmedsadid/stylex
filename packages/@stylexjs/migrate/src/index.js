@@ -58,6 +58,7 @@ export {
 export type { EvidenceCacheInputs } from './evidence/cache';
 export {
   createEvidenceSchedule,
+  evidenceScheduleIdentity,
   runEvidenceSchedule,
 } from './evidence/scheduler';
 export type {
@@ -85,6 +86,7 @@ export {
   loadLatestRepositoryEvidenceBundle,
   loadRepositoryEvidenceBundle,
   saveRepositoryEvidenceBundle,
+  validateRepositoryEvidenceBundle,
 } from './evidence/bundle';
 export type {
   BundleRepositoryEntry,
@@ -138,6 +140,7 @@ export { redact, redactText } from './state/redact';
 export {
   createApplyPlanEvidenceSubject,
   createCandidateEvidenceSubject,
+  repositoryEvidenceSubjectIdentity,
 } from './evidence/subject';
 export type {
   ApplyPlanEvidenceSubject,

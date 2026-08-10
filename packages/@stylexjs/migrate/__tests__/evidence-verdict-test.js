@@ -13,6 +13,8 @@ import {
   createCandidateWorkspace,
   createRepositoryEvidenceBundle,
   createSnapshot,
+  canonicalJson,
+  evidenceScheduleIdentity,
   evaluateRepositoryEvidence,
   hashBytes,
   hashString,
@@ -29,7 +31,7 @@ import {
 import type {
   CandidateWorkspace,
   Classification,
-  CoverageSummary,
+  EvidenceConfig,
   EvidenceResult,
   EvidenceScheduleResult,
   ProjectState,
@@ -178,7 +180,7 @@ describe('M5 evidence bundles and policy verdicts', () => {
   ): {
     +subject: RepositoryEvidenceSubject,
     +schedule: EvidenceScheduleResult,
-    +coverage: CoverageSummary,
+    +config: EvidenceConfig,
   } {
     const subject = createCandidateEvidenceSubject({
       candidate: candidate.candidate,
@@ -187,43 +189,48 @@ describe('M5 evidence bundles and policy verdicts', () => {
     });
     const repository = repositoryEvidence(subject, outcome);
     const artifact = writeArtifact(project, repository.output);
-    const covered = outcome === 'pass';
-    const coverage: CoverageSummary = {
-      status: covered ? 'covered' : 'uncovered',
-      entries: [
+    const config: EvidenceConfig = {
+      concurrency: 1,
+      outputPreviewBytes: 1024,
+      providers: [
         {
-          changePath: 'src/A.js',
-          siteIds: ['site-a'],
-          checks: ['typecheck'],
-          claimsSupported: covered ? ['checks-passed'] : [],
-          status: covered ? 'covered' : 'uncovered',
-          detail: covered ? 'all checks passed' : 'typecheck unavailable',
+          id: 'repo-typecheck',
+          kind: 'command',
+          check: 'typecheck',
+          checkVersion: 'selection-v1',
+          subject: 'candidate',
+          cost: 'standard',
+          argv: ['typecheck'],
+          versionArgv: ['typecheck', '--version'],
+          cwd: '.',
+          allowedEnv: ['PATH'],
+          fileGlobs: ['src/**'],
+          limitations: [],
+          timeoutMs: 1000,
         },
       ],
-      counts: {
-        covered: covered ? 1 : 0,
-        'partially-covered': 0,
-        uncovered: covered ? 0 : 1,
-      },
+    };
+    const scheduleStable = {
+      subjectId: subject.id,
+      configHash: hashString(canonicalJson(config)),
+      concurrency: 1,
+      items: [
+        {
+          providerId: 'repo-typecheck',
+          cost: 'standard' as 'standard',
+          estimatedDurationMs: 10,
+        },
+      ],
+      ignoredProviderIds: [],
+      estimatedCommandRuns: 1,
+      estimatedDurationMs: 10,
     };
     return {
       subject,
       schedule: {
         schedule: {
-          id: 'schedule-1',
-          subjectId: subject.id,
-          configHash: 'config-hash',
-          concurrency: 1,
-          items: [
-            {
-              providerId: 'repo-typecheck',
-              cost: 'standard',
-              estimatedDurationMs: 10,
-            },
-          ],
-          ignoredProviderIds: [],
-          estimatedCommandRuns: 1,
-          estimatedDurationMs: 10,
+          id: evidenceScheduleIdentity({ id: '', ...scheduleStable }),
+          ...scheduleStable,
         },
         entries: [
           {
@@ -239,7 +246,7 @@ describe('M5 evidence bundles and policy verdicts', () => {
         skippedProviderIds: [],
         actualDurationMs: 10,
       },
-      coverage,
+      config,
     };
   }
 
@@ -361,5 +368,32 @@ describe('M5 evidence bundles and policy verdicts', () => {
     expect(verdict.missingRequirements).toContain(
       'repo-typecheck failed typecheck',
     );
+  });
+
+  test('the bundle boundary rejects forged repository evidence', () => {
+    const candidate = record({
+      proposer: { kind: 'deterministic', version: 'fixture-v1' },
+      classification: 'mechanical',
+      includeStatic: true,
+    });
+    const inputsWithEvidence = inputs(candidate, 'unavailable');
+    const entry = inputsWithEvidence.schedule.entries[0];
+    const forgedSchedule = {
+      ...inputsWithEvidence.schedule,
+      entries: [
+        {
+          ...entry,
+          evidence: { ...entry.evidence, result: 'pass' as 'pass' },
+        },
+      ],
+    };
+    expect(() =>
+      createRepositoryEvidenceBundle({
+        subject: inputsWithEvidence.subject,
+        candidates: [candidate],
+        schedule: forgedSchedule,
+        config: inputsWithEvidence.config,
+      }),
+    ).toThrow('invalid repository evidence');
   });
 });

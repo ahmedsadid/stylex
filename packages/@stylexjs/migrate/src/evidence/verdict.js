@@ -11,6 +11,12 @@ import { hashString, shortHash } from '../kernel/hash';
 import { canonicalJson } from '../state/json';
 import { readRecord, writeRecord } from '../state/project';
 import { MECHANICAL_COMPARISON_MODEL } from '../kernel/applyPlan';
+import { validateCandidatePatch } from '../candidate/patch';
+import { validateRepositoryEvidenceBundle } from './bundle';
+import {
+  createApplyPlanEvidenceSubject,
+  createCandidateEvidenceSubject,
+} from './subject';
 import type { Claim } from '../kernel/evidence';
 import type { Classification } from '../inventory/model';
 import type { VerificationCandidate } from './candidates';
@@ -195,10 +201,43 @@ export function evaluateRepositoryEvidence({
   +candidates: $ReadOnlyArray<VerificationCandidate>,
   +now?: () => string,
 }): RepositoryEvidenceVerdict {
+  validateRepositoryEvidenceBundle(bundle);
+  if (candidates.length === 0) {
+    throw new Error('A repository evidence verdict requires candidates');
+  }
+  for (const record of candidates) {
+    const invalid = validateCandidatePatch(record.candidate, record.snapshot);
+    if (invalid != null) {
+      throw new Error(`Invalid candidate ${record.candidate.id}: ${invalid}`);
+    }
+  }
   const candidateIds = candidates.map((record) => record.candidate.id).sort();
   if (
     candidateIds.length !== bundle.candidateIds.length ||
     candidateIds.some((id, index) => id !== bundle.candidateIds[index])
+  ) {
+    throw new Error('Verdict candidates do not match the evidence bundle');
+  }
+  const subjectInputs = candidates.map((record) => ({
+    candidate: record.candidate,
+    snapshot: record.snapshot,
+    siteIdsByFile: record.siteIdsByFile,
+  }));
+  const expectedSubject =
+    subjectInputs.length === 1
+      ? createCandidateEvidenceSubject(subjectInputs[0])
+      : createApplyPlanEvidenceSubject(subjectInputs);
+  const expectedStatic = candidates
+    .map((record) => ({
+      candidateId: record.candidate.id,
+      results: record.staticEvidence,
+    }))
+    .sort((a, b) => a.candidateId.localeCompare(b.candidateId));
+  if (
+    canonicalJson(expectedSubject as $FlowFixMe) !==
+      canonicalJson(bundle.subject as $FlowFixMe) ||
+    canonicalJson(expectedStatic as $FlowFixMe) !==
+      canonicalJson(bundle.staticEntries as $FlowFixMe)
   ) {
     throw new Error('Verdict candidates do not match the evidence bundle');
   }

@@ -49,6 +49,13 @@ function subjectIdentity(value: mixed): string {
   return shortHash(hashString(canonicalJson(value as $FlowFixMe)));
 }
 
+export function repositoryEvidenceSubjectIdentity(
+  subject: RepositoryEvidenceSubject,
+): string {
+  const { id: _id, ...stable } = subject;
+  return subjectIdentity(stable);
+}
+
 function changesFor({
   candidate,
   snapshot,
@@ -96,7 +103,10 @@ export function createCandidateEvidenceSubject(
     candidateIds: Object.freeze([input.candidate.id]),
     changes,
   };
-  return Object.freeze({ ...stable, id: subjectIdentity(stable) });
+  return Object.freeze({
+    ...stable,
+    id: repositoryEvidenceSubjectIdentity({ id: '', ...stable }),
+  });
 }
 
 export function createApplyPlanEvidenceSubject(
@@ -145,5 +155,8 @@ export function createApplyPlanEvidenceSubject(
     candidateIds: Object.freeze(candidateIds),
     changes: Object.freeze(changes),
   };
-  return Object.freeze({ ...stable, id: subjectIdentity(stable) });
+  return Object.freeze({
+    ...stable,
+    id: repositoryEvidenceSubjectIdentity({ id: '', ...stable }),
+  });
 }

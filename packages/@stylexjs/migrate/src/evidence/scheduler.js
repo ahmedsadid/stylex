@@ -56,6 +56,20 @@ export type EvidenceScheduleResult = {
   +actualDurationMs: number,
 };
 
+export function evidenceScheduleIdentity(schedule: EvidenceSchedule): string {
+  const identity = {
+    subjectId: schedule.subjectId,
+    configHash: schedule.configHash,
+    concurrency: schedule.concurrency,
+    providers: schedule.items.map((item) => ({
+      providerId: item.providerId,
+      cost: item.cost,
+    })),
+    ignoredProviderIds: schedule.ignoredProviderIds,
+  };
+  return shortHash(hashString(canonicalJson(identity as $FlowFixMe)));
+}
+
 type ProviderHistory = {
   +kind: 'repository-evidence-history',
   +providerId: string,
@@ -232,18 +246,8 @@ export function createEvidenceSchedule({
     estimatedCommandRuns: items.length,
     estimatedDurationMs: estimatedWallTime(items, config.concurrency),
   };
-  const identity = {
-    subjectId: stable.subjectId,
-    configHash: stable.configHash,
-    concurrency: stable.concurrency,
-    providers: items.map((item) => ({
-      providerId: item.providerId,
-      cost: item.cost,
-    })),
-    ignoredProviderIds,
-  };
   return Object.freeze({
-    id: shortHash(hashString(canonicalJson(identity as $FlowFixMe))),
+    id: evidenceScheduleIdentity({ id: '', ...stable }),
     ...stable,
   });
 }

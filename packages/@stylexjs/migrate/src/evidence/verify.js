@@ -10,7 +10,6 @@
 import { removeCandidateWorkspace } from '../candidate/workspace';
 import { appendStateEvent } from '../state/events';
 import { readConfig } from '../state/project';
-import { aggregateRepositoryCoverage } from './coverage';
 import {
   createApplyPlanEvidenceSubject,
   createCandidateEvidenceSubject,
@@ -85,18 +84,14 @@ export async function verifyPersistedCandidates({
       now,
       monotonicNow,
     });
-    const coverage = aggregateRepositoryCoverage({
-      subject,
-      providers: config.providers,
-      entries: schedule.entries,
-    });
     const bundle = createRepositoryEvidenceBundle({
       subject,
       candidates,
       schedule,
-      coverage,
+      config,
       now,
     });
+    const coverage = bundle.coverage;
     const verdict = evaluateRepositoryEvidence({
       bundle,
       candidates,
