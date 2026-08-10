@@ -40,8 +40,13 @@ export type {
   StateIndexes,
 } from './state/events';
 
+export { cleanupProject, migrateProject } from './state/maintenance';
+export type { CleanupResult, MigrationResult } from './state/maintenance';
+
 export { canonicalJson, immutableJson, parseJson } from './state/json';
 export type { JsonValue } from './state/json';
+
+export { redact, redactText } from './state/redact';
 
 export {
   hashFields,
