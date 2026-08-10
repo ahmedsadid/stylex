@@ -12,7 +12,9 @@ import {
   initializeProject,
   loadCurrentInventory,
   loadCurrentPlan,
+  loadInventory,
   openProject,
+  readRecord,
   saveInventory,
   savePlan,
   scanRepository,
@@ -79,6 +81,26 @@ export const App = () => <div css={{ color: 'red' }} />;
     });
     expect(() => loadCurrentInventory(project)).toThrow(
       'Invalid persisted inventory',
+    );
+  });
+
+  test('a report lookup cannot return content with another identity', () => {
+    const project = initializeProject({ repositoryRoot: repo });
+    const inventory = scanRepository({ repositoryRoot: repo });
+    saveInventory(project, inventory);
+    const original = readRecord(
+      project,
+      'reports',
+      `inventory-${inventory.id}`,
+    );
+    writeRecord(
+      project,
+      'reports',
+      'inventory-0000000000000000',
+      original.payload,
+    );
+    expect(() => loadInventory(project, '0000000000000000')).toThrow(
+      `contains ${inventory.id}`,
     );
   });
 });

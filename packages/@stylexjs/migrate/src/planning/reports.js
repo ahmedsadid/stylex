@@ -318,7 +318,15 @@ export function loadInventory(
   if (!object(payload) || payload.kind !== 'inventory') {
     throw new Error(`Invalid persisted inventory record ${id}`);
   }
-  return parseInventory(payload.inventory, project, record.writtenAt);
+  const inventory = parseInventory(
+    payload.inventory,
+    project,
+    record.writtenAt,
+  );
+  if (inventory.id !== id) {
+    throw new Error(`Inventory report ${id} contains ${inventory.id}`);
+  }
+  return inventory;
 }
 
 export function loadCurrentInventory(project: ProjectState): Inventory | null {
@@ -368,7 +376,11 @@ export function loadPlan(project: ProjectState, id: string): Plan | null {
   if (!object(payload) || payload.kind !== 'plan') {
     throw new Error(`Invalid persisted plan record ${id}`);
   }
-  return parsePlan(payload.plan, record.writtenAt);
+  const plan = parsePlan(payload.plan, record.writtenAt);
+  if (plan.id !== id) {
+    throw new Error(`Plan report ${id} contains ${plan.id}`);
+  }
+  return plan;
 }
 
 export function loadCurrentPlan(project: ProjectState): Plan | null {
