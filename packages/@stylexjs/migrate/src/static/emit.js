@@ -7,7 +7,12 @@
  * @flow strict
  */
 
-import type { Declaration, StaticValue, StyleObject } from './ir';
+import type {
+  Declaration,
+  PseudoElement,
+  StaticValue,
+  StyleObject,
+} from './ir';
 
 /**
  * Turning the neutral representation into StyleX source text.
@@ -92,9 +97,12 @@ function sortedProperties(
   ].sort();
 }
 
-export function emitStyleObject(style: StyleObject, indent: string): string {
-  const lines = sortedProperties(style.declarations).flatMap((property) => {
-    const declarations = style.declarations.filter(
+function declarationLines(
+  input: $ReadOnlyArray<Declaration>,
+  indent: string,
+): $ReadOnlyArray<string> {
+  return sortedProperties(input).flatMap((property) => {
+    const declarations = input.filter(
       (declaration) => declaration.property === property,
     );
     if (declarations.every((declaration) => declaration.condition == null)) {
@@ -122,6 +130,25 @@ export function emitStyleObject(style: StyleObject, indent: string): string {
       });
     return [`${indent}  ${property}: {`, ...values, `${indent}  },`];
   });
+}
+
+export function emitStyleObject(style: StyleObject, indent: string): string {
+  const rootDeclarations = style.declarations.filter(
+    (declaration) => declaration.pseudoElement == null,
+  );
+  const lines = [...declarationLines(rootDeclarations, indent)];
+  const pseudoElements: $ReadOnlyArray<PseudoElement> = ['::after', '::before'];
+  for (const pseudoElement of pseudoElements) {
+    const declarations = style.declarations.filter(
+      (declaration) => declaration.pseudoElement === pseudoElement,
+    );
+    if (declarations.length === 0) continue;
+    lines.push(
+      `${indent}  '${pseudoElement}': {`,
+      ...declarationLines(declarations, `${indent}  `),
+      `${indent}  },`,
+    );
+  }
   return `{\n${lines.join('\n')}\n${indent}}`;
 }
 

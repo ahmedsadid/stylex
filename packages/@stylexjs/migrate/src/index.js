@@ -276,10 +276,16 @@ export type {
 export { parseSource, pluginsForFilename } from './static/parse';
 export type { ParseResult } from './static/parse';
 
-export { hasConditions, isEmptyStyle, styleObject } from './static/ir';
+export {
+  hasConditions,
+  hasPseudoElements,
+  isEmptyStyle,
+  styleObject,
+} from './static/ir';
 export type {
   Condition,
   Declaration,
+  PseudoElement,
   StaticValue,
   StyleObject,
 } from './static/ir';

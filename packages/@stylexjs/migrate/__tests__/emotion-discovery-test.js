@@ -131,6 +131,19 @@ describe('emotion discovery', () => {
     ]);
   });
 
+  test('reads flat before and after pseudo-element targets', () => {
+    const result = read(`${PRAGMA}const App = () => (
+  <div css={{ color: 'black', '::before': { color: 'red', content: '"x"' }, '::after': { color: 'blue' } }} />
+);`);
+    expect(result.refusals).toEqual([]);
+    expect(result.sites[0].style.declarations).toEqual([
+      { property: 'color', value: 'black' },
+      { property: 'color', value: 'red', pseudoElement: '::before' },
+      { property: 'content', value: '"x"', pseudoElement: '::before' },
+      { property: 'color', value: 'blue', pseudoElement: '::after' },
+    ]);
+  });
+
   test('refuses an effectful value hidden by a later duplicate property', () => {
     const result = read(`${PRAGMA}const App = () => (
   <div css={{ color: sideEffect(), color: 'red' }} />
@@ -208,9 +221,19 @@ describe('emotion discovery', () => {
         'unsupported-condition',
       ],
       [
-        'a pseudo-element target',
-        `${PRAGMA}const App = () => <div css={{ '::before': { content: 'x' } }} />;`,
+        'an unsupported pseudo-element target',
+        `${PRAGMA}const App = () => <input css={{ '::placeholder': { color: 'gray' } }} />;`,
         'unsupported-condition',
+      ],
+      [
+        'a pseudo-element mixed with a pseudo-class condition',
+        `${PRAGMA}const App = () => <div css={{ ':hover': { color: 'red' }, '::before': { content: '"x"' } }} />;`,
+        'mixed-condition-and-pseudo-element',
+      ],
+      [
+        'a condition nested inside a pseudo-element',
+        `${PRAGMA}const App = () => <div css={{ '::before': { ':hover': { color: 'red' } } }} />;`,
+        'nested-style-object',
       ],
       [
         'a nested condition',

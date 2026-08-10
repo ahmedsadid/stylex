@@ -10,7 +10,12 @@
 import { getPriority } from '@stylexjs/shared';
 import { walk } from '../../static/walk';
 import { styleObject } from '../../static/ir';
-import type { Condition, Declaration, StyleObject } from '../../static/ir';
+import type {
+  Condition,
+  Declaration,
+  PseudoElement,
+  StyleObject,
+} from '../../static/ir';
 
 /**
  * Emotion discovery for the mechanical lane.
@@ -30,6 +35,7 @@ export type RefusalReason =
   | 'computed-style-key'
   | 'nested-style-object'
   | 'unsupported-condition'
+  | 'mixed-condition-and-pseudo-element'
   | 'template-literal-value'
   | 'non-literal-value'
   | 'css-with-class-or-style-prop'
@@ -87,6 +93,10 @@ const SUPPORTED_PROPERTY_NAME = /^[a-zA-Z][a-zA-Z0-9]*$/;
 const SUPPORTED_CONDITIONS: $ReadOnlySet<string> = new Set([
   ':hover',
   ':focus',
+]);
+const SUPPORTED_PSEUDO_ELEMENTS: $ReadOnlySet<string> = new Set([
+  '::before',
+  '::after',
 ]);
 
 /**
@@ -218,6 +228,7 @@ function lastDeclarations(
 function readLiteralDeclarations(
   objectExpression: $FlowFixMe,
   condition?: Condition,
+  pseudoElement?: PseudoElement,
 ):
   | { +ok: true, +declarations: $ReadOnlyArray<Declaration> }
   | { +ok: false, +reason: RefusalReason } {
@@ -257,6 +268,7 @@ function readLiteralDeclarations(
         property: name,
         value: value.value,
         ...(condition == null ? {} : { condition }),
+        ...(pseudoElement == null ? {} : { pseudoElement }),
       });
     } else if (value.type === 'ObjectExpression') {
       return { ok: false, reason: 'nested-style-object' };
@@ -293,17 +305,28 @@ function readDeclarations(
       return { ok: false, reason: 'computed-style-key' };
     }
     if (property.value.type === 'ObjectExpression') {
-      if (!SUPPORTED_CONDITIONS.has(name)) {
+      if (
+        !SUPPORTED_CONDITIONS.has(name) &&
+        !SUPPORTED_PSEUDO_ELEMENTS.has(name)
+      ) {
         return { ok: false, reason: 'unsupported-condition' };
       }
-      const condition: Condition = name === ':hover' ? ':hover' : ':focus';
-      const conditional = readLiteralDeclarations(property.value, condition);
-      if (!conditional.ok) return conditional;
-      // A later duplicate condition key replaces this entire object. The
+      const nested = SUPPORTED_CONDITIONS.has(name)
+        ? readLiteralDeclarations(
+            property.value,
+            name === ':hover' ? ':hover' : ':focus',
+          )
+        : readLiteralDeclarations(
+            property.value,
+            undefined,
+            name === '::before' ? '::before' : '::after',
+          );
+      if (!nested.ok) return nested;
+      // A later duplicate selector key replaces this entire object. The
       // earlier object was still evaluated, so it was validated above even
       // though none of its declarations survive.
       if (lastIndexes.has(index)) {
-        declarations.push(...conditional.declarations);
+        declarations.push(...nested.declarations);
       }
       continue;
     }
@@ -312,6 +335,12 @@ function readDeclarations(
     if (lastIndexes.has(index)) {
       declarations.push(...ordinary.declarations);
     }
+  }
+  if (
+    declarations.some((declaration) => declaration.condition != null) &&
+    declarations.some((declaration) => declaration.pseudoElement != null)
+  ) {
+    return { ok: false, reason: 'mixed-condition-and-pseudo-element' };
   }
   return { ok: true, style: styleObject(declarations) };
 }

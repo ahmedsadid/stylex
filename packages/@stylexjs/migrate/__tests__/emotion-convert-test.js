@@ -119,6 +119,23 @@ export const App = () => (
     },`);
   });
 
+  test('before and after targets remain selector-keyed StyleX objects', () => {
+    const source = `${PRAGMA}export const App = () => (
+  <div css={{ color: 'black', '::before': { color: 'red', content: '"x"' }, '::after': { color: 'blue' } }} />
+);
+`;
+    expect(convert(source)).toContain(`div: {
+    color: 'black',
+    '::after': {
+      color: 'blue',
+    },
+    '::before': {
+      color: 'red',
+      content: '"x"',
+    },
+  },`);
+  });
+
   test('everything outside the converted spans is untouched', () => {
     const source = `${PRAGMA}import React from 'react';
 
