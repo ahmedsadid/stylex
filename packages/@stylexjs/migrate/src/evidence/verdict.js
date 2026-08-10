@@ -246,7 +246,7 @@ export function evaluateRepositoryEvidence({
   const classification = strongest(candidates);
   const policyId =
     classification === 'mechanical'
-      ? 'mechanical-repository-v5'
+      ? 'mechanical-repository-v6'
       : 'contextual-repository-v1';
   const failures = new Set<string>();
   const missing = new Set<string>();
