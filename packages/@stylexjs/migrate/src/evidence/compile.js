@@ -26,8 +26,18 @@ export type CompileResult =
       +code: string,
       // Class name to the CSS rule text StyleX generated for it.
       +rules: $ReadOnlyMap<string, string>,
+      // Exact compiler metadata used by the referee fixtures. Consumers must
+      // treat these values as observed output, not a priority table to copy.
+      +ruleMetadata: $ReadOnlyArray<CompiledStyleXRule>,
     }
   | { +ok: false, +reason: string };
+
+export type CompiledStyleXRule = {
+  +className: string,
+  +ltr: string,
+  +rtl: string | null,
+  +priority: number,
+};
 
 export function compileStyleX(source: string, filename: string): CompileResult {
   let output;
@@ -55,6 +65,7 @@ export function compileStyleX(source: string, filename: string): CompileResult {
   }
 
   const rules = new Map<string, string>();
+  const ruleMetadata = [];
   const metadata: $FlowFixMe = output?.metadata;
   const entries = metadata?.stylex;
   if (Array.isArray(entries)) {
@@ -64,11 +75,26 @@ export function compileStyleX(source: string, filename: string): CompileResult {
       }
       const className = entry[0];
       const rule = entry[1];
-      if (typeof className === 'string' && rule != null && rule.ltr != null) {
-        rules.set(className, String(rule.ltr));
+      const priority = entry[2];
+      if (
+        typeof className === 'string' &&
+        rule != null &&
+        typeof rule.ltr === 'string' &&
+        typeof priority === 'number' &&
+        Number.isFinite(priority)
+      ) {
+        const ltr = String(rule.ltr);
+        const rtl = typeof rule.rtl === 'string' ? rule.rtl : null;
+        rules.set(className, ltr);
+        ruleMetadata.push(Object.freeze({ className, ltr, rtl, priority }));
       }
     }
   }
 
-  return { ok: true, code, rules };
+  return {
+    ok: true,
+    code,
+    rules,
+    ruleMetadata: Object.freeze(ruleMetadata),
+  };
 }
