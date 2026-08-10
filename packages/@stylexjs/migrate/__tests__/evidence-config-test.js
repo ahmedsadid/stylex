@@ -31,6 +31,7 @@ const TYPECHECK = {
   cwd: '.',
   allowedEnv: ['PATH', 'CI'],
   fileGlobs: ['**/*.{js,jsx}'],
+  limitations: ['does not exercise runtime behavior'],
   timeoutMs: 120000,
 };
 

@@ -24,6 +24,7 @@ export type CommandProviderConfig = {
   +cwd: string,
   +allowedEnv: $ReadOnlyArray<string>,
   +fileGlobs: $ReadOnlyArray<string>,
+  +limitations: $ReadOnlyArray<string>,
   +timeoutMs: number,
 };
 
@@ -98,6 +99,7 @@ function normalizeProvider(value: mixed): CommandProviderConfig {
     !provider.allowedEnv.every((key) => ENVIRONMENT_KEY.test(key)) ||
     new Set(provider.allowedEnv).size !== provider.allowedEnv.length ||
     !nonEmptyStrings(provider.fileGlobs) ||
+    !strings(provider.limitations) ||
     typeof provider.timeoutMs !== 'number' ||
     !Number.isInteger(provider.timeoutMs) ||
     provider.timeoutMs < 1 ||
@@ -117,6 +119,7 @@ function normalizeProvider(value: mixed): CommandProviderConfig {
     cwd: provider.cwd,
     allowedEnv: Object.freeze([...provider.allowedEnv].sort()),
     fileGlobs: Object.freeze([...provider.fileGlobs]),
+    limitations: Object.freeze([...provider.limitations]),
     timeoutMs: provider.timeoutMs,
   });
 }

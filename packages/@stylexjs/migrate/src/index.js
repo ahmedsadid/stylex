@@ -36,6 +36,19 @@ export {
   DEFAULT_EVIDENCE_CONFIG,
   normalizeEvidenceConfig,
 } from './evidence/config';
+export { runCommandProvider } from './evidence/command';
+export type {
+  CommandExecution,
+  CommandExecutionContext,
+  CommandRecord,
+  PlatformFingerprint,
+  RepositoryEvidenceResult,
+} from './evidence/command';
+export { createEvidenceProviderRegistry } from './evidence/registry';
+export type {
+  EvidenceProviderRegistry,
+  EvidenceProviderRunner,
+} from './evidence/registry';
 export type {
   CommandProviderConfig,
   EvidenceConfig,
