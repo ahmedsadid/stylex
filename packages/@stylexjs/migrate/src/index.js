@@ -427,6 +427,11 @@ export type {
   SupportsNestingMutation,
   SupportsNestingMutationId,
 } from './referee/supportsNestingMutations';
+export { KEYFRAMES_MUTATION_MANIFEST } from './referee/keyframesMutations';
+export type {
+  KeyframesMutation,
+  KeyframesMutationId,
+} from './referee/keyframesMutations';
 export type {
   CompilerProbe,
   ObservedCompilerProbe,
