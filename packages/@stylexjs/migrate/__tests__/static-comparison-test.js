@@ -27,6 +27,7 @@ import { convertSource } from '../src/adapters/emotion/convert';
 import {
   MEDIA_QUERY_REFEREE_MODEL,
   PSEUDO_ELEMENT_REFEREE_MODEL,
+  SUPPORTS_NESTING_REFEREE_MODEL,
   REFEREE_MODEL,
 } from '../src/referee/model';
 
@@ -185,7 +186,7 @@ describe('the Emotion baseline', () => {
 
   test('observes only one literal media-query block', () => {
     const result = emotionMediaQueryBaseline(
-      '{ color: \'black\', \'@media (min-width: 800px)\': { color: \'blue\' } }',
+      "{ color: 'black', '@media (min-width: 800px)': { color: 'blue' } }",
     );
     expect(result.ok).toBe(true);
     if (result.ok) {
@@ -204,12 +205,12 @@ describe('the Emotion baseline', () => {
     }
     expect(
       emotionMediaQueryBaseline(
-        '{ \'@media (min-width: 800px)\': { color: sideEffect() } }',
+        "{ '@media (min-width: 800px)': { color: sideEffect() } }",
       ).ok,
     ).toBe(false);
     expect(
       emotionMediaQueryBaseline(
-        '{ \'@media (min-width: 800px)\': { color: \'red\' }, \'@media (min-width: 1200px)\': { color: \'blue\' } }',
+        "{ '@media (min-width: 800px)': { color: 'red' }, '@media (min-width: 1200px)': { color: 'blue' } }",
       ).ok,
     ).toBe(false);
   });
@@ -312,7 +313,7 @@ describe('proposing a conversion', () => {
   test('one exact media query passes its own referee model', () => {
     const result = proposeStaticConversion({
       source: file(
-        '{ color: \'black\', \'@media (min-width: 800px)\': { color: \'blue\', opacity: 0.5 } }',
+        "{ color: 'black', '@media (min-width: 800px)': { color: 'blue', opacity: 0.5 } }",
       ),
       filename: FILENAME,
     });
@@ -332,7 +333,7 @@ describe('proposing a conversion', () => {
   test('a default authored after its media block is refused', () => {
     const result = proposeStaticConversion({
       source: file(
-        '{ \'@media (min-width: 800px)\': { color: \'blue\' }, color: \'black\' }',
+        "{ '@media (min-width: 800px)': { color: 'blue' }, color: 'black' }",
       ),
       filename: FILENAME,
     });
@@ -344,6 +345,52 @@ describe('proposing a conversion', () => {
       result.evidence.find((item) => item.check === 'static-css-comparison')
         ?.result,
     ).toBe('fail');
+  });
+
+  test('one exact supports query passes its own referee model', () => {
+    const result = proposeStaticConversion({
+      source: file(
+        "{ color: 'black', '@supports (display: grid)': { display: 'grid', color: 'blue' } }",
+      ),
+      filename: FILENAME,
+    });
+    expect(result.status).toBe('proposed');
+    if (result.status !== 'proposed') return;
+    expect(result.model).toBe(SUPPORTS_NESTING_REFEREE_MODEL);
+    const comparison = result.evidence.find(
+      (item) => item.check === 'static-css-comparison',
+    );
+    expect(comparison?.result).toBe('pass');
+    expect(comparison?.subject.model).toBe(SUPPORTS_NESTING_REFEREE_MODEL);
+  });
+
+  test('one supports and media intersection passes in either wrapper order', () => {
+    for (const object of [
+      "{ color: 'black', '@supports (display: grid)': { color: 'blue', '@media (min-width: 800px)': { color: 'purple' } } }",
+      "{ color: 'black', '@media (min-width: 800px)': { color: 'blue', '@supports (display: grid)': { color: 'purple' } } }",
+    ]) {
+      const result = proposeStaticConversion({
+        source: file(object),
+        filename: FILENAME,
+      });
+      expect(result.status).toBe('proposed');
+      if (result.status === 'proposed') {
+        expect(result.model).toBe(SUPPORTS_NESTING_REFEREE_MODEL);
+      }
+    }
+  });
+
+  test('supports source order that disagrees with StyleX priority is refused', () => {
+    const result = proposeStaticConversion({
+      source: file(
+        "{ '@supports (display: grid)': { color: 'blue' }, color: 'black' }",
+      ),
+      filename: FILENAME,
+    });
+    expect(result.status).toBe('refused');
+    if (result.status === 'refused') {
+      expect(result.reason).toContain('supports-nesting CSS differs');
+    }
   });
 
   test('values the two libraries print differently still compare equal', () => {

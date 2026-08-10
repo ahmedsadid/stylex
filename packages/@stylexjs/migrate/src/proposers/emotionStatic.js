@@ -13,6 +13,7 @@ import {
   emotionConditionalBaseline,
   emotionMediaQueryBaseline,
   emotionPseudoElementBaseline,
+  emotionSupportsNestingBaseline,
 } from '../adapters/emotion/baseline';
 import { compileStyleX } from '../evidence/compile';
 import { describeLintMessages, lintStyleX } from '../evidence/lint';
@@ -31,6 +32,7 @@ import {
   hasConditions,
   hasMediaQueries,
   hasPseudoElements,
+  hasSupportsQueries,
 } from '../static/ir';
 import {
   MEDIA_QUERY_REFEREE_MODEL,
@@ -38,7 +40,9 @@ import {
   referee,
   refereeMediaQueries,
   refereePseudoElements,
+  refereeSupportsNesting,
   REFEREE_MODEL,
+  SUPPORTS_NESTING_REFEREE_MODEL,
 } from '../referee/model';
 import type { EvidenceResult } from '../evidence/claims';
 import type { EmotionRefusal } from '../adapters/emotion/discover';
@@ -362,25 +366,33 @@ export function verifyConversion({
     if (
       hasConditions(entry.style) ||
       hasPseudoElements(entry.style) ||
-      hasMediaQueries(entry.style)
+      hasMediaQueries(entry.style) ||
+      hasSupportsQueries(entry.style)
     ) {
+      const isSupports = hasSupportsQueries(entry.style);
       const isMediaQuery = hasMediaQueries(entry.style);
       const isPseudoElement = hasPseudoElements(entry.style);
-      const model = isMediaQuery
-        ? MEDIA_QUERY_REFEREE_MODEL
-        : isPseudoElement
-          ? PSEUDO_ELEMENT_REFEREE_MODEL
-          : REFEREE_MODEL;
-      const capability = isMediaQuery
-        ? 'media-query'
-        : isPseudoElement
-          ? 'pseudo-element'
-          : 'conditional';
-      const baseline = isMediaQuery
-        ? emotionMediaQueryBaseline(objectSource)
-        : isPseudoElement
-          ? emotionPseudoElementBaseline(objectSource)
-          : emotionConditionalBaseline(objectSource);
+      const model = isSupports
+        ? SUPPORTS_NESTING_REFEREE_MODEL
+        : isMediaQuery
+          ? MEDIA_QUERY_REFEREE_MODEL
+          : isPseudoElement
+            ? PSEUDO_ELEMENT_REFEREE_MODEL
+            : REFEREE_MODEL;
+      const capability = isSupports
+        ? 'supports-nesting'
+        : isMediaQuery
+          ? 'media-query'
+          : isPseudoElement
+            ? 'pseudo-element'
+            : 'conditional';
+      const baseline = isSupports
+        ? emotionSupportsNestingBaseline(objectSource)
+        : isMediaQuery
+          ? emotionMediaQueryBaseline(objectSource)
+          : isPseudoElement
+            ? emotionPseudoElementBaseline(objectSource)
+            : emotionConditionalBaseline(objectSource);
       if (!baseline.ok) {
         results.push(
           evidence({
@@ -422,11 +434,13 @@ export function verifyConversion({
           evidence: results,
         };
       }
-      const comparison = isMediaQuery
-        ? refereeMediaQueries(baseline.declarations, target.declarations)
-        : isPseudoElement
-          ? refereePseudoElements(baseline.declarations, target.declarations)
-          : referee(baseline.declarations, target.declarations);
+      const comparison = isSupports
+        ? refereeSupportsNesting(baseline.declarations, target.declarations)
+        : isMediaQuery
+          ? refereeMediaQueries(baseline.declarations, target.declarations)
+          : isPseudoElement
+            ? refereePseudoElements(baseline.declarations, target.declarations)
+            : referee(baseline.declarations, target.declarations);
       const detail =
         comparison.status === 'unsupported'
           ? comparison.reasons.join('; ')
@@ -450,11 +464,13 @@ export function verifyConversion({
             `compared under model ${model}`,
             `source CSS from ${EMOTION_PROVIDER} ${packageVersion(EMOTION_PROVIDER)}, ` +
               `target CSS and priority from ${STYLEX_PROVIDER} ${packageVersion(STYLEX_PROVIDER)}`,
-            isMediaQuery
-              ? 'compared default and one exact @media activation state; multiple or rewritten queries are refused'
-              : isPseudoElement
-                ? 'compared root, ::before, and ::after selector targets with no pseudo-class conditions'
-                : 'enumerated default, :hover, :focus, and simultaneous :hover/:focus states',
+            isSupports
+              ? 'enumerated one exact @supports state and, when present, its intersection with one exact @media state'
+              : isMediaQuery
+                ? 'compared default and one exact @media activation state; multiple or rewritten queries are refused'
+                : isPseudoElement
+                  ? 'compared root, ::before, and ::after selector targets with no pseudo-class conditions'
+                  : 'enumerated default, :hover, :focus, and simultaneous :hover/:focus states',
             'no runtime evidence and no CSS outside this local style object was compared',
           ],
         }),

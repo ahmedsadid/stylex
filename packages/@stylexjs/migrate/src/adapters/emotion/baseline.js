@@ -156,6 +156,45 @@ function isApprovedMediaQueryObject(objectSource: string): boolean {
   return mediaQueries.size === 1;
 }
 
+function isApprovedSupportsNestingObject(objectSource: string): boolean {
+  const parsed = parseSource(`(${objectSource})`, 'supports-baseline-guard.js');
+  if (!parsed.ok) return false;
+  const expression = parsed.ast.program?.body?.[0]?.expression;
+  if (expression?.type !== 'ObjectExpression') return false;
+  const supports = new Set<string>();
+  const media = new Set<string>();
+  const visit = (
+    object: $FlowFixMe,
+    atRules: $ReadOnlyArray<string>,
+  ): boolean => {
+    for (const property of object.properties ?? []) {
+      const name = staticKey(property);
+      if (name == null) return false;
+      if (literalValue(property.value)) continue;
+      if (property.value?.type !== 'ObjectExpression' || atRules.length >= 2) {
+        return false;
+      }
+      const isSupports = /^@supports [^\r\n{}]+$/.test(name);
+      const isMedia = /^@media [^\r\n{}]+$/.test(name);
+      if (!isSupports && !isMedia) return false;
+      if (
+        atRules.some((atRule) =>
+          isSupports
+            ? atRule.startsWith('@supports ')
+            : atRule.startsWith('@media '),
+        )
+      ) {
+        return false;
+      }
+      if (isSupports) supports.add(name);
+      if (isMedia) media.add(name);
+      if (!visit(property.value, [...atRules, name])) return false;
+    }
+    return true;
+  };
+  return visit(expression, []) && supports.size === 1 && media.size <= 1;
+}
+
 export function emotionBaseline(objectSource: string): BaselineResult {
   if (!isLiteralOnlyObject(objectSource)) {
     return {
@@ -266,6 +305,31 @@ export function emotionMediaQueryBaseline(
     return {
       ok: false,
       reason: `could not evaluate the media-query style object: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    };
+  }
+  return observeEmotionSerialization(styleValue);
+}
+
+export function emotionSupportsNestingBaseline(
+  objectSource: string,
+): CascadeObservation {
+  if (!isApprovedSupportsNestingObject(objectSource)) {
+    return {
+      ok: false,
+      reason:
+        'refusing to evaluate a supports style outside the approved bounded literal grammar',
+    };
+  }
+  let styleValue: mixed;
+  try {
+    // eslint-disable-next-line no-new-func
+    styleValue = new Function(`return (${objectSource});`)();
+  } catch (error) {
+    return {
+      ok: false,
+      reason: `could not evaluate the supports style object: ${
         error instanceof Error ? error.message : String(error)
       }`,
     };

@@ -350,6 +350,7 @@ export {
   emotionConditionalBaseline,
   emotionMediaQueryBaseline,
   emotionPseudoElementBaseline,
+  emotionSupportsNestingBaseline,
 } from './adapters/emotion/baseline';
 
 export {
