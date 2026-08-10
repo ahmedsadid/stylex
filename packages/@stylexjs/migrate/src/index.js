@@ -72,6 +72,13 @@ export type {
   CoverageStatus,
   CoverageSummary,
 } from './evidence/coverage';
+export {
+  loadVerificationCandidate,
+  loadVerificationCandidates,
+  saveVerificationCandidate,
+} from './evidence/candidates';
+export type { VerificationCandidate } from './evidence/candidates';
+export { createVerificationWorkspace } from './evidence/workspace';
 export { createEvidenceProviderRegistry } from './evidence/registry';
 export type {
   EvidenceProviderRegistry,
