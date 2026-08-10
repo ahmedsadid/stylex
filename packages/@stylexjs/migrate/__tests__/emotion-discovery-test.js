@@ -173,6 +173,47 @@ describe('emotion discovery', () => {
     ]);
   });
 
+  test('reads one supports query with one nested media intersection', () => {
+    const result = read(`${PRAGMA}const App = () => (
+  <div css={{ color: 'black', '@supports (display: grid)': { display: 'grid', '@media (min-width: 800px)': { color: 'blue' } } }} />
+);`);
+    expect(result.refusals).toEqual([]);
+    expect(result.sites[0].style.declarations).toEqual([
+      { property: 'color', value: 'black' },
+      {
+        property: 'display',
+        value: 'grid',
+        supportsQuery: '@supports (display: grid)',
+      },
+      {
+        property: 'color',
+        value: 'blue',
+        supportsQuery: '@supports (display: grid)',
+        mediaQuery: '@media (min-width: 800px)',
+      },
+    ]);
+  });
+
+  test('reads the equivalent media then supports nesting order', () => {
+    const result = read(`${PRAGMA}const App = () => (
+  <div css={{ '@media (min-width: 800px)': { color: 'blue', '@supports (display: grid)': { display: 'grid' } } }} />
+);`);
+    expect(result.refusals).toEqual([]);
+    expect(result.sites[0].style.declarations).toEqual([
+      {
+        property: 'color',
+        value: 'blue',
+        mediaQuery: '@media (min-width: 800px)',
+      },
+      {
+        property: 'display',
+        value: 'grid',
+        supportsQuery: '@supports (display: grid)',
+        mediaQuery: '@media (min-width: 800px)',
+      },
+    ]);
+  });
+
   test('refuses an effectful value hidden by a later pseudo-element block', () => {
     const result = read(`${PRAGMA}const App = () => (
   <div css={{ '::after': { color: sideEffect() }, '::after': { opacity: 1 } }} />
@@ -279,8 +320,13 @@ describe('emotion discovery', () => {
       ],
       [
         'an unsupported at-rule condition',
-        `${PRAGMA}const App = () => <div css={{ '@supports (display: grid)': { display: 'grid' } }} />;`,
+        `${PRAGMA}const App = () => <div css={{ '@container (min-width: 10px)': { display: 'grid' } }} />;`,
         'unsupported-condition',
+      ],
+      [
+        'more than one supports query',
+        `${PRAGMA}const App = () => <div css={{ '@supports (display: grid)': { display: 'grid' }, '@supports (display: flex)': { display: 'flex' } }} />;`,
+        'multiple-supports-queries',
       ],
       [
         'more than one media query',

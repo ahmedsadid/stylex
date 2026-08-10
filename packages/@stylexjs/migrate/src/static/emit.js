@@ -108,7 +108,9 @@ function declarationLines(
     if (
       declarations.every(
         (declaration) =>
-          declaration.condition == null && declaration.mediaQuery == null,
+          declaration.condition == null &&
+          declaration.mediaQuery == null &&
+          declaration.supportsQuery == null,
       )
     ) {
       const declaration = declarations[declarations.length - 1];
@@ -124,6 +126,57 @@ function declarationLines(
     ]);
     const modifier = (declaration: Declaration): string =>
       declaration.condition ?? declaration.mediaQuery ?? 'default';
+    if (declarations.some((declaration) => declaration.supportsQuery != null)) {
+      const root = declarations.find(
+        (declaration) =>
+          declaration.supportsQuery == null &&
+          declaration.mediaQuery == null &&
+          declaration.condition == null,
+      );
+      const supportsOnly = declarations.find(
+        (declaration) =>
+          declaration.supportsQuery != null && declaration.mediaQuery == null,
+      );
+      const mediaOnly = declarations.find(
+        (declaration) =>
+          declaration.supportsQuery == null && declaration.mediaQuery != null,
+      );
+      const intersection = declarations.find(
+        (declaration) =>
+          declaration.supportsQuery != null && declaration.mediaQuery != null,
+      );
+      const lines = [`${indent}  ${property}: {`];
+      if (root != null) {
+        lines.push(`${indent}    default: ${serializeValue(root.value)},`);
+      }
+      if (supportsOnly != null || intersection != null) {
+        const supportsQuery = (supportsOnly ?? intersection)?.supportsQuery;
+        if (supportsQuery == null) throw new Error('missing supports query');
+        if (intersection == null) {
+          lines.push(
+            `${indent}    ${serializeValue(supportsQuery)}: ${serializeValue(supportsOnly?.value ?? '')},`,
+          );
+        } else {
+          lines.push(`${indent}    ${serializeValue(supportsQuery)}: {`);
+          if (supportsOnly != null) {
+            lines.push(
+              `${indent}      default: ${serializeValue(supportsOnly.value)},`,
+            );
+          }
+          lines.push(
+            `${indent}      ${serializeValue(intersection.mediaQuery ?? '')}: ${serializeValue(intersection.value)},`,
+            `${indent}    },`,
+          );
+        }
+      }
+      if (mediaOnly != null) {
+        lines.push(
+          `${indent}    ${serializeValue(mediaOnly.mediaQuery ?? '')}: ${serializeValue(mediaOnly.value)},`,
+        );
+      }
+      lines.push(`${indent}  },`);
+      return lines;
+    }
     const values = [...declarations]
       .sort(
         (first, second) =>

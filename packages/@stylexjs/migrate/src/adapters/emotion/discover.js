@@ -38,6 +38,7 @@ export type RefusalReason =
   | 'mixed-condition-and-pseudo-element'
   | 'mixed-media-query-modifier'
   | 'multiple-media-queries'
+  | 'multiple-supports-queries'
   | 'template-literal-value'
   | 'non-literal-value'
   | 'css-with-class-or-style-prop'
@@ -101,12 +102,19 @@ const SUPPORTED_PSEUDO_ELEMENTS: $ReadOnlySet<string> = new Set([
   '::after',
 ]);
 const MEDIA_QUERY = /^@media [^\r\n{}]+$/;
+const SUPPORTS_QUERY = /^@supports [^\r\n{}]+$/;
 
 type DeclarationTarget =
   | { +kind: 'root' }
   | { +kind: 'condition', +condition: Condition }
   | { +kind: 'pseudo-element', +pseudoElement: PseudoElement }
-  | { +kind: 'media-query', +mediaQuery: string };
+  | { +kind: 'media-query', +mediaQuery: string }
+  | { +kind: 'supports-query', +supportsQuery: string }
+  | {
+      +kind: 'supports-media-query',
+      +supportsQuery: string,
+      +mediaQuery: string,
+    };
 
 /**
  * Shorthands are refused wholesale.
@@ -291,6 +299,19 @@ function readLiteralDeclarations(
           value: value.value,
           mediaQuery: target.mediaQuery,
         };
+      } else if (target.kind === 'supports-query') {
+        declaration = {
+          property: name,
+          value: value.value,
+          supportsQuery: target.supportsQuery,
+        };
+      } else if (target.kind === 'supports-media-query') {
+        declaration = {
+          property: name,
+          value: value.value,
+          supportsQuery: target.supportsQuery,
+          mediaQuery: target.mediaQuery,
+        };
       } else {
         declaration = { property: name, value: value.value };
       }
@@ -307,6 +328,51 @@ function readLiteralDeclarations(
     ok: true,
     declarations: Object.freeze(lastDeclarations(declarations)),
   };
+}
+
+function readAtRuleDeclarations(
+  objectExpression: $FlowFixMe,
+  atRule: string,
+):
+  | { +ok: true, +declarations: $ReadOnlyArray<Declaration> }
+  | { +ok: false, +reason: RefusalReason } {
+  const declarations = [];
+  const lastIndexes = lastPropertyIndexes(objectExpression.properties);
+  for (let index = 0; index < objectExpression.properties.length; index++) {
+    const property = objectExpression.properties[index];
+    if (property.type === 'SpreadElement') {
+      return { ok: false, reason: 'spread-in-style-object' };
+    }
+    if (property.type !== 'ObjectProperty') {
+      return { ok: false, reason: 'non-literal-value' };
+    }
+    const name = propertyName(property);
+    if (name == null) return { ok: false, reason: 'computed-style-key' };
+    if (property.value.type === 'ObjectExpression') {
+      const outerSupports = SUPPORTS_QUERY.test(atRule);
+      const validInner = outerSupports
+        ? MEDIA_QUERY.test(name)
+        : SUPPORTS_QUERY.test(name);
+      if (!validInner) return { ok: false, reason: 'nested-style-object' };
+      const nested = readLiteralDeclarations(property.value, {
+        kind: 'supports-media-query',
+        supportsQuery: outerSupports ? atRule : name,
+        mediaQuery: outerSupports ? name : atRule,
+      });
+      if (!nested.ok) return nested;
+      if (lastIndexes.has(index)) declarations.push(...nested.declarations);
+      continue;
+    }
+    const nested = readLiteralDeclarations(
+      { properties: [property] },
+      SUPPORTS_QUERY.test(atRule)
+        ? { kind: 'supports-query', supportsQuery: atRule }
+        : { kind: 'media-query', mediaQuery: atRule },
+    );
+    if (!nested.ok) return nested;
+    if (lastIndexes.has(index)) declarations.push(...nested.declarations);
+  }
+  return { ok: true, declarations: Object.freeze(declarations) };
 }
 
 function readDeclarations(
@@ -333,7 +399,8 @@ function readDeclarations(
       if (
         !SUPPORTED_CONDITIONS.has(name) &&
         !SUPPORTED_PSEUDO_ELEMENTS.has(name) &&
-        !MEDIA_QUERY.test(name)
+        !MEDIA_QUERY.test(name) &&
+        !SUPPORTS_QUERY.test(name)
       ) {
         return { ok: false, reason: 'unsupported-condition' };
       }
@@ -347,10 +414,12 @@ function readDeclarations(
               kind: 'pseudo-element',
               pseudoElement: name === '::before' ? '::before' : '::after',
             })
-          : readLiteralDeclarations(property.value, {
-              kind: 'media-query',
-              mediaQuery: name,
-            });
+          : MEDIA_QUERY.test(name) || SUPPORTS_QUERY.test(name)
+            ? readAtRuleDeclarations(property.value, name)
+            : readLiteralDeclarations(property.value, {
+                kind: 'media-query',
+                mediaQuery: name,
+              });
       if (!nested.ok) return nested;
       // A later duplicate selector key replaces this entire object. The
       // earlier object was still evaluated, so it was validated above even
@@ -380,8 +449,16 @@ function readDeclarations(
   if (mediaQueries.size > 1) {
     return { ok: false, reason: 'multiple-media-queries' };
   }
+  const supportsQueries = new Set(
+    declarations.flatMap((declaration) =>
+      declaration.supportsQuery == null ? [] : [declaration.supportsQuery],
+    ),
+  );
+  if (supportsQueries.size > 1) {
+    return { ok: false, reason: 'multiple-supports-queries' };
+  }
   if (
-    mediaQueries.size > 0 &&
+    (mediaQueries.size > 0 || supportsQueries.size > 0) &&
     declarations.some(
       (declaration) =>
         declaration.condition != null || declaration.pseudoElement != null,
