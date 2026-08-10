@@ -125,6 +125,11 @@ It admits separate, bounded modifier capabilities:
   under model `supports-nesting-referee-v1`. Either wrapper order may be
   authored because the model compares the same boolean intersection and StyleX
   canonicalizes its emitted wrapper order. Nesting stops after two at-rules.
+- One named `@keyframes` object containing literal `from` and `to` frames, with
+  one exact root `animationName` reference, under model `keyframes-referee-v1`.
+  The referee alpha-renames only StyleX's generated CSS identifier and still
+  compares both frames, their declarations, and the animation reference.
+  `stylex.keyframes(...)` stays inline, so no binding is introduced or moved.
 
 These are not general selector claims. A disagreement in any admitted state or
 target is a refusal. In particular, reversing two otherwise identical hover and
@@ -139,11 +144,11 @@ order. Media queries also cannot yet be mixed with pseudo-classes or
 pseudo-elements.
 
 Dynamic values, spreads, shorthands, `!important`, other pseudo-elements or
-pseudo-classes, other at-rules, deeper nesting, keyframes, component `css`
-props, and sites that also have `className`, `style`, or a JSX spread remain
-outside this mechanical boundary. The comparison is local and static: it does
-not establish whole-page browser behavior, repository build success, or runtime
-equivalence.
+pseudo-classes, other at-rules, deeper nesting, percentage or multiple
+keyframes, component `css` props, and sites that also have `className`, `style`,
+or a JSX spread remain outside this mechanical boundary. The comparison is local
+and static: it does not establish whole-page browser behavior, repository build
+success, or runtime equivalence.
 
 The candidate persistence API is available for deterministic integrations. The
 end-user contextual candidate creation protocol and agent skill arrive in a

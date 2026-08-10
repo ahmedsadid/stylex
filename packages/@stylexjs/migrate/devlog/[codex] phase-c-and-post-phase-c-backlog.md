@@ -26,12 +26,11 @@ manifest, policy version, end-to-end candidate test, and exit review.
 - [x] One exact `@media` query per style object.
 - [x] One exact `@supports` query with at most one exact `@media` intersection,
       authored in either wrapper order and bounded to two at-rule levels.
+- [x] One referenced `@keyframes` rule with literal `from` and `to` frames,
+      compared through generated-name alpha-renaming without adding a binding.
 
 ## Required before Phase C closes
 
-- [ ] Keyframes with generated-name alpha-renaming.
-  - Compare frame selectors, declaration meaning, and animation references while
-    ignoring generated identifier spelling only where binding is preserved.
 - [ ] Shorthands after explicit expansion and cascade modeling.
   - Expand through an independently tested CSS model.
   - Compare reset behavior, order, importance, and longhand conflicts.
