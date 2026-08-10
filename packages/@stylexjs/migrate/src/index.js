@@ -48,6 +48,20 @@ export type { JsonValue } from './state/json';
 
 export { redact, redactText } from './state/redact';
 
+export { createFact, inventoryIdentity, siteIdentity } from './inventory/model';
+export type {
+  Classification,
+  Fact,
+  FactProvenance,
+  FactStatus,
+  Inventory,
+  InventoryDiagnostic,
+  InventoryFile,
+  Site,
+  SourceSpan,
+} from './inventory/model';
+export { scanRepository } from './inventory/scan';
+
 export {
   hashFields,
   hashString,

@@ -246,18 +246,9 @@ function lastWins(
   return result;
 }
 
-export function discover(ast: $FlowFixMe): DiscoveryResult {
-  const emotion = usesEmotion(ast);
+function discoverActive(ast: $FlowFixMe): DiscoveryResult {
   const sites: Array<EmotionSite> = [];
   const refusals: Array<EmotionRefusal> = [];
-
-  if (!emotion) {
-    return Object.freeze({
-      usesEmotion: false,
-      sites: Object.freeze([]),
-      refusals: Object.freeze([]),
-    });
-  }
 
   walk(ast, (node) => {
     if (node.type !== 'JSXOpeningElement') {
@@ -380,4 +371,20 @@ export function discover(ast: $FlowFixMe): DiscoveryResult {
     sites: Object.freeze([...sites].sort(byPosition)),
     refusals: Object.freeze([...refusals].sort(byPosition)),
   });
+}
+
+/** Inspect `css` syntax without making an activation claim. */
+export function discoverSyntax(ast: $FlowFixMe): DiscoveryResult {
+  return discoverActive(ast);
+}
+
+export function discover(ast: $FlowFixMe): DiscoveryResult {
+  if (!usesEmotion(ast)) {
+    return Object.freeze({
+      usesEmotion: false,
+      sites: Object.freeze([]),
+      refusals: Object.freeze([]),
+    });
+  }
+  return discoverActive(ast);
 }
