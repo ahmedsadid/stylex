@@ -11,12 +11,14 @@ import postcss from 'postcss';
 import { serializeStyles } from '@emotion/serialize';
 import { canonicalProperty, canonicalValue } from '../compare/model';
 import { compileStyleX } from '../evidence/compile';
+import type { CompiledStyleXRule } from '../evidence/compile';
 import type { RefereeDeclaration, Specificity } from './model';
 
 export type CascadeObservation =
   | {
       +ok: true,
       +css: string,
+      +classNames: $ReadOnlyArray<string>,
       +declarations: $ReadOnlyArray<RefereeDeclaration>,
     }
   | { +ok: false, +reason: string };
@@ -164,22 +166,17 @@ export function observeEmotionSerialization(style: mixed): CascadeObservation {
   return Object.freeze({
     ok: true,
     css,
+    classNames: Object.freeze([]),
     declarations: Object.freeze(declarations),
   });
 }
 
-/** Observe StyleX selector and priority facts from the actual compiler. */
-export function observeStyleXCompilation(
-  source: string,
-  filename: string,
+export function observeStyleXRules(
+  rules: $ReadOnlyArray<CompiledStyleXRule>,
 ): CascadeObservation {
-  const compiled = compileStyleX(source, filename);
-  if (!compiled.ok) {
-    return compiled;
-  }
   const declarations = [];
   let sourceOrder = 0;
-  for (const rule of compiled.ruleMetadata) {
+  for (const rule of rules) {
     let root;
     try {
       root = postcss.parse(rule.ltr);
@@ -230,7 +227,17 @@ export function observeStyleXCompilation(
   }
   return Object.freeze({
     ok: true,
-    css: compiled.ruleMetadata.map((rule) => rule.ltr).join('\n'),
+    css: rules.map((rule) => rule.ltr).join('\n'),
+    classNames: Object.freeze(rules.map((rule) => rule.className)),
     declarations: Object.freeze(declarations),
   });
+}
+
+/** Observe StyleX selector and priority facts from the actual compiler. */
+export function observeStyleXCompilation(
+  source: string,
+  filename: string,
+): CascadeObservation {
+  const compiled = compileStyleX(source, filename);
+  return compiled.ok ? observeStyleXRules(compiled.ruleMetadata) : compiled;
 }

@@ -101,11 +101,25 @@ export function emitStyleObject(style: StyleObject, indent: string): string {
       const declaration = declarations[declarations.length - 1];
       return [`${indent}  ${property}: ${serializeValue(declaration.value)},`];
     }
-    const values = declarations.map((declaration) => {
-      const condition = declaration.condition ?? 'default';
-      const key = condition === 'default' ? condition : `'${condition}'`;
-      return `${indent}    ${key}: ${serializeValue(declaration.value)},`;
-    });
+    // StyleX's lint contract requires this key order. Semantic comparison does
+    // not trust it: the referee still uses Emotion's authored source order and
+    // StyleX's observed compiler priorities.
+    const conditionOrder = new Map([
+      ['default', 0],
+      [':hover', 1],
+      [':focus', 2],
+    ]);
+    const values = [...declarations]
+      .sort(
+        (first, second) =>
+          (conditionOrder.get(first.condition ?? 'default') ?? 99) -
+          (conditionOrder.get(second.condition ?? 'default') ?? 99),
+      )
+      .map((declaration) => {
+        const condition = declaration.condition ?? 'default';
+        const key = condition === 'default' ? condition : `'${condition}'`;
+        return `${indent}    ${key}: ${serializeValue(declaration.value)},`;
+      });
     return [`${indent}  ${property}: {`, ...values, `${indent}  },`];
   });
   return `{\n${lines.join('\n')}\n${indent}}`;

@@ -9,7 +9,7 @@
 
 import { canonicalProperty, canonicalValue } from '../compare/model';
 
-export const REFEREE_MODEL: string = 'cascade-referee-v1-spec';
+export const REFEREE_MODEL: string = 'cascade-referee-v1';
 
 export type Specificity = $ReadOnly<[number, number, number]>;
 

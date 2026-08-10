@@ -334,9 +334,12 @@ export { compileStyleX } from './evidence/compile';
 export type { CompiledStyleXRule, CompileResult } from './evidence/compile';
 export { describeLintMessages, lintStyleX } from './evidence/lint';
 export type { LintMessage, LintResult } from './evidence/lint';
-export { stylexCssForKey } from './evidence/staticCss';
+export { stylexCascadeForKey, stylexCssForKey } from './evidence/staticCss';
 
-export { emotionBaseline } from './adapters/emotion/baseline';
+export {
+  emotionBaseline,
+  emotionConditionalBaseline,
+} from './adapters/emotion/baseline';
 
 export {
   COMPILER_FACTS_MODEL,
@@ -359,6 +362,7 @@ export type {
 export {
   observeEmotionSerialization,
   observeStyleXCompilation,
+  observeStyleXRules,
 } from './referee/observations';
 export type { CascadeObservation } from './referee/observations';
 export type {

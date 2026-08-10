@@ -11,7 +11,9 @@ import { serializeStyles } from '@emotion/serialize';
 import { parseSource } from '../../static/parse';
 import { walk } from '../../static/walk';
 import { parseDeclarations } from '../../compare/model';
+import { observeEmotionSerialization } from '../../referee/observations';
 import type { CssDeclaration } from '../../compare/model';
+import type { CascadeObservation } from '../../referee/observations';
 
 /**
  * The independent Emotion baseline.
@@ -64,6 +66,46 @@ function isLiteralOnlyObject(objectSource: string): boolean {
   return safe && objects === 1;
 }
 
+function staticKey(property: $FlowFixMe): string | null {
+  if (property.type !== 'ObjectProperty' || property.computed === true) {
+    return null;
+  }
+  if (property.key.type === 'Identifier') return property.key.name;
+  if (property.key.type === 'StringLiteral') return property.key.value;
+  return null;
+}
+
+function literalValue(node: $FlowFixMe): boolean {
+  return (
+    node.type === 'StringLiteral' ||
+    (node.type === 'NumericLiteral' && Number.isFinite(node.value))
+  );
+}
+
+function isApprovedConditionalObject(objectSource: string): boolean {
+  const parsed = parseSource(`(${objectSource})`, 'cascade-baseline-guard.js');
+  if (!parsed.ok) return false;
+  const expression = parsed.ast.program?.body?.[0]?.expression;
+  if (expression?.type !== 'ObjectExpression') return false;
+  for (const property of expression.properties ?? []) {
+    const name = staticKey(property);
+    if (name == null) return false;
+    if (literalValue(property.value)) continue;
+    if (
+      property.value?.type !== 'ObjectExpression' ||
+      (name !== ':hover' && name !== ':focus')
+    ) {
+      return false;
+    }
+    for (const nested of property.value.properties ?? []) {
+      if (staticKey(nested) == null || !literalValue(nested.value)) {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
 export function emotionBaseline(objectSource: string): BaselineResult {
   if (!isLiteralOnlyObject(objectSource)) {
     return {
@@ -104,4 +146,29 @@ export function emotionBaseline(objectSource: string): BaselineResult {
       reason: `Emotion could not serialize the style: ${message}`,
     };
   }
+}
+
+export function emotionConditionalBaseline(
+  objectSource: string,
+): CascadeObservation {
+  if (!isApprovedConditionalObject(objectSource)) {
+    return {
+      ok: false,
+      reason:
+        'refusing to evaluate a conditional style outside the approved literal grammar',
+    };
+  }
+  let styleValue: mixed;
+  try {
+    // eslint-disable-next-line no-new-func
+    styleValue = new Function(`return (${objectSource});`)();
+  } catch (error) {
+    return {
+      ok: false,
+      reason: `could not evaluate the conditional style object: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    };
+  }
+  return observeEmotionSerialization(styleValue);
 }

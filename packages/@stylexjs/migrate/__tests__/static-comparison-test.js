@@ -20,6 +20,7 @@ import {
   verifyConversion,
 } from '../src/proposers/emotionStatic';
 import { convertSource } from '../src/adapters/emotion/convert';
+import { REFEREE_MODEL } from '../src/referee/model';
 
 const PRAGMA = '/** @jsxImportSource @emotion/react */\n';
 const FILENAME = 'Component.jsx';
@@ -178,6 +179,43 @@ describe('proposing a conversion', () => {
     const compile = result.evidence[0];
     expect(compile.provider).toBe('@stylexjs/babel-plugin');
     expect(compile.providerVersion).not.toBe('unknown');
+  });
+
+  test('approved conditions pass the cascade referee', () => {
+    const result = proposeStaticConversion({
+      source: file(
+        "{ color: 'base', ':hover': { color: 'hover' }, ':focus': { color: 'focus' } }",
+      ),
+      filename: FILENAME,
+    });
+    expect(result.status).toBe('proposed');
+    if (result.status !== 'proposed') return;
+    expect(result.model).toBe(REFEREE_MODEL);
+    const comparison = result.evidence.find(
+      (item) => item.check === 'static-css-comparison',
+    );
+    expect(comparison?.result).toBe('pass');
+    expect(comparison?.subject.model).toBe(REFEREE_MODEL);
+    expect(comparison?.limitations.join('\n')).toContain(
+      'simultaneous :hover/:focus states',
+    );
+  });
+
+  test('condition order that changes a simultaneous winner is refused', () => {
+    const result = proposeStaticConversion({
+      source: file(
+        "{ color: 'base', ':focus': { color: 'focus' }, ':hover': { color: 'hover' } }",
+      ),
+      filename: FILENAME,
+    });
+    expect(result.status).toBe('refused');
+    if (result.status !== 'refused') return;
+    expect(result.reason).toContain('conditional CSS differs');
+    expect(result.reason).toContain(':focus+:hover');
+    expect(
+      result.evidence.find((item) => item.check === 'static-css-comparison')
+        ?.result,
+    ).toBe('fail');
   });
 
   test('values the two libraries print differently still compare equal', () => {

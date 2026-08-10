@@ -11,7 +11,9 @@ import { compileStyleX } from './compile';
 import { parseSource } from '../static/parse';
 import { walk } from '../static/walk';
 import { parseRule } from '../compare/model';
+import { observeStyleXRules } from '../referee/observations';
 import type { CssDeclaration } from '../compare/model';
+import type { CascadeObservation } from '../referee/observations';
 
 /**
  * The CSS StyleX actually produces for one style key.
@@ -125,4 +127,46 @@ export function stylexCssForKey({
   }
 
   return { ok: true, classNames, declarations };
+}
+
+export function stylexCascadeForKey({
+  importText,
+  registryName,
+  createCallText,
+  namespace,
+  key,
+}: {
+  +importText: string,
+  +registryName: string,
+  +createCallText: string,
+  +namespace: string,
+  +key: string,
+}): CascadeObservation {
+  const probe = [
+    importText,
+    `const ${registryName} = ${createCallText};`,
+    `export const probe = ${namespace}.props(${registryName}.${key});`,
+    '',
+  ].join('\n');
+  const compiled = compileStyleX(probe, 'cascade-probe.js');
+  if (!compiled.ok) return compiled;
+  const classNames = probeClassNames(compiled.code);
+  if (classNames == null) {
+    return { ok: false, reason: 'could not read the compiled cascade probe' };
+  }
+  const rules = new Map(
+    compiled.ruleMetadata.map((rule) => [rule.className, rule]),
+  );
+  const selected = [];
+  for (const className of classNames) {
+    const rule = rules.get(className);
+    if (rule == null) {
+      return {
+        ok: false,
+        reason: `StyleX referenced class ${className} but generated no cascade rule`,
+      };
+    }
+    selected.push(rule);
+  }
+  return observeStyleXRules(selected);
 }
