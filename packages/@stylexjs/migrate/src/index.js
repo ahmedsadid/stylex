@@ -351,7 +351,9 @@ export {
 export {
   activationStates,
   orderStyleXDeclarations,
+  PSEUDO_ELEMENT_REFEREE_MODEL,
   referee,
+  refereePseudoElements,
   REFEREE_MODEL,
 } from './referee/model';
 export type {

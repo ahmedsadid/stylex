@@ -10,6 +10,7 @@
 import { canonicalProperty, canonicalValue } from '../compare/model';
 
 export const REFEREE_MODEL: string = 'cascade-referee-v1';
+export const PSEUDO_ELEMENT_REFEREE_MODEL: string = 'pseudo-element-referee-v1';
 
 export type Specificity = $ReadOnly<[number, number, number]>;
 
@@ -55,6 +56,28 @@ export type RefereeResult =
     };
 
 const FIRST_CONDITIONS = new Set([':hover', ':focus']);
+const FIRST_PSEUDO_ELEMENTS = new Set(['::before', '::after']);
+
+type RefereeGrammar = {
+  +model: string,
+  +conditions: $ReadOnlySet<string>,
+  +maximumConditions: number,
+  +pseudoElements: $ReadOnlySet<string>,
+};
+
+const CONDITIONAL_GRAMMAR: RefereeGrammar = Object.freeze({
+  model: REFEREE_MODEL,
+  conditions: FIRST_CONDITIONS,
+  maximumConditions: 1,
+  pseudoElements: new Set(),
+});
+
+const PSEUDO_ELEMENT_GRAMMAR: RefereeGrammar = Object.freeze({
+  model: PSEUDO_ELEMENT_REFEREE_MODEL,
+  conditions: new Set(),
+  maximumConditions: 0,
+  pseudoElements: FIRST_PSEUDO_ELEMENTS,
+});
 
 function compareSpecificity(first: Specificity, second: Specificity): number {
   for (let index = 0; index < 3; index++) {
@@ -136,6 +159,7 @@ export function activationStates(
 function grammarReasons(
   side: 'source' | 'target',
   declarations: $ReadOnlyArray<RefereeDeclaration>,
+  grammar: RefereeGrammar,
 ): $ReadOnlyArray<string> {
   const reasons = new Set<string>();
   const ids = new Set<string>();
@@ -159,19 +183,29 @@ function grammarReasons(
     if (declaration.important) {
       reasons.add(`${side}: !important is outside the first grammar`);
     }
-    if (declaration.pseudoElement != null) {
-      reasons.add(`${side}: pseudo-elements are outside the first grammar`);
+    if (
+      declaration.pseudoElement != null &&
+      !grammar.pseudoElements.has(declaration.pseudoElement)
+    ) {
+      reasons.add(
+        grammar.pseudoElements.size === 0
+          ? `${side}: pseudo-elements are outside ${grammar.model}`
+          : `${side}: unsupported pseudo-element ${declaration.pseudoElement}`,
+      );
     }
     if (
-      declaration.conditions.length > 1 ||
+      declaration.conditions.length > grammar.maximumConditions ||
       declaration.conditions.some(
-        (condition) => !FIRST_CONDITIONS.has(condition),
+        (condition) => !grammar.conditions.has(condition),
       )
     ) {
       reasons.add(`${side}: unsupported condition set`);
     }
-    const expectedSpecificity: Specificity =
-      declaration.conditions.length === 0 ? [0, 1, 0] : [0, 2, 0];
+    const expectedSpecificity: Specificity = [
+      0,
+      1 + declaration.conditions.length,
+      declaration.pseudoElement == null ? 0 : 1,
+    ];
     if (
       compareSpecificity(declaration.specificity, expectedSpecificity) !== 0
     ) {
@@ -259,18 +293,19 @@ export function orderStyleXDeclarations(
   );
 }
 
-export function referee(
+function compareWithGrammar(
   source: $ReadOnlyArray<RefereeDeclaration>,
   target: $ReadOnlyArray<RefereeDeclaration>,
+  grammar: RefereeGrammar,
 ): RefereeResult {
   const reasons = [
-    ...grammarReasons('source', source),
-    ...grammarReasons('target', target),
+    ...grammarReasons('source', source, grammar),
+    ...grammarReasons('target', target, grammar),
   ];
   if (reasons.length > 0) {
     return Object.freeze({
       status: 'unsupported',
-      model: REFEREE_MODEL,
+      model: grammar.model,
       reasons: Object.freeze(reasons.sort()),
     });
   }
@@ -309,8 +344,23 @@ export function referee(
   }
   return Object.freeze({
     status: differences.length === 0 ? 'equivalent' : 'mismatch',
-    model: REFEREE_MODEL,
+    model: grammar.model,
     states,
     differences: Object.freeze(differences),
   });
+}
+
+export function referee(
+  source: $ReadOnlyArray<RefereeDeclaration>,
+  target: $ReadOnlyArray<RefereeDeclaration>,
+): RefereeResult {
+  return compareWithGrammar(source, target, CONDITIONAL_GRAMMAR);
+}
+
+/** Compare only root, ::before, and ::after declarations with no conditions. */
+export function refereePseudoElements(
+  source: $ReadOnlyArray<RefereeDeclaration>,
+  target: $ReadOnlyArray<RefereeDeclaration>,
+): RefereeResult {
+  return compareWithGrammar(source, target, PSEUDO_ELEMENT_GRAMMAR);
 }
