@@ -102,6 +102,28 @@ and site coverage, and persists an evidence-bound verdict. It returns exit code
 3 for blocked evidence and 4 for a rejected result. A passing repository test
 cannot replace the required static comparison for a mechanical candidate.
 
+## Current mechanical boundary
+
+The development API can propose a conversion for an Emotion `css` prop on a host
+element when the file has an exact Emotion JSX pragma and the style is an object
+literal containing supported camelCase longhands with string or finite numeric
+literal values.
+
+It also admits sibling `:hover` and `:focus` objects. This is not a general
+selector claim. For each conditional site, the verifier obtains source rules
+from Emotion and target rules and priorities from the StyleX compiler, then
+compares the winning declaration in the default, hover-only, focus-only, and
+simultaneous hover/focus states under model `cascade-referee-v1`. A disagreement
+in any state is a refusal. In particular, reversing two otherwise identical
+hover and focus branches can be refused because Emotion and StyleX may then
+choose different winners when both states are active.
+
+Dynamic values, spreads, shorthands, `!important`, pseudo-elements, other
+pseudo-classes, at-rules, nesting, keyframes, component `css` props, and sites
+that also have `className`, `style`, or a JSX spread remain outside this
+mechanical boundary. The comparison is local and static: it does not establish
+whole-page browser behavior, repository build success, or runtime equivalence.
+
 The candidate persistence API is available for deterministic integrations. The
 end-user contextual candidate creation protocol and agent skill arrive in a
 later milestone; this early-development package does not yet present `verify` as
