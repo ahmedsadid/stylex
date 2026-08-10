@@ -33,22 +33,32 @@ _safe_, _verified_, and _equivalent_ are never used unqualified.
 
 A check that could not run reports `unavailable`. That never counts as a pass.
 
-## Local project state
+## Inventory and local project state
 
-M3 stores durable migration records under `.stylex-migrate/`. The directory is
-added to `.git/info/exclude`; the tool does not edit the repository's tracked
-`.gitignore` or create commits.
+Migration records live under `.stylex-migrate/`. The directory is added to
+`.git/info/exclude`; the tool does not edit the repository's tracked
+`.gitignore`, source files, or Git history during inventory and planning.
 
 ```sh
 stylex-migrate init
+stylex-migrate scan
+stylex-migrate plan
 stylex-migrate status
+stylex-migrate explain <site-or-cluster-or-plan-id>
 stylex-migrate state rebuild
 stylex-migrate schema migrate --dry-run
 stylex-migrate cleanup             # preview
 stylex-migrate cleanup --confirm   # remove unreferenced local artifacts
 ```
 
-Every command also accepts `--json`.
+`scan` inventories configured source globs and records parse or resolution
+failures without treating them as absence. `plan` groups sites with overlapping
+change ownership and retains the inputs and facts behind each classification.
+`status` reports counts by classification and state; it does not report a
+conversion percentage. `explain` makes routing and blocking reasons available
+after restarting the process.
+
+Every command also accepts `--json`. Run `init` before the other commands.
 
 ## Development
 
