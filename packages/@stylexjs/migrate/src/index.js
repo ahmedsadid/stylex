@@ -367,6 +367,11 @@ export {
   observeStyleXRules,
 } from './referee/observations';
 export type { CascadeObservation } from './referee/observations';
+export { CONDITIONAL_MUTATION_MANIFEST } from './referee/mutations';
+export type {
+  ConditionalMutation,
+  ConditionalMutationId,
+} from './referee/mutations';
 export type {
   CompilerProbe,
   ObservedCompilerProbe,
