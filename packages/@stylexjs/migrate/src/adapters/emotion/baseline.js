@@ -106,6 +106,30 @@ function isApprovedConditionalObject(objectSource: string): boolean {
   return true;
 }
 
+function isApprovedPseudoElementObject(objectSource: string): boolean {
+  const parsed = parseSource(`(${objectSource})`, 'pseudo-baseline-guard.js');
+  if (!parsed.ok) return false;
+  const expression = parsed.ast.program?.body?.[0]?.expression;
+  if (expression?.type !== 'ObjectExpression') return false;
+  for (const property of expression.properties ?? []) {
+    const name = staticKey(property);
+    if (name == null) return false;
+    if (literalValue(property.value)) continue;
+    if (
+      property.value?.type !== 'ObjectExpression' ||
+      (name !== '::before' && name !== '::after')
+    ) {
+      return false;
+    }
+    for (const nested of property.value.properties ?? []) {
+      if (staticKey(nested) == null || !literalValue(nested.value)) {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
 export function emotionBaseline(objectSource: string): BaselineResult {
   if (!isLiteralOnlyObject(objectSource)) {
     return {
@@ -166,6 +190,31 @@ export function emotionConditionalBaseline(
     return {
       ok: false,
       reason: `could not evaluate the conditional style object: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    };
+  }
+  return observeEmotionSerialization(styleValue);
+}
+
+export function emotionPseudoElementBaseline(
+  objectSource: string,
+): CascadeObservation {
+  if (!isApprovedPseudoElementObject(objectSource)) {
+    return {
+      ok: false,
+      reason:
+        'refusing to evaluate a pseudo-element style outside the approved literal grammar',
+    };
+  }
+  let styleValue: mixed;
+  try {
+    // eslint-disable-next-line no-new-func
+    styleValue = new Function(`return (${objectSource});`)();
+  } catch (error) {
+    return {
+      ok: false,
+      reason: `could not evaluate the pseudo-element style object: ${
         error instanceof Error ? error.message : String(error)
       }`,
     };

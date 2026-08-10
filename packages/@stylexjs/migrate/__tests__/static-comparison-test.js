@@ -14,7 +14,10 @@ import {
   parseDeclarations,
   parseRule,
 } from '../src/compare/model';
-import { emotionBaseline } from '../src/adapters/emotion/baseline';
+import {
+  emotionBaseline,
+  emotionPseudoElementBaseline,
+} from '../src/adapters/emotion/baseline';
 import {
   proposeStaticConversion,
   verifyConversion,
@@ -141,6 +144,38 @@ describe('the Emotion baseline', () => {
     expect(emotionBaseline('{ color: doSomething() }').ok).toBe(false);
     expect(emotionBaseline('{ ...spread }').ok).toBe(false);
     expect(emotionBaseline("{ ':hover': { color: 'red' } }").ok).toBe(false);
+  });
+
+  test('observes only the approved literal pseudo-element shape', () => {
+    const result = emotionPseudoElementBaseline(
+      '{ color: \'black\', \'::before\': { content: \'"x"\' }, \'::after\': { opacity: 0.5 } }',
+    );
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(
+        result.declarations.map((declaration) => [
+          declaration.property,
+          declaration.value,
+          declaration.pseudoElement,
+        ]),
+      ).toEqual([
+        ['color', 'black', null],
+        ['content', '"x"', '::before'],
+        ['opacity', '0.5', '::after'],
+      ]);
+    }
+    expect(
+      emotionPseudoElementBaseline('{ \'::before\': { content: sideEffect() } }')
+        .ok,
+    ).toBe(false);
+    expect(
+      emotionPseudoElementBaseline(
+        '{ \'::before\': { \':hover\': { color: \'red\' } } }',
+      ).ok,
+    ).toBe(false);
+    expect(
+      emotionPseudoElementBaseline('{ \'::placeholder\': { color: \'gray\' } }').ok,
+    ).toBe(false);
   });
 });
 
