@@ -48,6 +48,18 @@ export type { JsonValue } from './state/json';
 
 export { redact, redactText } from './state/redact';
 
+export {
+  createApplyPlanEvidenceSubject,
+  createCandidateEvidenceSubject,
+} from './evidence/subject';
+export type {
+  ApplyPlanEvidenceSubject,
+  CandidateEvidenceSubject,
+  CandidateSubjectInput,
+  EvidenceChange,
+  RepositoryEvidenceSubject,
+} from './evidence/subject';
+
 export { createFact, inventoryIdentity, siteIdentity } from './inventory/model';
 export type {
   Classification,
