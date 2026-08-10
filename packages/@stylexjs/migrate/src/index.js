@@ -326,11 +326,23 @@ export type {
 export { evidence, packageVersion } from './evidence/claims';
 
 export { compileStyleX } from './evidence/compile';
+export type { CompiledStyleXRule, CompileResult } from './evidence/compile';
 export { describeLintMessages, lintStyleX } from './evidence/lint';
 export type { LintMessage, LintResult } from './evidence/lint';
 export { stylexCssForKey } from './evidence/staticCss';
 
 export { emotionBaseline } from './adapters/emotion/baseline';
+
+export {
+  COMPILER_FACTS_MODEL,
+  observeStyleXCompiler,
+  STYLEX_COMPILER_PROVIDER,
+} from './referee/compilerFacts';
+export type {
+  CompilerProbe,
+  ObservedCompilerProbe,
+  StyleXCompilerFacts,
+} from './referee/compilerFacts';
 
 /**
  * The supported way to convert an Emotion file. It runs the checks itself and

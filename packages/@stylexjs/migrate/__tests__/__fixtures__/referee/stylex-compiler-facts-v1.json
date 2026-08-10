@@ -1,0 +1,152 @@
+{
+  "id": "84e264c3deb935d0",
+  "model": "stylex-compiler-facts-v1",
+  "provider": "@stylexjs/babel-plugin",
+  "providerVersion": "0.19.0",
+  "probes": [
+    {
+      "id": "property-priorities",
+      "filename": "property-priorities.js",
+      "source": "import * as stylex from \"@stylexjs/stylex\";\nconst styles = stylex.create({x:{margin:1,marginTop:2,color:\"red\",inset:3,top:4}});\nexport const props = stylex.props(styles.x);\n",
+      "sourceHash": "74af29a3c65f318d337d333c415d392eaf9882638350961447bd3473cb001d4d",
+      "compiledCode": "import * as stylex from \"@stylexjs/stylex\";\nexport const props = {\n  className: \"x1qyo9ns xr9ek0c x1e2nbdu x1ncdc0q xndqk7f\"\n};",
+      "rules": [
+        {
+          "className": "x1qyo9ns",
+          "ltr": ".x1qyo9ns{margin:1px}",
+          "rtl": null,
+          "priority": 1000
+        },
+        {
+          "className": "xr9ek0c",
+          "ltr": ".xr9ek0c{margin-top:2px}",
+          "rtl": null,
+          "priority": 4000
+        },
+        {
+          "className": "x1e2nbdu",
+          "ltr": ".x1e2nbdu{color:red}",
+          "rtl": null,
+          "priority": 3000
+        },
+        {
+          "className": "x1ncdc0q",
+          "ltr": ".x1ncdc0q{inset:3px}",
+          "rtl": null,
+          "priority": 1000
+        },
+        {
+          "className": "xndqk7f",
+          "ltr": ".xndqk7f{top:4px}",
+          "rtl": null,
+          "priority": 4000
+        }
+      ]
+    },
+    {
+      "id": "pseudo-priorities",
+      "filename": "pseudo-priorities.js",
+      "source": "import * as stylex from \"@stylexjs/stylex\";\nconst styles = stylex.create({x:{color:{default:\"base\",\":hover\":\"hover\",\":focus\":\"focus\",\":focus-visible\":\"focusVisible\",\":active\":\"active\",\":disabled\":\"disabled\"}}});\nexport const props = stylex.props(styles.x);\n",
+      "sourceHash": "f40ce22a13e1c793d2e660e609bae10f34ed253c8b57c555cdc578f8c4ee9329",
+      "compiledCode": "import * as stylex from \"@stylexjs/stylex\";\nexport const props = {\n  className: \"xxstz17 x1pms30q x14ztg3o xf6btqg x4kjqdr x1p4wti9\"\n};",
+      "rules": [
+        {
+          "className": "xxstz17",
+          "ltr": ".xxstz17{color:base}",
+          "rtl": null,
+          "priority": 3000
+        },
+        {
+          "className": "x1pms30q",
+          "ltr": ".x1pms30q:hover{color:hover}",
+          "rtl": null,
+          "priority": 3130
+        },
+        {
+          "className": "x14ztg3o",
+          "ltr": ".x14ztg3o:focus{color:focus}",
+          "rtl": null,
+          "priority": 3150
+        },
+        {
+          "className": "xf6btqg",
+          "ltr": ".xf6btqg:focus-visible{color:focusVisible}",
+          "rtl": null,
+          "priority": 3040
+        },
+        {
+          "className": "x4kjqdr",
+          "ltr": ".x4kjqdr:active{color:active}",
+          "rtl": null,
+          "priority": 3170
+        },
+        {
+          "className": "x1p4wti9",
+          "ltr": ".x1p4wti9:disabled{color:disabled}",
+          "rtl": null,
+          "priority": 3092
+        }
+      ]
+    },
+    {
+      "id": "at-rule-priorities",
+      "filename": "at-rule-priorities.js",
+      "source": "import * as stylex from \"@stylexjs/stylex\";\nconst styles = stylex.create({x:{color:{default:\"base\",\"@supports (display: grid)\":\"supports\",\"@media (min-width: 1px)\":\"media\",\"@container (min-width: 1px)\":\"container\"}}});\nexport const props = stylex.props(styles.x);\n",
+      "sourceHash": "6fe5bfcc4e7354054127b7f843e3f8a0d9dcac783c1d00531f9d2b7030717712",
+      "compiledCode": "import * as stylex from \"@stylexjs/stylex\";\nexport const props = {\n  className: \"xxstz17 xtaf1wx xnfydbl xnc8dj8\"\n};",
+      "rules": [
+        {
+          "className": "xxstz17",
+          "ltr": ".xxstz17{color:base}",
+          "rtl": null,
+          "priority": 3000
+        },
+        {
+          "className": "xtaf1wx",
+          "ltr": "@supports (display: grid){.xtaf1wx.xtaf1wx{color:supports}}",
+          "rtl": null,
+          "priority": 3030
+        },
+        {
+          "className": "xnfydbl",
+          "ltr": "@container (min-width: 1px){.xnfydbl.xnfydbl{color:container}}",
+          "rtl": null,
+          "priority": 3300
+        },
+        {
+          "className": "xnc8dj8",
+          "ltr": "@media (min-width: 1px){.xnc8dj8.xnc8dj8{color:media}}",
+          "rtl": null,
+          "priority": 3200
+        }
+      ]
+    },
+    {
+      "id": "pseudo-elements",
+      "filename": "pseudo-elements.js",
+      "source": "import * as stylex from \"@stylexjs/stylex\";\nconst styles = stylex.create({x:{\"::before\":{color:\"before\",content:\"x\"},\"::after\":{color:\"after\"}}});\nexport const props = stylex.props(styles.x);\n",
+      "sourceHash": "76c1221e9c0f8688358517bb02b8dcc8d0f2c44448b681999f4be8e5b2975484",
+      "compiledCode": "import * as stylex from \"@stylexjs/stylex\";\nexport const props = {\n  className: \"xdftx4j xbyusbh xjql2xq\"\n};",
+      "rules": [
+        {
+          "className": "xdftx4j",
+          "ltr": ".xdftx4j::before{color:before}",
+          "rtl": null,
+          "priority": 8000
+        },
+        {
+          "className": "xbyusbh",
+          "ltr": ".xbyusbh::before{content:\"x\"}",
+          "rtl": null,
+          "priority": 8000
+        },
+        {
+          "className": "xjql2xq",
+          "ltr": ".xjql2xq::after{color:after}",
+          "rtl": null,
+          "priority": 8000
+        }
+      ]
+    }
+  ]
+}
