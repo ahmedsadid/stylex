@@ -51,6 +51,8 @@ export type RefusalReason =
   | 'duplicate-css-prop'
   | 'unsupported-property-name'
   | 'shorthand-property'
+  | 'invalid-box-shorthand'
+  | 'mixed-shorthand-modifier'
   | 'non-finite-number'
   | 'css-with-jsx-spread';
 
@@ -249,6 +251,63 @@ function lastDeclarations(
   return result;
 }
 
+function declarationIdentity(declaration: Declaration): string {
+  return [
+    declaration.property,
+    declaration.condition ?? '',
+    declaration.pseudoElement ?? '',
+    declaration.mediaQuery ?? '',
+    declaration.supportsQuery ?? '',
+  ].join('\0');
+}
+
+function lastDeclarationsByTarget(
+  declarations: $ReadOnlyArray<Declaration>,
+): $ReadOnlyArray<Declaration> {
+  const seen = new Set<string>();
+  const result = [];
+  for (let index = declarations.length - 1; index >= 0; index--) {
+    const declaration = declarations[index];
+    const identity = declarationIdentity(declaration);
+    if (seen.has(identity)) continue;
+    seen.add(identity);
+    result.unshift(declaration);
+  }
+  return result;
+}
+
+function expandAuthoredBoxShorthand(
+  property: 'margin' | 'padding',
+  value: string | number,
+): $ReadOnlyArray<{ +property: string, +value: string | number }> | null {
+  const values =
+    typeof value === 'number' ? [value] : value.trim().split(/\s+/);
+  if (
+    values.length < 1 ||
+    values.length > 4 ||
+    values.some(
+      (item) =>
+        typeof item === 'string' &&
+        (item === '' || /[;{}]/.test(item) || /\s/.test(item)),
+    )
+  ) {
+    return null;
+  }
+  const sides =
+    values.length === 1
+      ? [values[0], values[0], values[0], values[0]]
+      : values.length === 2
+        ? [values[0], values[1], values[0], values[1]]
+        : values.length === 3
+          ? [values[0], values[1], values[2], values[1]]
+          : values;
+  const prefix = property === 'margin' ? 'margin' : 'padding';
+  return ['Top', 'Right', 'Bottom', 'Left'].map((side, index) => ({
+    property: `${prefix}${side}`,
+    value: sides[index],
+  }));
+}
+
 function readLiteralDeclarations(
   objectExpression: $FlowFixMe,
   target: DeclarationTarget = { kind: 'root' },
@@ -281,48 +340,61 @@ function readLiteralDeclarations(
       if (!SUPPORTED_PROPERTY_NAME.test(name)) {
         return { ok: false, reason: 'unsupported-property-name' };
       }
-      if (isShorthandProperty(name)) {
-        return { ok: false, reason: 'shorthand-property' };
-      }
       if (typeof value.value === 'number' && !Number.isFinite(value.value)) {
         return { ok: false, reason: 'non-finite-number' };
       }
-      let declaration: Declaration;
-      if (target.kind === 'condition') {
-        declaration = {
-          property: name,
-          value: value.value,
-          condition: target.condition,
-        };
-      } else if (target.kind === 'pseudo-element') {
-        declaration = {
-          property: name,
-          value: value.value,
-          pseudoElement: target.pseudoElement,
-        };
-      } else if (target.kind === 'media-query') {
-        declaration = {
-          property: name,
-          value: value.value,
-          mediaQuery: target.mediaQuery,
-        };
-      } else if (target.kind === 'supports-query') {
-        declaration = {
-          property: name,
-          value: value.value,
-          supportsQuery: target.supportsQuery,
-        };
-      } else if (target.kind === 'supports-media-query') {
-        declaration = {
-          property: name,
-          value: value.value,
-          supportsQuery: target.supportsQuery,
-          mediaQuery: target.mediaQuery,
-        };
-      } else {
-        declaration = { property: name, value: value.value };
+      let authoredDeclarations = [{ property: name, value: value.value }];
+      if (isShorthandProperty(name)) {
+        if (name !== 'margin' && name !== 'padding') {
+          return { ok: false, reason: 'shorthand-property' };
+        }
+        const expanded = expandAuthoredBoxShorthand(name, value.value);
+        if (expanded == null) {
+          return { ok: false, reason: 'invalid-box-shorthand' };
+        }
+        authoredDeclarations = expanded;
       }
-      declarations.push(declaration);
+      for (const authored of authoredDeclarations) {
+        let declaration: Declaration;
+        if (target.kind === 'condition') {
+          declaration = {
+            property: authored.property,
+            value: authored.value,
+            condition: target.condition,
+          };
+        } else if (target.kind === 'pseudo-element') {
+          declaration = {
+            property: authored.property,
+            value: authored.value,
+            pseudoElement: target.pseudoElement,
+          };
+        } else if (target.kind === 'media-query') {
+          declaration = {
+            property: authored.property,
+            value: authored.value,
+            mediaQuery: target.mediaQuery,
+          };
+        } else if (target.kind === 'supports-query') {
+          declaration = {
+            property: authored.property,
+            value: authored.value,
+            supportsQuery: target.supportsQuery,
+          };
+        } else if (target.kind === 'supports-media-query') {
+          declaration = {
+            property: authored.property,
+            value: authored.value,
+            supportsQuery: target.supportsQuery,
+            mediaQuery: target.mediaQuery,
+          };
+        } else {
+          declaration = { property: authored.property, value: authored.value };
+        }
+        if (name === 'margin' || name === 'padding') {
+          declaration = { ...declaration, expandedFrom: name };
+        }
+        declarations.push(declaration);
+      }
     } else if (value.type === 'ObjectExpression') {
       return { ok: false, reason: 'nested-style-object' };
     } else if (value.type === 'TemplateLiteral') {
@@ -540,6 +612,18 @@ function readDeclarations(
   if (keyframes.length > 1) {
     return { ok: false, reason: 'multiple-keyframes' };
   }
+  if (
+    declarations.some((declaration) => declaration.expandedFrom != null) &&
+    declarations.some(
+      (declaration) =>
+        declaration.condition != null ||
+        declaration.pseudoElement != null ||
+        declaration.mediaQuery != null ||
+        declaration.supportsQuery != null,
+    )
+  ) {
+    return { ok: false, reason: 'mixed-shorthand-modifier' };
+  }
   if (keyframes.length === 1) {
     if (
       declarations.some(
@@ -561,14 +645,18 @@ function readDeclarations(
     ) {
       return { ok: false, reason: 'missing-keyframes-reference' };
     }
-    const withKeyframes = declarations.map((declaration) =>
-      declaration === animationNames[0]
-        ? { ...declaration, value: keyframes[0] }
-        : declaration,
+    const withKeyframes = lastDeclarationsByTarget(declarations).map(
+      (declaration) =>
+        declaration === animationNames[0]
+          ? { ...declaration, value: keyframes[0] }
+          : declaration,
     );
     return { ok: true, style: styleObject(withKeyframes) };
   }
-  return { ok: true, style: styleObject(declarations) };
+  return {
+    ok: true,
+    style: styleObject(lastDeclarationsByTarget(declarations)),
+  };
 }
 
 function discoverActive(ast: $FlowFixMe): DiscoveryResult {

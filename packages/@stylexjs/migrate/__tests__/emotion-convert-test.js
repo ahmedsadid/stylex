@@ -267,18 +267,13 @@ export const App = () => <div css={{ color: 'red' }} />;
     expect(converted).not.toMatch(/const fade\s*=/);
   });
 
-  test('shorthands are refused rather than guessed at', () => {
-    const result = convertSource(
+  test('physical box shorthands expand before emission', () => {
+    const converted = convert(
       `${PRAGMA}export const App = () => <div css={{ marginTop: 20, margin: 4 }} />;`,
-      'Component.jsx',
     );
-    expect(result.status).toBe('unchanged');
-    if (result.status === 'unchanged') {
-      expect(result.reason).toBe('no-supported-sites');
-      expect(result.refusals.map((r) => r.reason)).toEqual([
-        'shorthand-property',
-      ]);
-    }
+    expect(converted).toContain('marginTop: 4,');
+    expect(converted).toContain('marginRight: 4,');
+    expect(converted).not.toContain('margin: 4,');
   });
 
   test('a file without emotion is left alone', () => {

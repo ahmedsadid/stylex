@@ -241,6 +241,28 @@ describe('emotion discovery', () => {
     ]);
   });
 
+  test('expands box shorthands in authored cascade order', () => {
+    const reset = read(
+      `${PRAGMA}const App = () => <div css={{ marginTop: 20, margin: '4px 8px' }} />;`,
+    );
+    expect(reset.refusals).toEqual([]);
+    expect(reset.sites[0].style.declarations).toEqual([
+      { property: 'marginTop', value: '4px', expandedFrom: 'margin' },
+      { property: 'marginRight', value: '8px', expandedFrom: 'margin' },
+      { property: 'marginBottom', value: '4px', expandedFrom: 'margin' },
+      { property: 'marginLeft', value: '8px', expandedFrom: 'margin' },
+    ]);
+    const override = read(
+      `${PRAGMA}const App = () => <div css={{ margin: 4, marginTop: 20 }} />;`,
+    );
+    expect(override.sites[0].style.declarations).toEqual([
+      { property: 'marginRight', value: 4, expandedFrom: 'margin' },
+      { property: 'marginBottom', value: 4, expandedFrom: 'margin' },
+      { property: 'marginLeft', value: 4, expandedFrom: 'margin' },
+      { property: 'marginTop', value: 20 },
+    ]);
+  });
+
   test('refuses an effectful value hidden by a later pseudo-element block', () => {
     const result = read(`${PRAGMA}const App = () => (
   <div css={{ '::after': { color: sideEffect() }, '::after': { opacity: 1 } }} />
@@ -443,7 +465,17 @@ describe('emotion discovery', () => {
       [
         'a shorthand inside a pseudo-element',
         `${PRAGMA}const App = () => <div css={{ '::before': { margin: 4 } }} />;`,
+        'mixed-shorthand-modifier',
+      ],
+      [
+        'an unsupported shorthand family',
+        `${PRAGMA}const App = () => <div css={{ border: '1px solid red' }} />;`,
         'shorthand-property',
+      ],
+      [
+        'a box shorthand with more than four components',
+        `${PRAGMA}const App = () => <div css={{ margin: '1px 2px 3px 4px 5px' }} />;`,
+        'invalid-box-shorthand',
       ],
       [
         'a nested condition',

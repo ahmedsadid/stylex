@@ -49,6 +49,7 @@ export type Declaration = {
   +pseudoElement?: PseudoElement,
   +mediaQuery?: string,
   +supportsQuery?: string,
+  +expandedFrom?: 'margin' | 'padding',
 };
 
 export type StyleObject = {
@@ -94,5 +95,11 @@ export function hasKeyframes(style: StyleObject): boolean {
     (declaration) =>
       typeof declaration.value === 'object' &&
       declaration.value.kind === 'keyframes',
+  );
+}
+
+export function hasBoxShorthands(style: StyleObject): boolean {
+  return style.declarations.some(
+    (declaration) => declaration.expandedFrom != null,
   );
 }
