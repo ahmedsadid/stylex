@@ -56,6 +56,22 @@ export {
   saveCachedExecution,
 } from './evidence/cache';
 export type { EvidenceCacheInputs } from './evidence/cache';
+export {
+  createEvidenceSchedule,
+  runEvidenceSchedule,
+} from './evidence/scheduler';
+export type {
+  EvidenceRunEntry,
+  EvidenceSchedule,
+  EvidenceScheduleItem,
+  EvidenceScheduleResult,
+} from './evidence/scheduler';
+export { aggregateRepositoryCoverage } from './evidence/coverage';
+export type {
+  CoverageEntry,
+  CoverageStatus,
+  CoverageSummary,
+} from './evidence/coverage';
 export { createEvidenceProviderRegistry } from './evidence/registry';
 export type {
   EvidenceProviderRegistry,
