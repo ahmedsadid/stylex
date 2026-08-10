@@ -405,6 +405,16 @@ export type {
   KeyframesObservationResult,
   KeyframesRefereeResult,
 } from './referee/keyframes';
+export {
+  BOX_SHORTHAND_REFEREE_MODEL,
+  expandBoxShorthand,
+  observeEmotionBoxShorthands,
+  refereeBoxShorthands,
+} from './referee/shorthands';
+export type {
+  BoxShorthandObservation,
+  BoxShorthandRefereeResult,
+} from './referee/shorthands';
 export { CONDITIONAL_MUTATION_MANIFEST } from './referee/mutations';
 export type {
   ConditionalMutationGate,
