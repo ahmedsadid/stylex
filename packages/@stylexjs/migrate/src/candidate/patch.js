@@ -7,15 +7,26 @@
  * @flow strict
  */
 
-import fs from 'fs';
-import path from 'path';
-import { git, extendSnapshot, snapshotHash } from '../kernel/snapshot';
+import {
+  git,
+  gitBuffer,
+  extendSnapshot,
+  snapshotHash,
+} from '../kernel/snapshot';
 import { hashFields, hashString, shortHash } from '../kernel/hash';
 import type { WorkspaceSnapshot } from '../kernel/snapshot';
 import type { CandidateWorkspace } from './workspace';
 import type { FileChangeStatus } from './scope';
 
 const NUL = String.fromCharCode(0);
+
+const REGULAR_FILE = '100644';
+const EXECUTABLE_FILE = '100755';
+const SYMLINK = '120000';
+const GITLINK = '160000';
+const ABSENT = '000000';
+
+const SUPPORTED_MODES = new Set([REGULAR_FILE, EXECUTABLE_FILE]);
 
 export type ProposerKind = 'deterministic' | 'agent' | 'human';
 
@@ -28,6 +39,10 @@ export type Proposer = {
 export type FileChange = {
   +path: string,
   +status: FileChangeStatus,
+  // The git file mode this change results in, e.g. '100644'. Part of the
+  // candidate's identity: a file that only changes mode is still a change, and
+  // a write that ignored it would not reproduce the candidate.
+  +mode: string,
   // null for a deletion.
   +content: string | null,
   +contentHash: string | null,
@@ -46,6 +61,7 @@ export type CandidatePatch = {
   +clusterIds: $ReadOnlyArray<string>,
   +baseSnapshotHash: string,
   +baseCommit: string,
+  +repositoryRoot: string,
   +proposer: Proposer,
   +changes: $ReadOnlyArray<FileChange>,
   +touchedFiles: $ReadOnlyArray<string>,
@@ -54,47 +70,118 @@ export type CandidatePatch = {
   +decisionArtifactHashes: $ReadOnlyArray<string>,
 };
 
-function parseNameStatus(raw: string): $ReadOnlyArray<{
+export type CandidateResult =
+  | { +ok: true, +candidate: CandidatePatch, +snapshot: WorkspaceSnapshot }
+  | { +ok: false, +reason: string, +paths: $ReadOnlyArray<string> };
+
+type RawChange = {
   +path: string,
   +status: FileChangeStatus,
-}> {
+  +sourceMode: string,
+  +targetMode: string,
+  +targetBlob: string,
+};
+
+/**
+ * Parse `git diff --cached --raw -z`, which reports both file modes and the
+ * staged blob for every change.
+ *
+ * Modes matter: reading content through the working tree loses the difference
+ * between a regular file, an executable and a symlink, and a writer that
+ * always produces a regular file would then not reproduce the candidate it
+ * claimed to have verified.
+ */
+function parseRawDiff(
+  raw: string,
+):
+  | { +ok: true, +changes: $ReadOnlyArray<RawChange> }
+  | { +ok: false, +reason: string, +paths: $ReadOnlyArray<string> } {
   const parts = raw.split(NUL).filter((part) => part !== '');
-  const changes = [];
+  const changes: Array<RawChange> = [];
   for (let i = 0; i + 1 < parts.length; i += 2) {
-    const code = parts[i];
+    const meta = parts[i];
     const filePath = parts[i + 1];
+    if (!meta.startsWith(':')) {
+      return {
+        ok: false,
+        reason: 'could not read the candidate diff',
+        paths: [filePath],
+      };
+    }
+    const fields = meta.slice(1).split(' ');
+    if (fields.length < 5) {
+      return {
+        ok: false,
+        reason: 'could not read the candidate diff',
+        paths: [filePath],
+      };
+    }
+    const [sourceMode, targetMode, , targetBlob, code] = fields;
+
     let status: FileChangeStatus;
     if (code.startsWith('A')) {
       status = 'added';
     } else if (code.startsWith('D')) {
       status = 'deleted';
-    } else {
+    } else if (code.startsWith('M') || code.startsWith('T')) {
       status = 'modified';
+    } else {
+      return {
+        ok: false,
+        reason: `unsupported change type "${code}"`,
+        paths: [filePath],
+      };
     }
-    changes.push({ path: filePath, status });
+
+    changes.push({
+      path: filePath,
+      status,
+      sourceMode,
+      targetMode,
+      targetBlob,
+    });
   }
-  return changes;
+  return { ok: true, changes };
 }
 
-function readWorkspaceFile(workspacePath: string, filePath: string): string {
-  const content = fs.readFileSync(path.join(workspacePath, filePath), 'utf8');
-  if (content.includes(NUL)) {
-    throw new Error(
-      `Candidate touches a binary file (${filePath}). The candidate boundary ` +
-        'handles text only; exclude it from the allowlist or convert it in a ' +
-        'separate, human-reviewed change.',
-    );
+function rejectUnsupported(change: RawChange): { +reason: string } | null {
+  const { sourceMode, targetMode, status, path: filePath } = change;
+
+  if (sourceMode === SYMLINK || targetMode === SYMLINK) {
+    return {
+      reason:
+        `${filePath} is a symbolic link. The writer reproduces regular files ` +
+        'only, so a candidate containing one could not be applied exactly as ' +
+        'it was checked.',
+    };
   }
-  return content;
+  if (sourceMode === GITLINK || targetMode === GITLINK) {
+    return { reason: `${filePath} is a submodule, which is out of scope` };
+  }
+  if (status !== 'deleted' && !SUPPORTED_MODES.has(targetMode)) {
+    return { reason: `${filePath} has unsupported file mode ${targetMode}` };
+  }
+  if (
+    status === 'modified' &&
+    sourceMode !== ABSENT &&
+    sourceMode !== targetMode
+  ) {
+    return {
+      reason:
+        `${filePath} changes file mode from ${sourceMode} to ${targetMode}. ` +
+        'Mode changes are out of scope for the mechanical lane.',
+    };
+  }
+  return null;
 }
 
 /**
  * Build a candidate from whatever a proposer left in its workspace.
  *
- * The returned snapshot is the input snapshot extended with every file the
- * candidate actually touches, so staleness detection later covers the full set
- * of files the write will modify — including files that did not exist when the
- * plan was made.
+ * The workspace and the snapshot must describe the same repository at the same
+ * commit. Without that, a candidate can be generated against one state and
+ * checked against another, and the snapshot's promise to identify "the exact
+ * source state" would mean nothing.
  */
 export function createCandidatePatch({
   workspace,
@@ -102,47 +189,131 @@ export function createCandidatePatch({
   clusterIds = [],
   proposer,
   decisionArtifactHashes = [],
+  expectedContent,
 }: {
   +workspace: CandidateWorkspace,
   +snapshot: WorkspaceSnapshot,
   +clusterIds?: $ReadOnlyArray<string>,
   +proposer: Proposer,
   +decisionArtifactHashes?: $ReadOnlyArray<string>,
-}): { +candidate: CandidatePatch, +snapshot: WorkspaceSnapshot } {
+  // Repository-relative path to the content hash a verified proposal produced.
+  // Supplying it closes the gap between "these bytes were checked" and "these
+  // bytes are staged": without it, a candidate can carry evidence for code that
+  // is not the code in the workspace.
+  +expectedContent?: { +[path: string]: string },
+}): CandidateResult {
+  if (workspace.repositoryRoot !== snapshot.repositoryRoot) {
+    return {
+      ok: false,
+      reason:
+        'the candidate workspace and the snapshot describe different ' +
+        `repositories (${workspace.repositoryRoot} and ${snapshot.repositoryRoot})`,
+      paths: [],
+    };
+  }
+  if (workspace.baseCommit !== snapshot.gitCommit) {
+    return {
+      ok: false,
+      reason:
+        `the candidate workspace is based on ${workspace.baseCommit} but the ` +
+        `snapshot records ${snapshot.gitCommit}`,
+      paths: [],
+    };
+  }
+
   // Stage everything so that new and deleted files are visible to `diff`.
   git(workspace.path, ['add', '-A']);
-  const nameStatus = git(workspace.path, [
+  const raw = git(workspace.path, [
     'diff',
     '--cached',
     '--no-renames',
-    '--name-status',
+    '--raw',
     '-z',
   ]);
   const patchText = git(workspace.path, ['diff', '--cached', '--no-renames']);
 
-  const parsed = [...parseNameStatus(nameStatus)].sort((a, b) =>
+  const parsed = parseRawDiff(raw);
+  if (!parsed.ok) {
+    return parsed;
+  }
+
+  const ordered = [...parsed.changes].sort((a, b) =>
     a.path < b.path ? -1 : a.path > b.path ? 1 : 0,
   );
 
-  const changes: Array<FileChange> = parsed.map(
-    ({ path: filePath, status }) => {
-      if (status === 'deleted') {
-        return Object.freeze({
-          path: filePath,
-          status,
+  const changes: Array<FileChange> = [];
+  for (const change of ordered) {
+    const rejection = rejectUnsupported(change);
+    if (rejection != null) {
+      return { ok: false, reason: rejection.reason, paths: [change.path] };
+    }
+
+    if (change.status === 'deleted') {
+      changes.push(
+        Object.freeze({
+          path: change.path,
+          status: change.status,
+          mode: change.sourceMode,
           content: null,
           contentHash: null,
-        });
-      }
-      const content = readWorkspaceFile(workspace.path, filePath);
-      return Object.freeze({
-        path: filePath,
-        status,
+        }),
+      );
+      continue;
+    }
+
+    // Read the staged blob rather than the working tree: the blob is what the
+    // diff described, and it cannot change under us afterwards.
+    const bytes = gitBuffer(workspace.path, [
+      'cat-file',
+      'blob',
+      change.targetBlob,
+    ]);
+    if (bytes.includes(0)) {
+      return {
+        ok: false,
+        reason:
+          `${change.path} is a binary file. The candidate boundary handles ` +
+          'text only; exclude it from the allowlist or change it in a ' +
+          'separate, human-reviewed commit.',
+        paths: [change.path],
+      };
+    }
+    const content = bytes.toString('utf8');
+    changes.push(
+      Object.freeze({
+        path: change.path,
+        status: change.status,
+        mode: change.targetMode,
         content,
         contentHash: hashString(content),
-      });
-    },
-  );
+      }),
+    );
+  }
+
+  if (expectedContent != null) {
+    const byPath = new Map(
+      changes.map((change) => [change.path, change.contentHash]),
+    );
+    for (const file of Object.keys(expectedContent)) {
+      const staged = byPath.get(file);
+      if (staged == null) {
+        return {
+          ok: false,
+          reason: `the verified proposal changed ${file}, but the candidate does not`,
+          paths: [file],
+        };
+      }
+      if (staged !== expectedContent[file]) {
+        return {
+          ok: false,
+          reason:
+            `${file} in the workspace is not the content that was checked ` +
+            '(the proposal and the candidate disagree)',
+          paths: [file],
+        };
+      }
+    }
+  }
 
   const touchedFiles = changes.map((change) => change.path);
   const extended = extendSnapshot(snapshot, touchedFiles);
@@ -151,6 +322,7 @@ export function createCandidatePatch({
   const patchHash = hashFields(
     changes.flatMap((change) => [
       change.status,
+      change.mode,
       change.path,
       change.contentHash ?? 'deleted',
     ]),
@@ -161,6 +333,7 @@ export function createCandidatePatch({
     clusterIds: Object.freeze([...clusterIds]),
     baseSnapshotHash,
     baseCommit: workspace.baseCommit,
+    repositoryRoot: snapshot.repositoryRoot,
     proposer: Object.freeze({ ...proposer }),
     changes: Object.freeze(changes),
     touchedFiles: Object.freeze(touchedFiles),
@@ -169,7 +342,7 @@ export function createCandidatePatch({
     decisionArtifactHashes: Object.freeze([...decisionArtifactHashes]),
   });
 
-  return Object.freeze({ candidate, snapshot: extended });
+  return Object.freeze({ ok: true, candidate, snapshot: extended });
 }
 
 export function changedPaths(

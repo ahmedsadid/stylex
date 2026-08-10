@@ -7,9 +7,10 @@
  * @flow strict
  */
 
-export const VERSION: string = '0.19.0';
+export { VERSION } from './version';
 
 export {
+  hashBytes,
   hashFields,
   hashString,
   shortHash,
@@ -17,7 +18,9 @@ export {
 } from './kernel/hash';
 
 export {
+  canonicalRoot,
   createSnapshot,
+  detectMovedHead,
   detectStaleFiles,
   extendSnapshot,
   gitCommitOf,
@@ -34,6 +37,14 @@ export {
 } from './kernel/state';
 export type { Actor, MigrationState } from './kernel/state';
 
+export { allPassed, makeEvidence } from './kernel/evidence';
+export type {
+  Claim,
+  CheckOutcome,
+  EvidenceResult,
+  EvidenceSubject,
+} from './kernel/evidence';
+
 export {
   assertCleanWorktree,
   createCandidateWorkspace,
@@ -44,6 +55,7 @@ export type { CandidateWorkspace } from './candidate/workspace';
 export { changedPaths, createCandidatePatch, isEmpty } from './candidate/patch';
 export type {
   CandidatePatch,
+  CandidateResult,
   FileChange,
   Proposer,
   ProposerKind,
@@ -65,5 +77,19 @@ export type {
   ScopeViolationReason,
 } from './candidate/scope';
 
-export { defaultWriteIO, writeCandidate } from './candidate/write';
+/**
+ * The writer itself is not exported. Reaching the user's files goes through a
+ * commit plan, which requires an immutable candidate, evidence bound to that
+ * candidate's hash, and an approval naming it. Exposing the low-level writer
+ * would make all of that optional.
+ */
 export type { WriteIO, WriteResult } from './candidate/write';
+
+export { approve, bundleEvidence, writeCommitPlan } from './kernel/commitPlan';
+export type {
+  Approval,
+  CommitPlan,
+  CommitPlanEntry,
+  CommitPlanResult,
+  EvidenceBundle,
+} from './kernel/commitPlan';

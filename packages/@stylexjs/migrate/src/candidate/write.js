@@ -10,7 +10,12 @@
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import { detectStaleFiles, snapshotHash } from '../kernel/snapshot';
+import {
+  canonicalRoot,
+  detectMovedHead,
+  detectStaleFiles,
+  snapshotHash,
+} from '../kernel/snapshot';
 import { changedPaths } from './patch';
 import { validateScope } from './scope';
 import type { WorkspaceSnapshot } from '../kernel/snapshot';
@@ -20,15 +25,19 @@ import type { ScopeRules, ScopeViolation } from './scope';
 /**
  * Writing a candidate into the accepted source tree.
  *
- * This is the only place in the kit that modifies the user's files, and it
- * refuses in three situations before it writes anything: the candidate is not
- * bound to this snapshot, the patch leaves its allowed paths, or a source file
- * has changed since the candidate was verified.
+ * This is the only code in the kit that modifies the user's files, and it is
+ * deliberately not part of the package's public surface: reaching it goes
+ * through a commit plan, so that state, evidence and approval are checked
+ * rather than assumed. See `kernel/commitPlan.js`.
  *
- * When a write fails part-way, the originals are restored from a recovery
- * directory and the patch is left on disk, so the tree is never abandoned in a
- * half-written state. Git remains the rollback mechanism of last resort; this
- * module never runs a destructive git command.
+ * The destination is taken from the snapshot rather than accepted as an
+ * argument. A separately supplied root would let a candidate verified against
+ * one checkout be written into another, which is the precise failure this
+ * layer exists to prevent.
+ *
+ * Before anything is written it refuses when: the candidate is not bound to
+ * this snapshot, the repository has moved to a different commit, the patch
+ * leaves its allowed paths, or a covered file no longer matches its preimage.
  */
 
 export type WriteIO = {
@@ -47,6 +56,7 @@ export type WriteResult =
       +status: 'stale',
       +candidateId: string,
       +staleFiles: $ReadOnlyArray<string>,
+      +movedHead: string | null,
     }
   | {
       +status: 'scope-violation',
@@ -63,6 +73,11 @@ export type WriteResult =
     };
 
 const TEMP_SUFFIX = '.stylex-migrate-tmp';
+
+const MODE_BITS: { +[string]: number } = {
+  '100644': 0o644,
+  '100755': 0o755,
+};
 
 export const defaultWriteIO: WriteIO = Object.freeze({
   writeFileSync: (file: string, data: string) => {
@@ -83,11 +98,20 @@ function assertSafeRelativePath(filePath: string): void {
   }
 }
 
+function existingMode(absolute: string): number | null {
+  try {
+    const stats = fs.lstatSync(absolute);
+    return stats.isFile() ? stats.mode & 0o777 : null;
+  } catch (error) {
+    return null;
+  }
+}
+
 function prepareRecovery(
   repositoryRoot: string,
   candidate: CandidatePatch,
   recoveryRoot: string,
-): string {
+): { +recoveryPath: string, +modes: Map<string, number> } {
   const recoveryPath = path.join(recoveryRoot, candidate.id);
   fs.mkdirSync(path.join(recoveryPath, 'originals'), { recursive: true });
   fs.writeFileSync(
@@ -95,36 +119,46 @@ function prepareRecovery(
     candidate.patchText,
     'utf8',
   );
+
+  const modes = new Map<string, number>();
+  for (const file of candidate.touchedFiles) {
+    const absolute = path.join(repositoryRoot, file);
+    const mode = existingMode(absolute);
+    if (mode != null) {
+      modes.set(file, mode);
+      const target = path.join(recoveryPath, 'originals', file);
+      fs.mkdirSync(path.dirname(target), { recursive: true });
+      fs.copyFileSync(absolute, target);
+      fs.chmodSync(target, mode);
+    }
+  }
+
   fs.writeFileSync(
     path.join(recoveryPath, 'manifest.json'),
     JSON.stringify(
       {
         candidateId: candidate.id,
+        repositoryRoot,
         baseCommit: candidate.baseCommit,
         baseSnapshotHash: candidate.baseSnapshotHash,
         patchHash: candidate.patchHash,
         touchedFiles: candidate.touchedFiles,
+        originalModes: Object.fromEntries(modes),
       },
       null,
       2,
     ),
     'utf8',
   );
-  for (const file of candidate.touchedFiles) {
-    const absolute = path.join(repositoryRoot, file);
-    if (fs.existsSync(absolute)) {
-      const target = path.join(recoveryPath, 'originals', file);
-      fs.mkdirSync(path.dirname(target), { recursive: true });
-      fs.copyFileSync(absolute, target);
-    }
-  }
-  return recoveryPath;
+
+  return { recoveryPath, modes };
 }
 
 function restore(
   repositoryRoot: string,
   recoveryPath: string,
   files: $ReadOnlyArray<string>,
+  modes: Map<string, number>,
 ): { +restored: $ReadOnlyArray<string>, +unrestored: $ReadOnlyArray<string> } {
   const restored = [];
   const unrestored = [];
@@ -134,6 +168,10 @@ function restore(
     try {
       if (fs.existsSync(original)) {
         fs.copyFileSync(original, absolute);
+        const mode = modes.get(file);
+        if (mode != null) {
+          fs.chmodSync(absolute, mode);
+        }
       } else {
         // The file did not exist before this candidate; undo means remove it.
         fs.rmSync(absolute, { force: true });
@@ -147,14 +185,12 @@ function restore(
 }
 
 export function writeCandidate({
-  repositoryRoot,
   candidate,
   snapshot,
   scopeRules,
   io = defaultWriteIO,
   recoveryRoot,
 }: {
-  +repositoryRoot: string,
   +candidate: CandidatePatch,
   +snapshot: WorkspaceSnapshot,
   +scopeRules: ScopeRules,
@@ -168,6 +204,13 @@ export function writeCandidate({
         'returned alongside the candidate.',
     );
   }
+  if (candidate.repositoryRoot !== snapshot.repositoryRoot) {
+    throw new Error(
+      `Candidate ${candidate.id} was built against ` +
+        `${candidate.repositoryRoot}, not ${snapshot.repositoryRoot}.`,
+    );
+  }
+  const repositoryRoot = canonicalRoot(snapshot.repositoryRoot);
   for (const change of candidate.changes) {
     assertSafeRelativePath(change.path);
   }
@@ -181,18 +224,20 @@ export function writeCandidate({
     });
   }
 
+  const movedHead = detectMovedHead(snapshot);
   const staleFiles = detectStaleFiles(snapshot);
-  if (staleFiles.length > 0) {
+  if (movedHead != null || staleFiles.length > 0) {
     return Object.freeze({
       status: 'stale',
       candidateId: candidate.id,
       staleFiles,
+      movedHead,
     });
   }
 
   const resolvedRecoveryRoot =
     recoveryRoot ?? path.join(os.tmpdir(), 'stylex-migrate', 'recovery');
-  const recoveryPath = prepareRecovery(
+  const { recoveryPath, modes } = prepareRecovery(
     repositoryRoot,
     candidate,
     resolvedRecoveryRoot,
@@ -210,6 +255,11 @@ export function writeCandidate({
       fs.mkdirSync(path.dirname(absolute), { recursive: true });
       temporaries.push(temporary);
       io.writeFileSync(temporary, change.content ?? '');
+      // An existing file keeps the permissions it already had; a new one takes
+      // the mode git recorded for it. Either way the result matches the
+      // candidate that was checked.
+      const mode = modes.get(change.path) ?? MODE_BITS[change.mode] ?? 0o644;
+      fs.chmodSync(temporary, mode);
       io.renameSync(temporary, absolute);
       temporaries.pop();
       written.push(change.path);
@@ -229,6 +279,7 @@ export function writeCandidate({
       repositoryRoot,
       recoveryPath,
       written,
+      modes,
     );
     return Object.freeze({
       status: 'failed',

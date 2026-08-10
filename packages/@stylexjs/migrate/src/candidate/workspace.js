@@ -11,7 +11,12 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import crypto from 'crypto';
-import { git, gitCommitOf, isWorktreeClean } from '../kernel/snapshot';
+import {
+  canonicalRoot,
+  git,
+  gitCommitOf,
+  isWorktreeClean,
+} from '../kernel/snapshot';
 
 /**
  * The candidate workspace: an isolated git worktree, created at an exact base
@@ -39,7 +44,7 @@ export function assertCleanWorktree(repositoryRoot: string): void {
 }
 
 export function createCandidateWorkspace({
-  repositoryRoot,
+  repositoryRoot: requestedRoot,
   allowedPaths,
   baseCommit,
   requireClean = true,
@@ -51,6 +56,11 @@ export function createCandidateWorkspace({
   +requireClean?: boolean,
   +rootDir?: string,
 }): CandidateWorkspace {
+  // Canonicalised for the same reason the snapshot is: the two are compared to
+  // establish that a candidate belongs to the repository it will be written
+  // into, and `/tmp/x` and `/private/tmp/x` must not look like different
+  // repositories.
+  const repositoryRoot = canonicalRoot(requestedRoot);
   if (requireClean) {
     assertCleanWorktree(repositoryRoot);
   }

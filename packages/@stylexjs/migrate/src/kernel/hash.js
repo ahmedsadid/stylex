@@ -27,6 +27,14 @@ export function hashString(input: string): string {
 }
 
 /**
+ * Hash raw bytes. Preimages are compared as bytes rather than as decoded text
+ * so that a file which is not valid UTF-8 still compares exactly.
+ */
+export function hashBytes(input: Buffer): string {
+  return crypto.createHash(HASH_ALGORITHM).update(input).digest('hex');
+}
+
+/**
  * Hash an ordered list of fields with a separator that cannot occur in a path
  * or a hash, so ['a', 'bc'] and ['ab', 'c'] cannot collide.
  */
