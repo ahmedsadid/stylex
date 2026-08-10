@@ -431,7 +431,9 @@ function readKeyframesValue(
     value: {
       kind: 'keyframes',
       sourceName,
-      frames: Object.freeze(frames),
+      frames: Object.freeze(
+        [...frames].sort((first) => (first.selector === 'from' ? -1 : 1)),
+      ),
     },
   };
 }
