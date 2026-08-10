@@ -24,13 +24,27 @@
  */
 
 export type StaticValue = string | number;
+export type StaticKeyframeDeclaration = {
+  +property: string,
+  +value: StaticValue,
+};
+export type StaticKeyframe = {
+  +selector: 'from' | 'to',
+  +declarations: $ReadOnlyArray<StaticKeyframeDeclaration>,
+};
+export type StaticKeyframesValue = {
+  +kind: 'keyframes',
+  +sourceName: string,
+  +frames: $ReadOnlyArray<StaticKeyframe>,
+};
+export type StyleValue = StaticValue | StaticKeyframesValue;
 export type Condition = ':hover' | ':focus';
 export type PseudoElement = '::before' | '::after';
 
 export type Declaration = {
   // The property name exactly as authored (camelCase, as both libraries take).
   +property: string,
-  +value: StaticValue,
+  +value: StyleValue,
   +condition?: Condition,
   +pseudoElement?: PseudoElement,
   +mediaQuery?: string,
@@ -72,5 +86,13 @@ export function hasMediaQueries(style: StyleObject): boolean {
 export function hasSupportsQueries(style: StyleObject): boolean {
   return style.declarations.some(
     (declaration) => declaration.supportsQuery != null,
+  );
+}
+
+export function hasKeyframes(style: StyleObject): boolean {
+  return style.declarations.some(
+    (declaration) =>
+      typeof declaration.value === 'object' &&
+      declaration.value.kind === 'keyframes',
   );
 }

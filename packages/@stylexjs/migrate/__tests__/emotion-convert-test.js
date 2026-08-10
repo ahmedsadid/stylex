@@ -255,6 +255,18 @@ export const App = () => <div css={{ color: 'red' }} />;
     expect(converted).not.toContain("color: 'red',");
   });
 
+  test('emits referenced keyframes inline without introducing a binding', () => {
+    const converted = convert(`${PRAGMA}export const App = () => (
+  <div css={{ animationName: 'fade', animationDuration: '1s', '@keyframes fade': { from: { opacity: 0 }, to: { opacity: 1 } } }} />
+);
+`);
+    expect(converted).toContain('animationName: stylex.keyframes({');
+    expect(converted).toContain('from: {');
+    expect(converted).toContain('to: {');
+    expect(converted).not.toContain('@keyframes fade');
+    expect(converted).not.toMatch(/const fade\s*=/);
+  });
+
   test('shorthands are refused rather than guessed at', () => {
     const result = convertSource(
       `${PRAGMA}export const App = () => <div css={{ marginTop: 20, margin: 4 }} />;`,

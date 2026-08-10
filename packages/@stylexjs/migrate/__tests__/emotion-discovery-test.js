@@ -214,6 +214,33 @@ describe('emotion discovery', () => {
     ]);
   });
 
+  test('reads one referenced from/to keyframes block', () => {
+    const result = read(`${PRAGMA}const App = () => (
+  <div css={{ animationName: 'fade', animationDuration: '1s', '@keyframes fade': { from: { opacity: 0 }, to: { opacity: 1 } } }} />
+);`);
+    expect(result.refusals).toEqual([]);
+    expect(result.sites[0].style.declarations).toEqual([
+      {
+        property: 'animationName',
+        value: {
+          kind: 'keyframes',
+          sourceName: 'fade',
+          frames: [
+            {
+              selector: 'from',
+              declarations: [{ property: 'opacity', value: 0 }],
+            },
+            {
+              selector: 'to',
+              declarations: [{ property: 'opacity', value: 1 }],
+            },
+          ],
+        },
+      },
+      { property: 'animationDuration', value: '1s' },
+    ]);
+  });
+
   test('refuses an effectful value hidden by a later pseudo-element block', () => {
     const result = read(`${PRAGMA}const App = () => (
   <div css={{ '::after': { color: sideEffect() }, '::after': { opacity: 1 } }} />
@@ -347,6 +374,21 @@ describe('emotion discovery', () => {
         'supports nesting deeper than two at-rules',
         `${PRAGMA}const App = () => <div css={{ '@supports (display: grid)': { '@media (min-width: 800px)': { '@supports (display: flex)': { display: 'flex' } } } }} />;`,
         'nested-style-object',
+      ],
+      [
+        'keyframes without an exact animation name reference',
+        `${PRAGMA}const App = () => <div css={{ animationName: 'other', '@keyframes fade': { from: { opacity: 0 }, to: { opacity: 1 } } }} />;`,
+        'missing-keyframes-reference',
+      ],
+      [
+        'keyframes without both boundary frames',
+        `${PRAGMA}const App = () => <div css={{ animationName: 'fade', '@keyframes fade': { to: { opacity: 1 } } }} />;`,
+        'invalid-keyframes',
+      ],
+      [
+        'more than one keyframes rule',
+        `${PRAGMA}const App = () => <div css={{ animationName: 'fade', '@keyframes fade': { from: { opacity: 0 }, to: { opacity: 1 } }, '@keyframes slide': { from: { left: 0 }, to: { left: 10 } } }} />;`,
+        'multiple-keyframes',
       ],
       [
         'a media query mixed with a pseudo-class',

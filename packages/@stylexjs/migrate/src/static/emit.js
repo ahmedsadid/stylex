@@ -11,6 +11,8 @@ import type {
   Declaration,
   PseudoElement,
   StaticValue,
+  StaticKeyframesValue,
+  StyleValue,
   StyleObject,
 } from './ir';
 
@@ -81,6 +83,13 @@ export function serializeValue(value: StaticValue): string {
   return `'${escaped}'`;
 }
 
+function staticValue(value: StyleValue): StaticValue {
+  if (typeof value === 'object') {
+    throw new Error('keyframes cannot be used as a conditional literal');
+  }
+  return value;
+}
+
 /**
  * Keys are emitted in alphabetical order.
  *
@@ -100,11 +109,32 @@ function sortedProperties(
 function declarationLines(
   input: $ReadOnlyArray<Declaration>,
   indent: string,
+  namespace: string,
 ): $ReadOnlyArray<string> {
   return sortedProperties(input).flatMap((property) => {
     const declarations = input.filter(
       (declaration) => declaration.property === property,
     );
+    const keyframes = declarations.find(
+      (declaration) => typeof declaration.value === 'object',
+    );
+    if (keyframes != null && typeof keyframes.value === 'object') {
+      const value: StaticKeyframesValue = keyframes.value;
+      const lines = [`${indent}  ${property}: ${namespace}.keyframes({`];
+      for (const frame of value.frames) {
+        lines.push(`${indent}    ${frame.selector}: {`);
+        for (const declaration of [...frame.declarations].sort((a, b) =>
+          a.property.localeCompare(b.property),
+        )) {
+          lines.push(
+            `${indent}      ${declaration.property}: ${serializeValue(declaration.value)},`,
+          );
+        }
+        lines.push(`${indent}    },`);
+      }
+      lines.push(`${indent}  }),`);
+      return lines;
+    }
     if (
       declarations.every(
         (declaration) =>
@@ -114,7 +144,9 @@ function declarationLines(
       )
     ) {
       const declaration = declarations[declarations.length - 1];
-      return [`${indent}  ${property}: ${serializeValue(declaration.value)},`];
+      return [
+        `${indent}  ${property}: ${serializeValue(staticValue(declaration.value))},`,
+      ];
     }
     // StyleX's lint contract requires this key order. Semantic comparison does
     // not trust it: the referee still uses Emotion's authored source order and
@@ -147,31 +179,33 @@ function declarationLines(
       );
       const lines = [`${indent}  ${property}: {`];
       if (root != null) {
-        lines.push(`${indent}    default: ${serializeValue(root.value)},`);
+        lines.push(
+          `${indent}    default: ${serializeValue(staticValue(root.value))},`,
+        );
       }
       if (supportsOnly != null || intersection != null) {
         const supportsQuery = (supportsOnly ?? intersection)?.supportsQuery;
         if (supportsQuery == null) throw new Error('missing supports query');
         if (intersection == null) {
           lines.push(
-            `${indent}    ${serializeValue(supportsQuery)}: ${serializeValue(supportsOnly?.value ?? '')},`,
+            `${indent}    ${serializeValue(supportsQuery)}: ${serializeValue(staticValue(supportsOnly?.value ?? ''))},`,
           );
         } else {
           lines.push(`${indent}    ${serializeValue(supportsQuery)}: {`);
           if (supportsOnly != null) {
             lines.push(
-              `${indent}      default: ${serializeValue(supportsOnly.value)},`,
+              `${indent}      default: ${serializeValue(staticValue(supportsOnly.value))},`,
             );
           }
           lines.push(
-            `${indent}      ${serializeValue(intersection.mediaQuery ?? '')}: ${serializeValue(intersection.value)},`,
+            `${indent}      ${serializeValue(intersection.mediaQuery ?? '')}: ${serializeValue(staticValue(intersection.value))},`,
             `${indent}    },`,
           );
         }
       }
       if (mediaOnly != null) {
         lines.push(
-          `${indent}    ${serializeValue(mediaOnly.mediaQuery ?? '')}: ${serializeValue(mediaOnly.value)},`,
+          `${indent}    ${serializeValue(mediaOnly.mediaQuery ?? '')}: ${serializeValue(staticValue(mediaOnly.value))},`,
         );
       }
       lines.push(`${indent}  },`);
@@ -187,17 +221,21 @@ function declarationLines(
         const condition = modifier(declaration);
         const key =
           condition === 'default' ? condition : serializeValue(condition);
-        return `${indent}    ${key}: ${serializeValue(declaration.value)},`;
+        return `${indent}    ${key}: ${serializeValue(staticValue(declaration.value))},`;
       });
     return [`${indent}  ${property}: {`, ...values, `${indent}  },`];
   });
 }
 
-export function emitStyleObject(style: StyleObject, indent: string): string {
+export function emitStyleObject(
+  style: StyleObject,
+  indent: string,
+  namespace: string,
+): string {
   const rootDeclarations = style.declarations.filter(
     (declaration) => declaration.pseudoElement == null,
   );
-  const lines = [...declarationLines(rootDeclarations, indent)];
+  const lines = [...declarationLines(rootDeclarations, indent, namespace)];
   const pseudoElements: $ReadOnlyArray<PseudoElement> = ['::after', '::before'];
   for (const pseudoElement of pseudoElements) {
     const declarations = style.declarations.filter(
@@ -206,7 +244,7 @@ export function emitStyleObject(style: StyleObject, indent: string): string {
     if (declarations.length === 0) continue;
     lines.push(
       `${indent}  '${pseudoElement}': {`,
-      ...declarationLines(declarations, `${indent}  `),
+      ...declarationLines(declarations, `${indent}  `, namespace),
       `${indent}  },`,
     );
   }
@@ -219,7 +257,10 @@ export function emitCreateCall(
   entries: $ReadOnlyArray<StyleEntry>,
 ): string {
   const body = entries
-    .map((entry) => `  ${entry.key}: ${emitStyleObject(entry.style, '  ')},`)
+    .map(
+      (entry) =>
+        `  ${entry.key}: ${emitStyleObject(entry.style, '  ', namespace)},`,
+    )
     .join('\n');
   return `const ${registryName} = ${namespace}.create({\n${body}\n});`;
 }

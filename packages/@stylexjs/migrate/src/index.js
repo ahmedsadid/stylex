@@ -288,6 +288,10 @@ export type {
   Declaration,
   PseudoElement,
   StaticValue,
+  StaticKeyframe,
+  StaticKeyframeDeclaration,
+  StaticKeyframesValue,
+  StyleValue,
   StyleObject,
 } from './static/ir';
 

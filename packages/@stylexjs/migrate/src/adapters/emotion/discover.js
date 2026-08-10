@@ -14,6 +14,8 @@ import type {
   Condition,
   Declaration,
   PseudoElement,
+  StaticKeyframesValue,
+  StaticKeyframe,
   StyleObject,
 } from '../../static/ir';
 
@@ -39,6 +41,10 @@ export type RefusalReason =
   | 'mixed-media-query-modifier'
   | 'multiple-media-queries'
   | 'multiple-supports-queries'
+  | 'multiple-keyframes'
+  | 'invalid-keyframes'
+  | 'missing-keyframes-reference'
+  | 'mixed-keyframes-modifier'
   | 'template-literal-value'
   | 'non-literal-value'
   | 'css-with-class-or-style-prop'
@@ -103,6 +109,7 @@ const SUPPORTED_PSEUDO_ELEMENTS: $ReadOnlySet<string> = new Set([
 ]);
 const MEDIA_QUERY = /^@media [^\r\n{}]+$/;
 const SUPPORTS_QUERY = /^@supports [^\r\n{}]+$/;
+const KEYFRAMES = /^@keyframes ([A-Za-z_][A-Za-z0-9_-]*)$/;
 
 type DeclarationTarget =
   | { +kind: 'root' }
@@ -375,10 +382,65 @@ function readAtRuleDeclarations(
   return { ok: true, declarations: Object.freeze(declarations) };
 }
 
+function readKeyframesValue(
+  objectExpression: $FlowFixMe,
+  sourceName: string,
+):
+  | { +ok: true, +value: StaticKeyframesValue }
+  | { +ok: false, +reason: RefusalReason } {
+  const frames: Array<StaticKeyframe> = [];
+  const lastIndexes = lastPropertyIndexes(objectExpression.properties);
+  for (let index = 0; index < objectExpression.properties.length; index++) {
+    const property = objectExpression.properties[index];
+    if (property.type === 'SpreadElement') {
+      return { ok: false, reason: 'spread-in-style-object' };
+    }
+    const selector = propertyName(property);
+    if (
+      selector == null ||
+      (selector !== 'from' && selector !== 'to') ||
+      property.value?.type !== 'ObjectExpression'
+    ) {
+      return { ok: false, reason: 'invalid-keyframes' };
+    }
+    const declarations = readLiteralDeclarations(property.value);
+    if (!declarations.ok) return declarations;
+    if (lastIndexes.has(index)) {
+      const frameDeclarations = [];
+      for (const declaration of declarations.declarations) {
+        if (typeof declaration.value === 'object') {
+          return { ok: false, reason: 'invalid-keyframes' };
+        }
+        frameDeclarations.push({
+          property: declaration.property,
+          value: declaration.value,
+        });
+      }
+      frames.push({ selector, declarations: frameDeclarations });
+    }
+  }
+  if (
+    frames.length !== 2 ||
+    !frames.some((frame) => frame.selector === 'from') ||
+    !frames.some((frame) => frame.selector === 'to')
+  ) {
+    return { ok: false, reason: 'invalid-keyframes' };
+  }
+  return {
+    ok: true,
+    value: {
+      kind: 'keyframes',
+      sourceName,
+      frames: Object.freeze(frames),
+    },
+  };
+}
+
 function readDeclarations(
   objectExpression: $FlowFixMe,
 ): { +ok: true, +style: StyleObject } | { +ok: false, +reason: RefusalReason } {
   const declarations: Array<Declaration> = [];
+  const keyframes: Array<StaticKeyframesValue> = [];
   const lastIndexes = lastPropertyIndexes(objectExpression.properties);
   for (let index = 0; index < objectExpression.properties.length; index++) {
     const property = objectExpression.properties[index];
@@ -396,6 +458,13 @@ function readDeclarations(
       return { ok: false, reason: 'computed-style-key' };
     }
     if (property.value.type === 'ObjectExpression') {
+      const keyframesMatch = name.match(KEYFRAMES);
+      if (keyframesMatch != null) {
+        const read = readKeyframesValue(property.value, keyframesMatch[1]);
+        if (!read.ok) return read;
+        if (lastIndexes.has(index)) keyframes.push(read.value);
+        continue;
+      }
       if (
         !SUPPORTED_CONDITIONS.has(name) &&
         !SUPPORTED_PSEUDO_ELEMENTS.has(name) &&
@@ -465,6 +534,37 @@ function readDeclarations(
     )
   ) {
     return { ok: false, reason: 'mixed-media-query-modifier' };
+  }
+  if (keyframes.length > 1) {
+    return { ok: false, reason: 'multiple-keyframes' };
+  }
+  if (keyframes.length === 1) {
+    if (
+      declarations.some(
+        (declaration) =>
+          declaration.condition != null ||
+          declaration.pseudoElement != null ||
+          declaration.mediaQuery != null ||
+          declaration.supportsQuery != null,
+      )
+    ) {
+      return { ok: false, reason: 'mixed-keyframes-modifier' };
+    }
+    const animationNames = declarations.filter(
+      (declaration) => declaration.property === 'animationName',
+    );
+    if (
+      animationNames.length !== 1 ||
+      animationNames[0].value !== keyframes[0].sourceName
+    ) {
+      return { ok: false, reason: 'missing-keyframes-reference' };
+    }
+    const withKeyframes = declarations.map((declaration) =>
+      declaration === animationNames[0]
+        ? { ...declaration, value: keyframes[0] }
+        : declaration,
+    );
+    return { ok: true, style: styleObject(withKeyframes) };
   }
   return { ok: true, style: styleObject(declarations) };
 }
