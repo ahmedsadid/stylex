@@ -1,0 +1,26 @@
+{
+  "name": "@stylexjs/migrate",
+  "version": "0.19.0",
+  "description": "A migration kit for moving styling libraries (Emotion first) to StyleX",
+  "main": "./lib/index.js",
+  "repository": "https://www.github.com/facebook/stylex",
+  "license": "MIT",
+  "private": true,
+  "scripts": {
+    "prebuild": "gen-types -i src/ -o lib/",
+    "build": "cross-env BABEL_ENV=cjs babel src/ --out-dir lib/ --copy-files",
+    "test": "jest"
+  },
+  "devDependencies": {
+    "scripts": "0.19.0"
+  },
+  "jest": {
+    "testPathIgnorePatterns": [
+      "/__fixtures__/",
+      "/__tests__/utils/"
+    ]
+  },
+  "files": [
+    "lib/*"
+  ]
+}
