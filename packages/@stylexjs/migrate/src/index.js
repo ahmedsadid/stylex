@@ -338,6 +338,19 @@ export {
   observeStyleXCompiler,
   STYLEX_COMPILER_PROVIDER,
 } from './referee/compilerFacts';
+export {
+  activationStates,
+  orderStyleXDeclarations,
+  referee,
+  REFEREE_MODEL,
+} from './referee/model';
+export type {
+  ActivationState,
+  RefereeDeclaration,
+  RefereeResult,
+  Specificity,
+  WinnerDifference,
+} from './referee/model';
 export type {
   CompilerProbe,
   ObservedCompilerProbe,
