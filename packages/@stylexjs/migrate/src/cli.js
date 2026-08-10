@@ -13,7 +13,10 @@ import {
   initializeProject,
   openProject,
   readConfig,
+  writeConfig,
 } from './state/project';
+import fs from 'fs';
+import path from 'path';
 import { rebuildIndexes, replayEvents } from './state/events';
 import { cleanupProject, migrateProject } from './state/maintenance';
 import { redact, redactText } from './state/redact';
@@ -28,6 +31,7 @@ import {
   savePlan,
 } from './planning/reports';
 import type { JsonValue } from './state/json';
+import { parseJson } from './state/json';
 import type { Inventory, Plan } from './inventory/model';
 import type { ProjectState } from './state/project';
 import { loadVerificationCandidate } from './evidence/candidates';
@@ -58,6 +62,8 @@ Commands:
   plan                    form migration clusters from the latest inventory
   verify <candidate...>   run checks against exact persisted candidate bytes
   review <id>             show a verdict, coverage, claims, and limitations
+  config show             show normalized project configuration
+  config set <json-file>  validate and store project configuration
   status                  summarize inventory, plan, and replayed state
   explain <id>            explain an inventory, candidate, evidence, or verdict id
   state rebuild           rebuild indexes from append-only events
@@ -343,6 +349,39 @@ export function runCli(
                   counts: inventoryCounts(inventory),
                 },
           plan: plan == null ? null : planSummary(plan, inventory),
+        },
+        json,
+        stdout,
+      );
+      return 0;
+    }
+    if (args[0] === 'config' && args[1] === 'show' && args.length === 2) {
+      present(
+        {
+          command: 'config show',
+          config: readConfig(openProject(cwd)) as $FlowFixMe,
+        },
+        json,
+        stdout,
+      );
+      return 0;
+    }
+    if (args[0] === 'config' && args[1] === 'set' && args.length === 3) {
+      const project = openProject(cwd);
+      const source = path.resolve(cwd, args[2]);
+      const config = parseJson(fs.readFileSync(source, 'utf8'), source);
+      if (
+        config == null ||
+        Array.isArray(config) ||
+        typeof config !== 'object'
+      ) {
+        throw new Error('Project configuration input must be a JSON object');
+      }
+      writeConfig(project, config as $FlowFixMe);
+      present(
+        {
+          command: 'config set',
+          config: readConfig(project) as $FlowFixMe,
         },
         json,
         stdout,

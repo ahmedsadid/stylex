@@ -18,6 +18,7 @@ import {
   writeConfig,
 } from '../src/index';
 import { createTempRepo, removeTempDir } from './utils/tempRepo';
+import { runCli } from '../src/cli';
 
 const TYPECHECK = {
   id: 'repo-typecheck',
@@ -106,5 +107,51 @@ describe('M5 repository evidence configuration', () => {
       sourceGlobs: ['src/**/*.js'],
       evidence: { concurrency: 2, outputPreviewBytes: 8192, providers: [] },
     });
+  });
+
+  test('the CLI validates and stores a user-authored config document', () => {
+    const project = initializeProject({ repositoryRoot: repo });
+    const input = path.join(project.stateRoot, 'provider-input.json');
+    fs.writeFileSync(
+      input,
+      JSON.stringify({
+        sourceGlobs: ['src/**/*.js'],
+        evidence: {
+          concurrency: 3,
+          outputPreviewBytes: 2048,
+          providers: [TYPECHECK],
+        },
+      }),
+      'utf8',
+    );
+    let stdout = '';
+    expect(
+      runCli(['config', 'set', input, '--json'], {
+        cwd: repo,
+        writeStdout: (text) => {
+          stdout += text;
+        },
+      }),
+    ).toBe(0);
+    expect(JSON.parse(stdout)).toMatchObject({
+      command: 'config set',
+      config: {
+        sourceGlobs: ['src/**/*.js'],
+        evidence: { concurrency: 3, providers: [{ id: 'repo-typecheck' }] },
+      },
+    });
+
+    stdout = '';
+    expect(
+      runCli(['config', 'show', '--json'], {
+        cwd: repo,
+        writeStdout: (text) => {
+          stdout += text;
+        },
+      }),
+    ).toBe(0);
+    expect(JSON.parse(stdout).config.evidence.providers[0].argv).toEqual(
+      TYPECHECK.argv,
+    );
   });
 });
