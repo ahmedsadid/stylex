@@ -93,3 +93,18 @@ export type {
   CommitPlanResult,
   EvidenceBundle,
 } from './kernel/commitPlan';
+export { parseSource, pluginsForFilename } from './static/parse';
+export type { ParseResult } from './static/parse';
+
+export { isEmptyStyle, styleObject } from './static/ir';
+export type { Declaration, StaticValue, StyleObject } from './static/ir';
+
+export { walk } from './static/walk';
+
+export { discover, usesEmotion } from './adapters/emotion/discover';
+export type {
+  DiscoveryResult,
+  EmotionRefusal,
+  EmotionSite,
+  RefusalReason,
+} from './adapters/emotion/discover';
