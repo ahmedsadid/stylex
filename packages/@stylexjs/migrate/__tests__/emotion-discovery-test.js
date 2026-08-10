@@ -247,6 +247,16 @@ describe('emotion discovery', () => {
     ]);
   });
 
+  test('refuses an effectful value hidden by a later supports block', () => {
+    const result = read(`${PRAGMA}const App = () => (
+  <div css={{ '@supports (display: grid)': { color: sideEffect() }, '@supports (display: grid)': { opacity: 1 } }} />
+);`);
+    expect(result.sites).toEqual([]);
+    expect(result.refusals.map((refusal) => refusal.reason)).toEqual([
+      'non-literal-value',
+    ]);
+  });
+
   test('refuses an effectful value hidden by a later duplicate property', () => {
     const result = read(`${PRAGMA}const App = () => (
   <div css={{ color: sideEffect(), color: 'red' }} />
@@ -332,6 +342,11 @@ describe('emotion discovery', () => {
         'more than one media query',
         `${PRAGMA}const App = () => <div css={{ '@media (min-width: 800px)': { color: 'red' }, '@media (min-width: 1200px)': { color: 'blue' } }} />;`,
         'multiple-media-queries',
+      ],
+      [
+        'supports nesting deeper than two at-rules',
+        `${PRAGMA}const App = () => <div css={{ '@supports (display: grid)': { '@media (min-width: 800px)': { '@supports (display: flex)': { display: 'flex' } } } }} />;`,
+        'nested-style-object',
       ],
       [
         'a media query mixed with a pseudo-class',
