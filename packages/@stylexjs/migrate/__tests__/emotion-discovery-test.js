@@ -144,6 +144,25 @@ describe('emotion discovery', () => {
     ]);
   });
 
+  test('duplicate pseudo-element blocks use only the last object value', () => {
+    const result = read(`${PRAGMA}const App = () => (
+  <div css={{ '::before': { color: 'discarded' }, '::before': { content: '"x"' } }} />
+);`);
+    expect(result.sites[0].style.declarations).toEqual([
+      { property: 'content', value: '"x"', pseudoElement: '::before' },
+    ]);
+  });
+
+  test('refuses an effectful value hidden by a later pseudo-element block', () => {
+    const result = read(`${PRAGMA}const App = () => (
+  <div css={{ '::after': { color: sideEffect() }, '::after': { opacity: 1 } }} />
+);`);
+    expect(result.sites).toEqual([]);
+    expect(result.refusals.map((refusal) => refusal.reason)).toEqual([
+      'non-literal-value',
+    ]);
+  });
+
   test('refuses an effectful value hidden by a later duplicate property', () => {
     const result = read(`${PRAGMA}const App = () => (
   <div css={{ color: sideEffect(), color: 'red' }} />
@@ -244,6 +263,11 @@ describe('emotion discovery', () => {
         'a dynamic value inside a pseudo-element',
         `${PRAGMA}const App = () => <div css={{ '::after': { color: theme.accent } }} />;`,
         'non-literal-value',
+      ],
+      [
+        'a shorthand inside a pseudo-element',
+        `${PRAGMA}const App = () => <div css={{ '::before': { margin: 4 } }} />;`,
+        'shorthand-property',
       ],
       [
         'a nested condition',
