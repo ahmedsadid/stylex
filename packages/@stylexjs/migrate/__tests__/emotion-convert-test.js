@@ -103,6 +103,22 @@ export const App = () => (
 `);
   });
 
+  test('approved conditions become property-first StyleX values', () => {
+    const source = `${PRAGMA}export const App = () => (
+  <div css={{ color: 'base', ':hover': { color: 'hover' }, ':focus': { color: 'focus', opacity: 1 } }} />
+);
+`;
+    const converted = convert(source);
+    expect(converted).toContain(`color: {
+      default: 'base',
+      ':hover': 'hover',
+      ':focus': 'focus',
+    },`);
+    expect(converted).toContain(`opacity: {
+      ':focus': 1,
+    },`);
+  });
+
   test('everything outside the converted spans is untouched', () => {
     const source = `${PRAGMA}import React from 'react';
 

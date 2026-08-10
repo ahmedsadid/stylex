@@ -109,6 +109,28 @@ describe('emotion discovery', () => {
     expect(result.sites[0].start).toBeLessThan(result.sites[1].start);
   });
 
+  test('reads the approved hover and focus condition grammar in authored order', () => {
+    const result = read(`${PRAGMA}const App = () => (
+  <div css={{ color: 'base', ':hover': { color: 'hover' }, ':focus': { color: 'focus', opacity: 1 } }} />
+);`);
+    expect(result.refusals).toEqual([]);
+    expect(result.sites[0].style.declarations).toEqual([
+      { property: 'color', value: 'base' },
+      { property: 'color', value: 'hover', condition: ':hover' },
+      { property: 'color', value: 'focus', condition: ':focus' },
+      { property: 'opacity', value: 1, condition: ':focus' },
+    ]);
+  });
+
+  test('duplicate condition blocks use only the last object value', () => {
+    const result = read(`${PRAGMA}const App = () => (
+  <div css={{ ':hover': { color: 'discarded' }, ':hover': { opacity: 1 } }} />
+);`);
+    expect(result.sites[0].style.declarations).toEqual([
+      { property: 'opacity', value: 1, condition: ':hover' },
+    ]);
+  });
+
   test('string keys are accepted when they are already camelCase', () => {
     const result = read(
       `${PRAGMA}const App = () => <div css={{ 'fontSize': 12 }} />;`,
@@ -141,8 +163,13 @@ describe('emotion discovery', () => {
         'computed-style-key',
       ],
       [
-        'a nested object',
-        `${PRAGMA}const App = () => <div css={{ ':hover': { color: 'red' } }} />;`,
+        'an unapproved condition',
+        `${PRAGMA}const App = () => <div css={{ ':active': { color: 'red' } }} />;`,
+        'unsupported-condition',
+      ],
+      [
+        'a nested condition',
+        `${PRAGMA}const App = () => <div css={{ ':hover': { ':focus': { color: 'red' } } }} />;`,
         'nested-style-object',
       ],
       [

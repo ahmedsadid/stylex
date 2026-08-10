@@ -84,19 +84,30 @@ export function serializeValue(value: StaticValue): string {
  * can change the result, and sorted keys satisfy StyleX's own lint rule without
  * anyone having to run an autofix over the file.
  */
-function sortedDeclarations(
+function sortedProperties(
   declarations: $ReadOnlyArray<Declaration>,
-): $ReadOnlyArray<Declaration> {
-  return [...declarations].sort((a, b) =>
-    a.property < b.property ? -1 : a.property > b.property ? 1 : 0,
-  );
+): $ReadOnlyArray<string> {
+  return [
+    ...new Set(declarations.map((declaration) => declaration.property)),
+  ].sort();
 }
 
 export function emitStyleObject(style: StyleObject, indent: string): string {
-  const lines = sortedDeclarations(style.declarations).map(
-    (declaration) =>
-      `${indent}  ${declaration.property}: ${serializeValue(declaration.value)},`,
-  );
+  const lines = sortedProperties(style.declarations).flatMap((property) => {
+    const declarations = style.declarations.filter(
+      (declaration) => declaration.property === property,
+    );
+    if (declarations.every((declaration) => declaration.condition == null)) {
+      const declaration = declarations[declarations.length - 1];
+      return [`${indent}  ${property}: ${serializeValue(declaration.value)},`];
+    }
+    const values = declarations.map((declaration) => {
+      const condition = declaration.condition ?? 'default';
+      const key = condition === 'default' ? condition : `'${condition}'`;
+      return `${indent}    ${key}: ${serializeValue(declaration.value)},`;
+    });
+    return [`${indent}  ${property}: {`, ...values, `${indent}  },`];
+  });
   return `{\n${lines.join('\n')}\n${indent}}`;
 }
 

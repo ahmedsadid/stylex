@@ -10,7 +10,7 @@
 import { getPriority } from '@stylexjs/shared';
 import { walk } from '../../static/walk';
 import { styleObject } from '../../static/ir';
-import type { Declaration, StyleObject } from '../../static/ir';
+import type { Condition, Declaration, StyleObject } from '../../static/ir';
 
 /**
  * Emotion discovery for the mechanical lane.
@@ -29,6 +29,7 @@ export type RefusalReason =
   | 'spread-in-style-object'
   | 'computed-style-key'
   | 'nested-style-object'
+  | 'unsupported-condition'
   | 'template-literal-value'
   | 'non-literal-value'
   | 'css-with-class-or-style-prop'
@@ -83,6 +84,10 @@ function commentDirectiveLines(value: string): $ReadOnlyArray<string> {
 // module deciding what a declaration means — the mechanical lane handles only
 // names that are already in the shape StyleX wants.
 const SUPPORTED_PROPERTY_NAME = /^[a-zA-Z][a-zA-Z0-9]*$/;
+const SUPPORTED_CONDITIONS: $ReadOnlySet<string> = new Set([
+  ':hover',
+  ':focus',
+]);
 
 /**
  * Shorthands are refused wholesale in M2.
@@ -165,11 +170,46 @@ export function usesEmotion(ast: $FlowFixMe): boolean {
   return false;
 }
 
-function readDeclarations(
+function propertyName(property: $FlowFixMe): string | null {
+  if (property.type !== 'ObjectProperty' || property.computed === true) {
+    return null;
+  }
+  const key = property.key;
+  if (key.type === 'Identifier' && typeof key.name === 'string') {
+    return key.name;
+  }
+  if (key.type === 'StringLiteral' && typeof key.value === 'string') {
+    return key.value;
+  }
+  return null;
+}
+
+/** Match JavaScript object semantics: a later static key replaces an earlier one. */
+function survivingProperties(
+  properties: $ReadOnlyArray<$FlowFixMe>,
+): $ReadOnlyArray<$FlowFixMe> {
+  const seen = new Set<string>();
+  const result: Array<$FlowFixMe> = [];
+  for (let index = properties.length - 1; index >= 0; index--) {
+    const property = properties[index];
+    const name = propertyName(property);
+    if (name != null) {
+      if (seen.has(name)) continue;
+      seen.add(name);
+    }
+    result.unshift(property);
+  }
+  return result;
+}
+
+function readLiteralDeclarations(
   objectExpression: $FlowFixMe,
-): { +ok: true, +style: StyleObject } | { +ok: false, +reason: RefusalReason } {
-  const declarations: Array<Declaration> = [];
-  for (const property of objectExpression.properties) {
+  condition?: Condition,
+):
+  | { +ok: true, +declarations: $ReadOnlyArray<Declaration> }
+  | { +ok: false, +reason: RefusalReason } {
+  const declarations = [];
+  for (const property of survivingProperties(objectExpression.properties)) {
     if (property.type === 'SpreadElement') {
       return { ok: false, reason: 'spread-in-style-object' };
     }
@@ -179,20 +219,10 @@ function readDeclarations(
     if (property.computed === true) {
       return { ok: false, reason: 'computed-style-key' };
     }
-
-    const key = property.key;
-    let name: string;
-    if (key.type === 'Identifier' && typeof key.name === 'string') {
-      name = key.name;
-    } else if (key.type === 'StringLiteral' && typeof key.value === 'string') {
-      name = key.value;
-    } else {
+    const name = propertyName(property);
+    if (name == null) {
       return { ok: false, reason: 'computed-style-key' };
     }
-    // The value is classified before the name, because when the value is a
-    // nested block the key is a selector rather than a property, and
-    // "unsupported property name" would be a misleading way to say
-    // "conditions are not supported yet".
     const value = property.value;
     if (
       (value.type === 'StringLiteral' && typeof value.value === 'string') ||
@@ -204,46 +234,58 @@ function readDeclarations(
       if (isShorthandProperty(name)) {
         return { ok: false, reason: 'shorthand-property' };
       }
-      // `1e999` is a numeric literal that parses to Infinity, which has no
-      // style meaning and cannot be emitted back as source.
       if (typeof value.value === 'number' && !Number.isFinite(value.value)) {
         return { ok: false, reason: 'non-finite-number' };
       }
-      declarations.push({ property: name, value: value.value });
+      declarations.push({
+        property: name,
+        value: value.value,
+        ...(condition == null ? {} : { condition }),
+      });
     } else if (value.type === 'ObjectExpression') {
       return { ok: false, reason: 'nested-style-object' };
     } else if (value.type === 'TemplateLiteral') {
       return { ok: false, reason: 'template-literal-value' };
     } else {
-      // Identifiers, calls, member expressions, unary minus and everything
-      // else: their CSS meaning cannot be established without running the
-      // program, so the mechanical lane does not touch them.
       return { ok: false, reason: 'non-literal-value' };
     }
   }
-  return { ok: true, style: styleObject(lastWins(declarations)) };
+  return { ok: true, declarations: Object.freeze(declarations) };
 }
 
-/**
- * `{color: 'red', color: 'blue'}` is a single-property object by the time any
- * styling library sees it — the engine resolves the duplicate before Emotion is
- * called. Keeping only the last occurrence reproduces that, rather than
- * inventing a second declaration that never existed at runtime.
- */
-function lastWins(
-  declarations: $ReadOnlyArray<Declaration>,
-): $ReadOnlyArray<Declaration> {
-  const seenLater = new Set<string>();
-  const result: Array<Declaration> = [];
-  for (let i = declarations.length - 1; i >= 0; i--) {
-    const declaration = declarations[i];
-    if (seenLater.has(declaration.property)) {
+function readDeclarations(
+  objectExpression: $FlowFixMe,
+): { +ok: true, +style: StyleObject } | { +ok: false, +reason: RefusalReason } {
+  const declarations: Array<Declaration> = [];
+  for (const property of survivingProperties(objectExpression.properties)) {
+    if (property.type === 'SpreadElement') {
+      return { ok: false, reason: 'spread-in-style-object' };
+    }
+    if (property.type !== 'ObjectProperty') {
+      return { ok: false, reason: 'non-literal-value' };
+    }
+    if (property.computed === true) {
+      return { ok: false, reason: 'computed-style-key' };
+    }
+    const name = propertyName(property);
+    if (name == null) {
+      return { ok: false, reason: 'computed-style-key' };
+    }
+    if (property.value.type === 'ObjectExpression') {
+      if (!SUPPORTED_CONDITIONS.has(name)) {
+        return { ok: false, reason: 'unsupported-condition' };
+      }
+      const condition: Condition = name === ':hover' ? ':hover' : ':focus';
+      const conditional = readLiteralDeclarations(property.value, condition);
+      if (!conditional.ok) return conditional;
+      declarations.push(...conditional.declarations);
       continue;
     }
-    seenLater.add(declaration.property);
-    result.unshift(declaration);
+    const ordinary = readLiteralDeclarations({ properties: [property] });
+    if (!ordinary.ok) return ordinary;
+    declarations.push(...ordinary.declarations);
   }
-  return result;
+  return { ok: true, style: styleObject(declarations) };
 }
 
 function discoverActive(ast: $FlowFixMe): DiscoveryResult {

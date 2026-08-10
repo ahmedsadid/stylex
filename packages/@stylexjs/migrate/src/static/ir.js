@@ -22,11 +22,13 @@
  */
 
 export type StaticValue = string | number;
+export type Condition = ':hover' | ':focus';
 
 export type Declaration = {
   // The property name exactly as authored (camelCase, as both libraries take).
   +property: string,
   +value: StaticValue,
+  +condition?: Condition,
 };
 
 export type StyleObject = {
@@ -41,4 +43,10 @@ export function styleObject(
 
 export function isEmptyStyle(style: StyleObject): boolean {
   return style.declarations.length === 0;
+}
+
+export function hasConditions(style: StyleObject): boolean {
+  return style.declarations.some(
+    (declaration) => declaration.condition != null,
+  );
 }

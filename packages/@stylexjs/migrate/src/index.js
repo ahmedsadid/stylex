@@ -274,8 +274,13 @@ export type {
 export { parseSource, pluginsForFilename } from './static/parse';
 export type { ParseResult } from './static/parse';
 
-export { isEmptyStyle, styleObject } from './static/ir';
-export type { Declaration, StaticValue, StyleObject } from './static/ir';
+export { hasConditions, isEmptyStyle, styleObject } from './static/ir';
+export type {
+  Condition,
+  Declaration,
+  StaticValue,
+  StyleObject,
+} from './static/ir';
 
 export { walk } from './static/walk';
 
