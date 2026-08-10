@@ -81,15 +81,17 @@ export type ApplyPlanResult =
       +writes: $ReadOnlyArray<WriteResult>,
     };
 
-export const MECHANICAL_POLICY_ID: string = 'mechanical-static-v3';
+export const MECHANICAL_POLICY_ID: string = 'mechanical-static-v4';
 const LEGACY_MECHANICAL_POLICY_ID: string = 'mechanical-static-v1';
 const CONDITIONAL_MECHANICAL_POLICY_ID: string = 'mechanical-static-v2';
+const PSEUDO_ELEMENT_MECHANICAL_POLICY_ID: string = 'mechanical-static-v3';
 export const MECHANICAL_COMPARISON_MODEL: string = 'static-css-v3';
 export const MECHANICAL_COMPARISON_MODELS: $ReadOnlyArray<string> =
   Object.freeze([
     MECHANICAL_COMPARISON_MODEL,
     'cascade-referee-v1',
     'pseudo-element-referee-v1',
+    'media-query-referee-v1',
   ]);
 
 export function isMechanicalComparisonModel(model: mixed): boolean {
@@ -105,6 +107,13 @@ function policyAcceptsComparisonModel(policyId: string, model: mixed): boolean {
   if (policyId === CONDITIONAL_MECHANICAL_POLICY_ID) {
     return (
       model === MECHANICAL_COMPARISON_MODEL || model === 'cascade-referee-v1'
+    );
+  }
+  if (policyId === PSEUDO_ELEMENT_MECHANICAL_POLICY_ID) {
+    return (
+      model === MECHANICAL_COMPARISON_MODEL ||
+      model === 'cascade-referee-v1' ||
+      model === 'pseudo-element-referee-v1'
     );
   }
   return (
@@ -227,6 +236,7 @@ function validateEvidenceBundle(
   }
   if (
     evidence.policyId !== MECHANICAL_POLICY_ID &&
+    evidence.policyId !== PSEUDO_ELEMENT_MECHANICAL_POLICY_ID &&
     evidence.policyId !== CONDITIONAL_MECHANICAL_POLICY_ID &&
     evidence.policyId !== LEGACY_MECHANICAL_POLICY_ID
   ) {
