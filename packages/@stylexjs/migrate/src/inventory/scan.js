@@ -14,6 +14,8 @@ import { hashBytes } from '../kernel/hash';
 import { matchesGlob } from '../candidate/scope';
 import { discoverSyntax, usesEmotion } from '../adapters/emotion/discover';
 import { parseSource } from '../static/parse';
+import { analyzeProjectActivation } from './activation';
+import { analyzeLocalDependencies } from './resolve';
 import { createFact, inventoryIdentity, siteIdentity } from './model';
 import type {
   Classification,
@@ -23,6 +25,7 @@ import type {
   InventoryFile,
   Site,
 } from './model';
+import type { ProjectActivation } from './activation';
 
 const SKIPPED_DIRECTORIES: $ReadOnlySet<string> = new Set([
   '.git',
@@ -107,8 +110,14 @@ function activationFact(
   ast: $FlowFixMe,
   file: string,
   hasSyntax: boolean,
+  projectActivation: ProjectActivation,
 ): Fact | null {
-  if (usesEmotion(ast)) {
+  const localPragma = usesEmotion(ast);
+  const valueImport = hasEmotionValueImport(ast);
+  if (!hasSyntax && !localPragma && !valueImport) {
+    return null;
+  }
+  if (localPragma) {
     return createFact({
       kind: 'emotion-jsx-activation',
       status: 'known',
@@ -119,7 +128,28 @@ function activationFact(
       inputFiles: [file],
     });
   }
-  if (hasEmotionValueImport(ast)) {
+  if (projectActivation.status === 'known') {
+    return createFact({
+      kind: 'emotion-jsx-activation',
+      status: 'known',
+      value: {
+        source: 'project-config',
+        config: projectActivation.source,
+      },
+      provenance: projectActivation.provenance,
+      inputFiles: [file, ...projectActivation.inputFiles],
+    });
+  }
+  if (projectActivation.status === 'resolution-failed') {
+    return createFact({
+      kind: 'emotion-jsx-activation',
+      status: 'resolution-failed',
+      value: { source: null },
+      provenance: projectActivation.provenance,
+      inputFiles: [file, ...projectActivation.inputFiles],
+    });
+  }
+  if (valueImport) {
     return createFact({
       kind: 'emotion-jsx-activation',
       status: 'inferred',
@@ -152,7 +182,16 @@ function classificationFor(
   supported: boolean,
   refusalReason: string | null,
   activation: Fact,
+  dependencyResolutionFailed: boolean,
 ): { +classification: Classification, +reasons: $ReadOnlyArray<string> } {
+  if (dependencyResolutionFailed) {
+    return {
+      classification: 'owner-decision',
+      reasons: Object.freeze([
+        'one or more local dependencies could not be resolved',
+      ]),
+    };
+  }
   if (activation.status !== 'known') {
     return {
       classification: 'owner-decision',
@@ -194,6 +233,7 @@ export function scanRepository({
   const sites: Array<Site> = [];
   const facts: Array<Fact> = [];
   const diagnostics: Array<InventoryDiagnostic> = [];
+  const projectActivation = analyzeProjectActivation(root);
 
   for (const file of sourceFiles(root, sourceGlobs)) {
     let bytes;
@@ -216,6 +256,7 @@ export function scanRepository({
         status: 'read-failed',
         siteIds: Object.freeze([]),
         factIds: Object.freeze([fact.id]),
+        dependencies: Object.freeze([]),
       });
       continue;
     }
@@ -238,6 +279,7 @@ export function scanRepository({
         status: 'read-failed',
         siteIds: Object.freeze([]),
         factIds: Object.freeze([fact.id]),
+        dependencies: Object.freeze([]),
       });
       continue;
     }
@@ -263,23 +305,43 @@ export function scanRepository({
         status: 'parse-failed',
         siteIds: Object.freeze([]),
         factIds: Object.freeze([fact.id]),
+        dependencies: Object.freeze([]),
       });
       continue;
     }
 
     const syntax = discoverSyntax(parsed.ast);
+    const dependencyAnalysis = analyzeLocalDependencies({
+      ast: parsed.ast,
+      repositoryRoot: root,
+      file,
+    });
+    facts.push(...dependencyAnalysis.facts);
+    const dependencyResolutionFailed = dependencyAnalysis.dependencies.some(
+      (dependency) => dependency.status === 'resolution-failed',
+    );
     const activation = activationFact(
       parsed.ast,
       file,
       syntax.sites.length > 0 || syntax.refusals.length > 0,
+      projectActivation,
     );
     const fileSiteIds = [];
-    const fileFactIds = activation == null ? [] : [activation.id];
+    const dependencyFactIds = dependencyAnalysis.facts.map((fact) => fact.id);
+    const fileFactIds = [
+      ...(activation == null ? [] : [activation.id]),
+      ...dependencyFactIds,
+    ];
     if (activation != null) {
       facts.push(activation);
       for (const raw of syntax.sites) {
         const span = { start: raw.start, end: raw.end };
-        const route = classificationFor(true, null, activation);
+        const route = classificationFor(
+          true,
+          null,
+          activation,
+          dependencyResolutionFailed,
+        );
         const site = Object.freeze({
           id: siteIdentity({
             adapter: 'emotion',
@@ -295,7 +357,7 @@ export function scanRepository({
           sourceHash,
           syntax: 'supported',
           refusalReason: null,
-          factIds: Object.freeze([activation.id]),
+          factIds: Object.freeze([activation.id, ...dependencyFactIds]),
           classification: route.classification,
           routingReasons: route.reasons,
         });
@@ -304,7 +366,12 @@ export function scanRepository({
       }
       for (const raw of syntax.refusals) {
         const span = { start: raw.start, end: raw.end };
-        const route = classificationFor(false, raw.reason, activation);
+        const route = classificationFor(
+          false,
+          raw.reason,
+          activation,
+          dependencyResolutionFailed,
+        );
         const site = Object.freeze({
           id: siteIdentity({
             adapter: 'emotion',
@@ -320,7 +387,7 @@ export function scanRepository({
           sourceHash,
           syntax: 'refused',
           refusalReason: raw.reason,
-          factIds: Object.freeze([activation.id]),
+          factIds: Object.freeze([activation.id, ...dependencyFactIds]),
           classification: route.classification,
           routingReasons: route.reasons,
         });
@@ -334,6 +401,7 @@ export function scanRepository({
       status: 'scanned',
       siteIds: Object.freeze(fileSiteIds.sort()),
       factIds: Object.freeze(fileFactIds),
+      dependencies: dependencyAnalysis.dependencies,
     });
   }
 
@@ -352,7 +420,7 @@ export function scanRepository({
     diagnostics: Object.freeze(
       diagnostics.sort((a, b) => a.file.localeCompare(b.file)),
     ),
-    configInputs: Object.freeze([]),
+    configInputs: projectActivation.inputFiles,
   };
   return Object.freeze({
     id: inventoryIdentity(stable),

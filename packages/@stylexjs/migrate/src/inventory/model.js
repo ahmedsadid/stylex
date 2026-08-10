@@ -53,12 +53,20 @@ export type Site = {
   +routingReasons: $ReadOnlyArray<string>,
 };
 
+export type LocalDependency = {
+  +specifier: string,
+  +status: 'known' | 'resolution-failed',
+  +resolvedPath: string | null,
+  +factId: string,
+};
+
 export type InventoryFile = {
   +path: string,
   +sourceHash: string | null,
   +status: 'scanned' | 'parse-failed' | 'read-failed',
   +siteIds: $ReadOnlyArray<string>,
   +factIds: $ReadOnlyArray<string>,
+  +dependencies: $ReadOnlyArray<LocalDependency>,
 };
 
 export type InventoryDiagnostic = {

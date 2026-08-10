@@ -61,6 +61,10 @@ export type {
   SourceSpan,
 } from './inventory/model';
 export { scanRepository } from './inventory/scan';
+export { analyzeProjectActivation } from './inventory/activation';
+export type { ProjectActivation } from './inventory/activation';
+export { analyzeLocalDependencies } from './inventory/resolve';
+export type { LocalDependency } from './inventory/model';
 
 export {
   hashFields,
