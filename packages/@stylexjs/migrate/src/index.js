@@ -10,6 +10,31 @@
 export { VERSION } from './version';
 
 export {
+  RECORD_COLLECTIONS,
+  STATE_DIRECTORY,
+  STATE_SCHEMA_VERSION,
+  initializeProject,
+  openProject,
+  projectDirectories,
+  readArtifact,
+  readConfig,
+  readRecord,
+  readSchemaVersion,
+  writeArtifact,
+  writeConfig,
+  writeRecord,
+} from './state/project';
+export type {
+  ArtifactReference,
+  ProjectConfig,
+  ProjectState,
+  RecordEnvelope,
+} from './state/project';
+
+export { canonicalJson, immutableJson, parseJson } from './state/json';
+export type { JsonValue } from './state/json';
+
+export {
   hashFields,
   hashString,
   shortHash,
