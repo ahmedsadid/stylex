@@ -333,6 +333,27 @@ describe('M5 evidence bundles and policy verdicts', () => {
     expect(verdict.policyId).toBe('mechanical-repository-v2');
   });
 
+  test('the repository verdict rejects an unreviewed comparison model', () => {
+    const candidate = record({
+      proposer: { kind: 'deterministic', version: 'fixture-v1' },
+      classification: 'mechanical',
+      includeStatic: true,
+      comparisonModel: 'unreviewed-model-v1',
+    });
+    const evidence = inputs(candidate);
+    const verdict = evaluateRepositoryEvidence({
+      bundle: createRepositoryEvidenceBundle({
+        ...evidence,
+        candidates: [candidate],
+      }),
+      candidates: [candidate],
+    });
+    expect(verdict.outcome).toBe('rejected');
+    expect(verdict.missingRequirements.join('\n')).toContain(
+      'unreviewed-model-v1',
+    );
+  });
+
   test('unavailable is not pass, and contextual review carries the runtime warning', () => {
     const mechanical = record({
       proposer: { kind: 'deterministic', version: 'fixture-v1' },

@@ -82,6 +82,7 @@ export type ApplyPlanResult =
     };
 
 export const MECHANICAL_POLICY_ID: string = 'mechanical-static-v2';
+const LEGACY_MECHANICAL_POLICY_ID: string = 'mechanical-static-v1';
 export const MECHANICAL_COMPARISON_MODEL: string = 'static-css-v3';
 export const MECHANICAL_COMPARISON_MODELS: $ReadOnlyArray<string> =
   Object.freeze([MECHANICAL_COMPARISON_MODEL, 'cascade-referee-v1']);
@@ -90,6 +91,12 @@ export function isMechanicalComparisonModel(model: mixed): boolean {
   return (
     typeof model === 'string' && MECHANICAL_COMPARISON_MODELS.includes(model)
   );
+}
+
+function policyAcceptsComparisonModel(policyId: string, model: mixed): boolean {
+  return policyId === LEGACY_MECHANICAL_POLICY_ID
+    ? model === MECHANICAL_COMPARISON_MODEL
+    : policyId === MECHANICAL_POLICY_ID && isMechanicalComparisonModel(model);
 }
 
 const REQUIRED_MECHANICAL_CHECKS: $ReadOnlyArray<{
@@ -205,7 +212,10 @@ function validateEvidenceBundle(
   if (evidence.snapshotId !== expectedSnapshotId) {
     return `evidence for candidate ${candidate.id} belongs to a different snapshot`;
   }
-  if (evidence.policyId !== MECHANICAL_POLICY_ID) {
+  if (
+    evidence.policyId !== MECHANICAL_POLICY_ID &&
+    evidence.policyId !== LEGACY_MECHANICAL_POLICY_ID
+  ) {
     return `candidate ${candidate.id} uses unsupported evidence policy ${evidence.policyId}`;
   }
   if (evidence.results.length === 0) {
@@ -255,7 +265,7 @@ function validateEvidenceBundle(
     }
     if (
       result.check === 'static-css-comparison' &&
-      !isMechanicalComparisonModel(result.subject.model)
+      !policyAcceptsComparisonModel(evidence.policyId, result.subject.model)
     ) {
       return (
         `static CSS evidence for ${result.subject.file} must use one of ` +

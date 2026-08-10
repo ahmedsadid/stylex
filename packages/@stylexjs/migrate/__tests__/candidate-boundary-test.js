@@ -1070,6 +1070,27 @@ export const Button = () => <button css={{ color: 'base', ':hover': { color: 'ho
       expect(readFile(repo, 'src/Button.js')).toBe(INITIAL['src/Button.js']);
     });
 
+    test('an unrecognized comparison model is not admitted by policy v2', () => {
+      const { candidate, snapshot, scopeRules } = planFor();
+      const results = passingEvidence(candidate, snapshot).map((item) =>
+        item.check === 'static-css-comparison'
+          ? makeEvidence({
+              ...item,
+              subject: { ...item.subject, model: 'unreviewed-model-v1' },
+            })
+          : item,
+      );
+      const evidence = bundleEvidence(candidate, snapshot, results);
+      const result = applyPlan(
+        { entries: [{ candidate, snapshot, scopeRules, evidence }] },
+        { recoveryRoot },
+      );
+      expect(result.status).toBe('rejected');
+      if (result.status === 'rejected') {
+        expect(result.reason).toContain('must use one of');
+      }
+    });
+
     test('an arbitrary passing check cannot replace the required policy', () => {
       const { candidate, snapshot, scopeRules } = planFor();
       const change = candidate.changes[0];
