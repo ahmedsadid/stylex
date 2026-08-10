@@ -357,9 +357,11 @@ export {
 } from './referee/compilerFacts';
 export {
   activationStates,
+  MEDIA_QUERY_REFEREE_MODEL,
   orderStyleXDeclarations,
   PSEUDO_ELEMENT_REFEREE_MODEL,
   referee,
+  refereeMediaQueries,
   refereePseudoElements,
   REFEREE_MODEL,
 } from './referee/model';

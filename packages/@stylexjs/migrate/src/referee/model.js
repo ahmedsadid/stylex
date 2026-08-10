@@ -11,6 +11,7 @@ import { canonicalProperty, canonicalValue } from '../compare/model';
 
 export const REFEREE_MODEL: string = 'cascade-referee-v1';
 export const PSEUDO_ELEMENT_REFEREE_MODEL: string = 'pseudo-element-referee-v1';
+export const MEDIA_QUERY_REFEREE_MODEL: string = 'media-query-referee-v1';
 
 export type Specificity = $ReadOnly<[number, number, number]>;
 
@@ -63,6 +64,10 @@ type RefereeGrammar = {
   +conditions: $ReadOnlySet<string>,
   +maximumConditions: number,
   +pseudoElements: $ReadOnlySet<string>,
+  +conditionSpecificity: {
+    +source: number,
+    +target: number,
+  },
 };
 
 const CONDITIONAL_GRAMMAR: RefereeGrammar = Object.freeze({
@@ -70,6 +75,7 @@ const CONDITIONAL_GRAMMAR: RefereeGrammar = Object.freeze({
   conditions: FIRST_CONDITIONS,
   maximumConditions: 1,
   pseudoElements: new Set(),
+  conditionSpecificity: { source: 1, target: 1 },
 });
 
 const PSEUDO_ELEMENT_GRAMMAR: RefereeGrammar = Object.freeze({
@@ -77,6 +83,7 @@ const PSEUDO_ELEMENT_GRAMMAR: RefereeGrammar = Object.freeze({
   conditions: new Set(),
   maximumConditions: 0,
   pseudoElements: FIRST_PSEUDO_ELEMENTS,
+  conditionSpecificity: { source: 1, target: 1 },
 });
 
 function compareSpecificity(first: Specificity, second: Specificity): number {
@@ -201,7 +208,7 @@ function grammarReasons(
     }
     const expectedSpecificity: Specificity = [
       0,
-      1 + declaration.conditions.length,
+      1 + declaration.conditions.length * grammar.conditionSpecificity[side],
       declaration.pseudoElement == null ? 0 : 1,
     ];
     if (
@@ -361,4 +368,39 @@ export function refereePseudoElements(
   target: $ReadOnlyArray<RefereeDeclaration>,
 ): RefereeResult {
   return compareWithGrammar(source, target, PSEUDO_ELEMENT_GRAMMAR);
+}
+
+/** Compare one exact media-query condition as a shared boolean state. */
+export function refereeMediaQueries(
+  source: $ReadOnlyArray<RefereeDeclaration>,
+  target: $ReadOnlyArray<RefereeDeclaration>,
+): RefereeResult {
+  const conditions = new Set(
+    [...source, ...target].flatMap((declaration) => declaration.conditions),
+  );
+  if (
+    conditions.size !== 1 ||
+    [...conditions].some((condition) => !/^@media [^\r\n{}]+$/.test(condition))
+  ) {
+    return Object.freeze({
+      status: 'unsupported',
+      model: MEDIA_QUERY_REFEREE_MODEL,
+      reasons: Object.freeze([
+        'media-query grammar requires one exact, non-nested @media condition',
+      ]),
+    });
+  }
+  return compareWithGrammar(
+    source,
+    target,
+    Object.freeze({
+      model: MEDIA_QUERY_REFEREE_MODEL,
+      conditions,
+      maximumConditions: 1,
+      pseudoElements: new Set(),
+      // Emotion's eventual class selector remains single-specificity inside
+      // its at-rule. StyleX deliberately emits `.class.class` for media rules.
+      conditionSpecificity: { source: 0, target: 1 },
+    }),
+  );
 }

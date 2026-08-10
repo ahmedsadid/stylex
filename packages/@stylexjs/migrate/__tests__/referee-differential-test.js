@@ -93,7 +93,7 @@ describe('Emotion and StyleX differential cascade fixtures', () => {
     }
   });
 
-  test('unknown pseudo-classes and at-rules remain outside the grammar', () => {
+  test('unknown pseudo-classes are rejected while media queries stay explicit', () => {
     expect(
       observeEmotionSerialization({
         ':focus-visible': { color: 'focusVisible' },
@@ -102,13 +102,19 @@ describe('Emotion and StyleX differential cascade fixtures', () => {
       ok: false,
       reason: 'Emotion emitted unsupported selector :focus-visible',
     });
-    expect(
-      observeEmotionSerialization({
-        '@media (min-width: 1px)': { color: 'media' },
-      }),
-    ).toEqual({
-      ok: false,
-      reason: 'Emotion emitted unsupported atrule node',
+    const media = observeEmotionSerialization({
+      '@media (min-width: 1px)': { color: 'media' },
     });
+    expect(media.ok).toBe(true);
+    if (media.ok) {
+      expect(media.declarations).toEqual([
+        expect.objectContaining({
+          property: 'color',
+          value: 'media',
+          conditions: ['@media (min-width: 1px)'],
+          specificity: [0, 1, 0],
+        }),
+      ]);
+    }
   });
 });

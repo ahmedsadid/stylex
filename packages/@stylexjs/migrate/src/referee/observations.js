@@ -66,6 +66,7 @@ function declarationFacts({
   sourceOrder,
   stylexPriority,
   className,
+  factsOverride,
 }: {
   +node: $FlowFixMe,
   +selector: string,
@@ -73,8 +74,9 @@ function declarationFacts({
   +sourceOrder: number,
   +stylexPriority: number | null,
   +className?: string,
+  +factsOverride?: SelectorFacts,
 }): RefereeDeclaration | null {
-  const facts = selectorFacts(selector, className);
+  const facts = factsOverride ?? selectorFacts(selector, className);
   if (facts == null) {
     return null;
   }
@@ -127,10 +129,40 @@ export function observeEmotionSerialization(style: mixed): CascadeObservation {
       continue;
     }
     if (node.type !== 'rule') {
-      return {
-        ok: false,
-        reason: `Emotion emitted unsupported ${String(node.type)} node`,
-      };
+      if (
+        node.type !== 'atrule' ||
+        String(node.name) !== 'media' ||
+        String(node.params) === ''
+      ) {
+        return {
+          ok: false,
+          reason: `Emotion emitted unsupported ${String(node.type)} node`,
+        };
+      }
+      const condition = `@media ${String(node.params)}`;
+      for (const child of node.nodes ?? []) {
+        if (child.type !== 'decl') {
+          return {
+            ok: false,
+            reason: `Emotion emitted nested ${String(child.type)} media node`,
+          };
+        }
+        const declaration = declarationFacts({
+          node: child,
+          selector: 'default',
+          id: `emotion-${sourceOrder}`,
+          sourceOrder,
+          stylexPriority: null,
+          factsOverride: {
+            conditions: [condition],
+            pseudoElement: null,
+            specificity: [0, 1, 0],
+          },
+        });
+        if (declaration != null) declarations.push(declaration);
+        sourceOrder++;
+      }
+      continue;
     }
     const selector = String(node.selector);
     if (selectorFacts(selector) == null) {
@@ -187,20 +219,58 @@ export function observeStyleXRules(
       };
     }
     const nodes = root.nodes ?? [];
-    if (nodes.length !== 1 || nodes[0].type !== 'rule') {
+    if (nodes.length !== 1) {
       return {
         ok: false,
         reason: 'StyleX emitted an unsupported conditional rule',
       };
     }
-    const selector = String(nodes[0].selector);
-    if (selectorFacts(selector, rule.className) == null) {
+    let ruleNode = nodes[0];
+    let factsOverride;
+    if (ruleNode.type === 'atrule') {
+      if (
+        String(ruleNode.name) !== 'media' ||
+        String(ruleNode.params) === '' ||
+        (ruleNode.nodes ?? []).length !== 1 ||
+        ruleNode.nodes[0].type !== 'rule'
+      ) {
+        return {
+          ok: false,
+          reason: 'StyleX emitted an unsupported at-rule shape',
+        };
+      }
+      const condition = `@media ${String(ruleNode.params)}`;
+      ruleNode = ruleNode.nodes[0];
+      const expectedSelector = `.${rule.className}.${rule.className}`;
+      if (String(ruleNode.selector) !== expectedSelector) {
+        return {
+          ok: false,
+          reason: `StyleX emitted unsupported media selector ${String(ruleNode.selector)}`,
+        };
+      }
+      factsOverride = {
+        conditions: [condition],
+        pseudoElement: null,
+        specificity: [0, 2, 0],
+      };
+    }
+    if (ruleNode.type !== 'rule') {
+      return {
+        ok: false,
+        reason: 'StyleX emitted an unsupported conditional rule',
+      };
+    }
+    const selector = String(ruleNode.selector);
+    if (
+      factsOverride == null &&
+      selectorFacts(selector, rule.className) == null
+    ) {
       return {
         ok: false,
         reason: `StyleX emitted unsupported selector ${selector}`,
       };
     }
-    for (const node of nodes[0].nodes ?? []) {
+    for (const node of ruleNode.nodes ?? []) {
       if (node.type !== 'decl') {
         return {
           ok: false,
@@ -214,6 +284,7 @@ export function observeStyleXRules(
         id: `stylex-${rule.className}-${sourceOrder}`,
         sourceOrder,
         stylexPriority: rule.priority,
+        factsOverride,
       });
       if (declaration == null) {
         return {
