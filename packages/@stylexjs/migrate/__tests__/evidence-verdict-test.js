@@ -330,7 +330,7 @@ describe('M5 evidence bundles and policy verdicts', () => {
       candidates: [candidate],
     });
     expect(verdict.outcome).toBe('auto-eligible');
-    expect(verdict.policyId).toBe('mechanical-repository-v4');
+    expect(verdict.policyId).toBe('mechanical-repository-v5');
   });
 
   test('the repository verdict accepts the pseudo-element referee model', () => {
@@ -349,7 +349,7 @@ describe('M5 evidence bundles and policy verdicts', () => {
       candidates: [candidate],
     });
     expect(verdict.outcome).toBe('auto-eligible');
-    expect(verdict.policyId).toBe('mechanical-repository-v4');
+    expect(verdict.policyId).toBe('mechanical-repository-v5');
   });
 
   test('the repository verdict accepts the media-query referee model', () => {
@@ -368,7 +368,26 @@ describe('M5 evidence bundles and policy verdicts', () => {
       candidates: [candidate],
     });
     expect(verdict.outcome).toBe('auto-eligible');
-    expect(verdict.policyId).toBe('mechanical-repository-v4');
+    expect(verdict.policyId).toBe('mechanical-repository-v5');
+  });
+
+  test('the repository verdict accepts the supports nesting referee model', () => {
+    const candidate = record({
+      proposer: { kind: 'deterministic', version: 'fixture-v1' },
+      classification: 'mechanical',
+      includeStatic: true,
+      comparisonModel: 'supports-nesting-referee-v1',
+    });
+    const evidence = inputs(candidate);
+    const verdict = evaluateRepositoryEvidence({
+      bundle: createRepositoryEvidenceBundle({
+        ...evidence,
+        candidates: [candidate],
+      }),
+      candidates: [candidate],
+    });
+    expect(verdict.outcome).toBe('auto-eligible');
+    expect(verdict.policyId).toBe('mechanical-repository-v5');
   });
 
   test('the repository verdict rejects an unreviewed comparison model', () => {

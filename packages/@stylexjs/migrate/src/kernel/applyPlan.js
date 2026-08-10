@@ -81,10 +81,11 @@ export type ApplyPlanResult =
       +writes: $ReadOnlyArray<WriteResult>,
     };
 
-export const MECHANICAL_POLICY_ID: string = 'mechanical-static-v4';
+export const MECHANICAL_POLICY_ID: string = 'mechanical-static-v5';
 const LEGACY_MECHANICAL_POLICY_ID: string = 'mechanical-static-v1';
 const CONDITIONAL_MECHANICAL_POLICY_ID: string = 'mechanical-static-v2';
 const PSEUDO_ELEMENT_MECHANICAL_POLICY_ID: string = 'mechanical-static-v3';
+const MEDIA_QUERY_MECHANICAL_POLICY_ID: string = 'mechanical-static-v4';
 export const MECHANICAL_COMPARISON_MODEL: string = 'static-css-v3';
 export const MECHANICAL_COMPARISON_MODELS: $ReadOnlyArray<string> =
   Object.freeze([
@@ -92,6 +93,7 @@ export const MECHANICAL_COMPARISON_MODELS: $ReadOnlyArray<string> =
     'cascade-referee-v1',
     'pseudo-element-referee-v1',
     'media-query-referee-v1',
+    'supports-nesting-referee-v1',
   ]);
 
 export function isMechanicalComparisonModel(model: mixed): boolean {
@@ -114,6 +116,12 @@ function policyAcceptsComparisonModel(policyId: string, model: mixed): boolean {
       model === MECHANICAL_COMPARISON_MODEL ||
       model === 'cascade-referee-v1' ||
       model === 'pseudo-element-referee-v1'
+    );
+  }
+  if (policyId === MEDIA_QUERY_MECHANICAL_POLICY_ID) {
+    return (
+      isMechanicalComparisonModel(model) &&
+      model !== 'supports-nesting-referee-v1'
     );
   }
   return (
