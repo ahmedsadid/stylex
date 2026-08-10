@@ -36,14 +36,26 @@ export {
   DEFAULT_EVIDENCE_CONFIG,
   normalizeEvidenceConfig,
 } from './evidence/config';
-export { runCommandProvider } from './evidence/command';
+export {
+  previewEvidenceOutput,
+  repositoryEvidenceIdentity,
+  runCommandProvider,
+} from './evidence/command';
 export type {
   CommandExecution,
   CommandExecutionContext,
+  CommandCacheLookup,
+  CommandCacheProbe,
   CommandRecord,
   PlatformFingerprint,
   RepositoryEvidenceResult,
 } from './evidence/command';
+export {
+  evidenceCacheKey,
+  loadCachedExecution,
+  saveCachedExecution,
+} from './evidence/cache';
+export type { EvidenceCacheInputs } from './evidence/cache';
 export { createEvidenceProviderRegistry } from './evidence/registry';
 export type {
   EvidenceProviderRegistry,

@@ -54,6 +54,20 @@ export type CommandExecution = {
   +fullOutput: Buffer,
 };
 
+export type CommandCacheProbe = {
+  +providerVersion: string,
+  +argv: $ReadOnlyArray<string>,
+  +versionArgv: $ReadOnlyArray<string>,
+  +cwd: string,
+  +allowedEnvKeys: $ReadOnlyArray<string>,
+  +environmentFingerprint: string,
+  +platform: PlatformFingerprint,
+};
+
+export type CommandCacheLookup = (
+  probe: CommandCacheProbe,
+) => Promise<CommandExecution | null>;
+
 export type CommandExecutionContext = {
   +workspaceRoot: string,
   +subject: RepositoryEvidenceSubject,
@@ -61,6 +75,7 @@ export type CommandExecutionContext = {
   +now?: () => string,
   +monotonicNow?: () => number,
   +outputPreviewBytes?: number,
+  +lookupCached?: CommandCacheLookup,
 };
 
 type ProcessResult = {
@@ -223,6 +238,23 @@ function preview(output: Buffer, limit: number): string {
   return `${output.subarray(0, limit).toString('utf8')}\n… output preview truncated; full log retained`;
 }
 
+export function previewEvidenceOutput(output: Buffer, limit: number): string {
+  return preview(output, limit);
+}
+
+export function repositoryEvidenceIdentity(
+  evidence: RepositoryEvidenceResult,
+): string {
+  const {
+    id: _id,
+    startedAt: _startedAt,
+    durationMs: _durationMs,
+    outputPreview: _outputPreview,
+    ...stable
+  } = evidence;
+  return shortHash(hashString(canonicalJson(stable as $FlowFixMe)));
+}
+
 function versionText(result: ProcessResult): string | null {
   if (result.error != null || result.timedOut || result.exitCode !== 0) {
     return null;
@@ -286,6 +318,28 @@ export async function runCommandProvider(
             `provider version command exited ${String(version.exitCode)}`);
       } else {
         providerVersion = reportedVersion;
+        const cached = await context.lookupCached?.(
+          Object.freeze({
+            providerVersion,
+            argv,
+            versionArgv: config.versionArgv,
+            cwd: config.cwd,
+            allowedEnvKeys: config.allowedEnv,
+            environmentFingerprint: environment.fingerprint,
+            platform,
+          }),
+        );
+        if (cached != null) {
+          if (
+            cached.evidence.provider !== config.id ||
+            cached.evidence.providerVersion !== providerVersion ||
+            cached.evidence.subject.id !== context.subject.id ||
+            cached.evidence.result !== 'pass'
+          ) {
+            throw new Error('Evidence cache returned an incompatible result');
+          }
+          return cached;
+        }
         processResult = await runProcess({
           argv,
           cwd,
@@ -347,12 +401,16 @@ export async function runCommandProvider(
     limitations: config.limitations,
     ...(detail == null ? {} : { detail }),
   };
-  const evidence = Object.freeze({
-    id: shortHash(hashString(canonicalJson(stable as $FlowFixMe))),
+  const provisional: RepositoryEvidenceResult = {
+    id: '',
     ...stable,
     startedAt,
     durationMs,
     outputPreview: preview(output, context.outputPreviewBytes ?? 8192),
+  };
+  const evidence = Object.freeze({
+    ...provisional,
+    id: repositoryEvidenceIdentity(provisional),
   });
   return Object.freeze({ evidence, fullOutput: output });
 }
