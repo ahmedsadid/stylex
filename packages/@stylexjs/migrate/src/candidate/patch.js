@@ -14,6 +14,7 @@ import {
   snapshotHash,
 } from '../kernel/snapshot';
 import { hashFields, hashString, shortHash } from '../kernel/hash';
+import { canonicalJson } from '../state/json';
 import type { WorkspaceSnapshot } from '../kernel/snapshot';
 import type { CandidateWorkspace } from './workspace';
 import type { FileChangeStatus } from './scope';
@@ -81,6 +82,32 @@ type RawChange = {
   +targetMode: string,
   +targetBlob: string,
 };
+
+function candidateIdentity({
+  baseSnapshotHash,
+  patchHash,
+  clusterIds,
+  proposer,
+  decisionArtifactHashes,
+}: {
+  +baseSnapshotHash: string,
+  +patchHash: string,
+  +clusterIds: $ReadOnlyArray<string>,
+  +proposer: Proposer,
+  +decisionArtifactHashes: $ReadOnlyArray<string>,
+}): string {
+  return shortHash(
+    hashString(
+      canonicalJson({
+        baseSnapshotHash,
+        patchHash,
+        clusterIds,
+        proposer,
+        decisionArtifactHashes,
+      }),
+    ),
+  );
+}
 
 /**
  * Parse `git diff --cached --raw -z`, which reports both file modes and the
@@ -359,20 +386,29 @@ export function createCandidatePatch({
     ]),
   );
 
+  const stableClusterIds = Object.freeze([...new Set(clusterIds)].sort());
+  const stableDecisions = Object.freeze(
+    [...new Set(decisionArtifactHashes)].sort(),
+  );
+  const stableProposer = Object.freeze({ ...proposer });
   const candidate: CandidatePatch = Object.freeze({
-    id: shortHash(
-      hashFields([baseSnapshotHash, patchHash, ...decisionArtifactHashes]),
-    ),
-    clusterIds: Object.freeze([...clusterIds]),
+    id: candidateIdentity({
+      baseSnapshotHash,
+      patchHash,
+      clusterIds: stableClusterIds,
+      proposer: stableProposer,
+      decisionArtifactHashes: stableDecisions,
+    }),
+    clusterIds: stableClusterIds,
     baseSnapshotHash,
     baseCommit: workspace.baseCommit,
     repositoryRoot: snapshot.repositoryRoot,
-    proposer: Object.freeze({ ...proposer }),
+    proposer: stableProposer,
     changes: Object.freeze(changes),
     touchedFiles: Object.freeze(touchedFiles),
     patchHash,
     patchText,
-    decisionArtifactHashes: Object.freeze([...decisionArtifactHashes]),
+    decisionArtifactHashes: stableDecisions,
   });
 
   return Object.freeze({ ok: true, candidate, snapshot: extended });
@@ -406,6 +442,24 @@ export function validateCandidatePatch(
   if (candidate.baseCommit !== snapshot.gitCommit) {
     return 'candidate and snapshot describe different base commits';
   }
+  if (
+    candidate.proposer.version === '' ||
+    (candidate.proposer.skillVersion != null &&
+      candidate.proposer.skillVersion === '')
+  ) {
+    return 'candidate proposer has no reproducible version';
+  }
+  for (const values of [
+    candidate.clusterIds,
+    candidate.decisionArtifactHashes,
+  ]) {
+    if (
+      new Set(values).size !== values.length ||
+      values.some((value, index) => index > 0 && values[index - 1] > value)
+    ) {
+      return 'candidate identity inputs are not canonical';
+    }
+  }
   for (const change of candidate.changes) {
     const contentHash =
       change.content == null ? null : hashString(change.content);
@@ -431,13 +485,13 @@ export function validateCandidatePatch(
   ) {
     return 'candidate touched-file list does not match its changes';
   }
-  const id = shortHash(
-    hashFields([
-      candidate.baseSnapshotHash,
-      patchHash,
-      ...candidate.decisionArtifactHashes,
-    ]),
-  );
+  const id = candidateIdentity({
+    baseSnapshotHash: candidate.baseSnapshotHash,
+    patchHash,
+    clusterIds: candidate.clusterIds,
+    proposer: candidate.proposer,
+    decisionArtifactHashes: candidate.decisionArtifactHashes,
+  });
   return id === candidate.id
     ? null
     : 'candidate id does not match its contents';

@@ -164,6 +164,43 @@ describe('the candidate boundary', () => {
     expect(readFile(repo, 'src/Button.js')).toBe('export const Button = 42;\n');
   });
 
+  test('candidate identity includes proposer policy and cluster ownership', () => {
+    function build(
+      proposer: Proposer,
+      clusterIds: $ReadOnlyArray<string>,
+    ): string {
+      const workspace = openWorkspace(['src/**']);
+      const contents = 'export const Button = 42;\n';
+      writeFiles(workspace.path, { 'src/Button.js': contents });
+      const snapshot = createSnapshot({
+        repositoryRoot: repo,
+        files: ['src/Button.js'],
+      });
+      const result = createCandidatePatch({
+        workspace,
+        snapshot,
+        proposer,
+        clusterIds,
+        ...(proposer.kind === 'deterministic'
+          ? { expectedContent: { 'src/Button.js': hashString(contents) } }
+          : {}),
+      });
+      if (!result.ok) {
+        throw new Error(result.reason);
+      }
+      return result.candidate.id;
+    }
+
+    const agent = build({ kind: 'agent', version: 'test-1' }, ['cluster-a']);
+    const deterministic = build({ kind: 'deterministic', version: 'test-1' }, [
+      'cluster-a',
+    ]);
+    const anotherCluster = build({ kind: 'agent', version: 'test-1' }, [
+      'cluster-b',
+    ]);
+    expect(new Set([agent, deterministic, anotherCluster]).size).toBe(3);
+  });
+
   test('a no-op candidate traverses the lifecycle and changes nothing', () => {
     const workspace = openWorkspace(['src/**']);
     const { candidate, snapshot } = propose(workspace, ['src/Button.js']);
