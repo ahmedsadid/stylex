@@ -32,6 +32,7 @@ export type Declaration = {
   +value: StaticValue,
   +condition?: Condition,
   +pseudoElement?: PseudoElement,
+  +mediaQuery?: string,
 };
 
 export type StyleObject = {
@@ -57,5 +58,11 @@ export function hasConditions(style: StyleObject): boolean {
 export function hasPseudoElements(style: StyleObject): boolean {
   return style.declarations.some(
     (declaration) => declaration.pseudoElement != null,
+  );
+}
+
+export function hasMediaQueries(style: StyleObject): boolean {
+  return style.declarations.some(
+    (declaration) => declaration.mediaQuery != null,
   );
 }

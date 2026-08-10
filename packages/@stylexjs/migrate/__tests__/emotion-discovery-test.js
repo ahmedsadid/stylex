@@ -153,6 +153,26 @@ describe('emotion discovery', () => {
     ]);
   });
 
+  test('reads one media-query block in authored order', () => {
+    const result = read(`${PRAGMA}const App = () => (
+  <div css={{ color: 'black', '@media (min-width: 800px)': { color: 'blue', opacity: 0.5 } }} />
+);`);
+    expect(result.refusals).toEqual([]);
+    expect(result.sites[0].style.declarations).toEqual([
+      { property: 'color', value: 'black' },
+      {
+        property: 'color',
+        value: 'blue',
+        mediaQuery: '@media (min-width: 800px)',
+      },
+      {
+        property: 'opacity',
+        value: 0.5,
+        mediaQuery: '@media (min-width: 800px)',
+      },
+    ]);
+  });
+
   test('refuses an effectful value hidden by a later pseudo-element block', () => {
     const result = read(`${PRAGMA}const App = () => (
   <div css={{ '::after': { color: sideEffect() }, '::after': { opacity: 1 } }} />
@@ -235,9 +255,29 @@ describe('emotion discovery', () => {
         'unsupported-condition',
       ],
       [
-        'an at-rule condition',
-        `${PRAGMA}const App = () => <div css={{ '@media (min-width: 1px)': { color: 'red' } }} />;`,
+        'an unsupported at-rule condition',
+        `${PRAGMA}const App = () => <div css={{ '@supports (display: grid)': { display: 'grid' } }} />;`,
         'unsupported-condition',
+      ],
+      [
+        'more than one media query',
+        `${PRAGMA}const App = () => <div css={{ '@media (min-width: 800px)': { color: 'red' }, '@media (min-width: 1200px)': { color: 'blue' } }} />;`,
+        'multiple-media-queries',
+      ],
+      [
+        'a media query mixed with a pseudo-class',
+        `${PRAGMA}const App = () => <div css={{ ':hover': { color: 'red' }, '@media (min-width: 800px)': { color: 'blue' } }} />;`,
+        'mixed-media-query-modifier',
+      ],
+      [
+        'a media query mixed with a pseudo-element',
+        `${PRAGMA}const App = () => <div css={{ '::before': { color: 'red' }, '@media (min-width: 800px)': { color: 'blue' } }} />;`,
+        'mixed-media-query-modifier',
+      ],
+      [
+        'a nested media query',
+        `${PRAGMA}const App = () => <div css={{ '@media (min-width: 800px)': { '@media (orientation: landscape)': { color: 'red' } } }} />;`,
+        'nested-style-object',
       ],
       [
         'an unsupported pseudo-element target',

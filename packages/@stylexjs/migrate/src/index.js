@@ -278,6 +278,7 @@ export type { ParseResult } from './static/parse';
 
 export {
   hasConditions,
+  hasMediaQueries,
   hasPseudoElements,
   isEmptyStyle,
   styleObject,

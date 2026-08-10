@@ -36,6 +36,8 @@ export type RefusalReason =
   | 'nested-style-object'
   | 'unsupported-condition'
   | 'mixed-condition-and-pseudo-element'
+  | 'mixed-media-query-modifier'
+  | 'multiple-media-queries'
   | 'template-literal-value'
   | 'non-literal-value'
   | 'css-with-class-or-style-prop'
@@ -98,6 +100,13 @@ const SUPPORTED_PSEUDO_ELEMENTS: $ReadOnlySet<string> = new Set([
   '::before',
   '::after',
 ]);
+const MEDIA_QUERY = /^@media [^\r\n{}]+$/;
+
+type DeclarationTarget =
+  | { +kind: 'root' }
+  | { +kind: 'condition', +condition: Condition }
+  | { +kind: 'pseudo-element', +pseudoElement: PseudoElement }
+  | { +kind: 'media-query', +mediaQuery: string };
 
 /**
  * Shorthands are refused wholesale.
@@ -227,8 +236,7 @@ function lastDeclarations(
 
 function readLiteralDeclarations(
   objectExpression: $FlowFixMe,
-  condition?: Condition,
-  pseudoElement?: PseudoElement,
+  target: DeclarationTarget = { kind: 'root' },
 ):
   | { +ok: true, +declarations: $ReadOnlyArray<Declaration> }
   | { +ok: false, +reason: RefusalReason } {
@@ -264,12 +272,28 @@ function readLiteralDeclarations(
       if (typeof value.value === 'number' && !Number.isFinite(value.value)) {
         return { ok: false, reason: 'non-finite-number' };
       }
-      const declaration: Declaration =
-        condition != null
-          ? { property: name, value: value.value, condition }
-          : pseudoElement != null
-            ? { property: name, value: value.value, pseudoElement }
-            : { property: name, value: value.value };
+      let declaration: Declaration;
+      if (target.kind === 'condition') {
+        declaration = {
+          property: name,
+          value: value.value,
+          condition: target.condition,
+        };
+      } else if (target.kind === 'pseudo-element') {
+        declaration = {
+          property: name,
+          value: value.value,
+          pseudoElement: target.pseudoElement,
+        };
+      } else if (target.kind === 'media-query') {
+        declaration = {
+          property: name,
+          value: value.value,
+          mediaQuery: target.mediaQuery,
+        };
+      } else {
+        declaration = { property: name, value: value.value };
+      }
       declarations.push(declaration);
     } else if (value.type === 'ObjectExpression') {
       return { ok: false, reason: 'nested-style-object' };
@@ -308,20 +332,25 @@ function readDeclarations(
     if (property.value.type === 'ObjectExpression') {
       if (
         !SUPPORTED_CONDITIONS.has(name) &&
-        !SUPPORTED_PSEUDO_ELEMENTS.has(name)
+        !SUPPORTED_PSEUDO_ELEMENTS.has(name) &&
+        !MEDIA_QUERY.test(name)
       ) {
         return { ok: false, reason: 'unsupported-condition' };
       }
       const nested = SUPPORTED_CONDITIONS.has(name)
-        ? readLiteralDeclarations(
-            property.value,
-            name === ':hover' ? ':hover' : ':focus',
-          )
-        : readLiteralDeclarations(
-            property.value,
-            undefined,
-            name === '::before' ? '::before' : '::after',
-          );
+        ? readLiteralDeclarations(property.value, {
+            kind: 'condition',
+            condition: name === ':hover' ? ':hover' : ':focus',
+          })
+        : SUPPORTED_PSEUDO_ELEMENTS.has(name)
+          ? readLiteralDeclarations(property.value, {
+              kind: 'pseudo-element',
+              pseudoElement: name === '::before' ? '::before' : '::after',
+            })
+          : readLiteralDeclarations(property.value, {
+              kind: 'media-query',
+              mediaQuery: name,
+            });
       if (!nested.ok) return nested;
       // A later duplicate selector key replaces this entire object. The
       // earlier object was still evaluated, so it was validated above even
@@ -342,6 +371,23 @@ function readDeclarations(
     declarations.some((declaration) => declaration.pseudoElement != null)
   ) {
     return { ok: false, reason: 'mixed-condition-and-pseudo-element' };
+  }
+  const mediaQueries = new Set(
+    declarations.flatMap((declaration) =>
+      declaration.mediaQuery == null ? [] : [declaration.mediaQuery],
+    ),
+  );
+  if (mediaQueries.size > 1) {
+    return { ok: false, reason: 'multiple-media-queries' };
+  }
+  if (
+    mediaQueries.size > 0 &&
+    declarations.some(
+      (declaration) =>
+        declaration.condition != null || declaration.pseudoElement != null,
+    )
+  ) {
+    return { ok: false, reason: 'mixed-media-query-modifier' };
   }
   return { ok: true, style: styleObject(declarations) };
 }

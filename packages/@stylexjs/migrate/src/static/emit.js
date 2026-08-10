@@ -105,7 +105,12 @@ function declarationLines(
     const declarations = input.filter(
       (declaration) => declaration.property === property,
     );
-    if (declarations.every((declaration) => declaration.condition == null)) {
+    if (
+      declarations.every(
+        (declaration) =>
+          declaration.condition == null && declaration.mediaQuery == null,
+      )
+    ) {
       const declaration = declarations[declarations.length - 1];
       return [`${indent}  ${property}: ${serializeValue(declaration.value)},`];
     }
@@ -124,8 +129,10 @@ function declarationLines(
           (conditionOrder.get(second.condition ?? 'default') ?? 99),
       )
       .map((declaration) => {
-        const condition = declaration.condition ?? 'default';
-        const key = condition === 'default' ? condition : `'${condition}'`;
+        const condition =
+          declaration.condition ?? declaration.mediaQuery ?? 'default';
+        const key =
+          condition === 'default' ? condition : serializeValue(condition);
         return `${indent}    ${key}: ${serializeValue(declaration.value)},`;
       });
     return [`${indent}  ${property}: {`, ...values, `${indent}  },`];

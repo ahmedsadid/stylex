@@ -136,6 +136,21 @@ export const App = () => (
   },`);
   });
 
+  test('one media block becomes a property-first StyleX condition', () => {
+    const source = `${PRAGMA}export const App = () => (
+  <div css={{ color: 'black', '@media (min-width: 800px)': { color: 'blue', opacity: 0.5 } }} />
+);
+`;
+    const converted = convert(source);
+    expect(converted).toContain(`color: {
+      default: 'black',
+      '@media (min-width: 800px)': 'blue',
+    },`);
+    expect(converted).toContain(`opacity: {
+      '@media (min-width: 800px)': 0.5,
+    },`);
+  });
+
   test('everything outside the converted spans is untouched', () => {
     const source = `${PRAGMA}import React from 'react';
 
