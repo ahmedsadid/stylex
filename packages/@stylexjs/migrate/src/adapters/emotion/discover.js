@@ -265,7 +265,7 @@ function lastDeclarationsByTarget(
   declarations: $ReadOnlyArray<Declaration>,
 ): $ReadOnlyArray<Declaration> {
   const seen = new Set<string>();
-  const result = [];
+  const result: Array<Declaration> = [];
   for (let index = declarations.length - 1; index >= 0; index--) {
     const declaration = declarations[index];
     const identity = declarationIdentity(declaration);
@@ -343,7 +343,10 @@ function readLiteralDeclarations(
       if (typeof value.value === 'number' && !Number.isFinite(value.value)) {
         return { ok: false, reason: 'non-finite-number' };
       }
-      let authoredDeclarations = [{ property: name, value: value.value }];
+      let authoredDeclarations: $ReadOnlyArray<{
+        +property: string,
+        +value: string | number,
+      }> = [{ property: name, value: value.value }];
       if (isShorthandProperty(name)) {
         if (name !== 'margin' && name !== 'padding') {
           return { ok: false, reason: 'shorthand-property' };

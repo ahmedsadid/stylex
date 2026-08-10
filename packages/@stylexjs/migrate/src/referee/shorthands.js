@@ -28,7 +28,7 @@ export type BoxShorthandRefereeResult = {
   +differences: $ReadOnlyArray<Difference>,
 };
 
-const BOX_LONGHANDS = {
+const BOX_LONGHANDS: { +[string]: $ReadOnlyArray<string> } = {
   margin: ['margin-top', 'margin-right', 'margin-bottom', 'margin-left'],
   padding: ['padding-top', 'padding-right', 'padding-bottom', 'padding-left'],
 };
