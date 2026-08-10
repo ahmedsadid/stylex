@@ -31,6 +31,15 @@ export type {
   RecordEnvelope,
 } from './state/project';
 
+export { appendStateEvent, rebuildIndexes, replayEvents } from './state/events';
+export type {
+  EntityKind,
+  IndexEntry,
+  ReplayResult,
+  StateEvent,
+  StateIndexes,
+} from './state/events';
+
 export { canonicalJson, immutableJson, parseJson } from './state/json';
 export type { JsonValue } from './state/json';
 
