@@ -23,25 +23,41 @@ const SKIPPED_KEYS = new Set([
  * Discovery only needs to find nodes of a few kinds; it never rewrites through
  * this walk and never needs scope information, so a full traversal library
  * would be a dependency bought for nothing.
+ *
+ * The traversal keeps its own stack rather than recursing. Real source produces
+ * arbitrarily deep trees — `a + a + a + ...` a few thousand times nests that
+ * deeply on the left — and a recursive version overflowed the call stack on
+ * exactly that input. Whether it overflowed depended on how much stack the
+ * process happened to have left, which made it an intermittent crash rather
+ * than an honest refusal.
+ *
+ * Nodes are visited in the same order a recursive pre-order walk would visit
+ * them: children are pushed in reverse so they pop back in source order. One
+ * caller depends on that, taking the last match in a file.
  */
 export function walk(node: mixed, visit: (node: $FlowFixMe) => void): void {
-  if (node == null || typeof node !== 'object') {
-    return;
-  }
-  if (Array.isArray(node)) {
-    for (const child of node) {
-      walk(child, visit);
-    }
-    return;
-  }
-  const record: { +[string]: mixed } = node;
-  if (typeof record.type === 'string') {
-    visit(node);
-  }
-  for (const key of Object.keys(record)) {
-    if (SKIPPED_KEYS.has(key)) {
+  const stack: Array<mixed> = [node];
+  while (stack.length > 0) {
+    const current = stack.pop();
+    if (current == null || typeof current !== 'object') {
       continue;
     }
-    walk(record[key], visit);
+    if (Array.isArray(current)) {
+      for (let i = current.length - 1; i >= 0; i--) {
+        stack.push(current[i]);
+      }
+      continue;
+    }
+    const record: { +[string]: mixed } = current;
+    if (typeof record.type === 'string') {
+      visit(current);
+    }
+    const keys = Object.keys(record);
+    for (let i = keys.length - 1; i >= 0; i--) {
+      if (SKIPPED_KEYS.has(keys[i])) {
+        continue;
+      }
+      stack.push(record[keys[i]]);
+    }
   }
 }

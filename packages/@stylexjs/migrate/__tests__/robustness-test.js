@@ -10,6 +10,7 @@
 import fs from 'fs';
 import path from 'path';
 import { proposeStaticConversion } from '../src/proposers/emotionStatic';
+import { walk } from '../src/static/walk';
 
 /**
  * Every input gets a verdict.
@@ -62,6 +63,44 @@ const AWKWARD_INPUTS: $ReadOnlyArray<[string, string, string]> = [
   ['an unknown extension', 'const a = 1;', 'a.weird'],
   ['no extension at all', 'const a = 1;', 'file'],
 ];
+
+describe('the AST walk', () => {
+  /**
+   * A recursive walk overflowed the call stack on deeply nested source, and
+   * whether it did depended on how much stack the process had left — an
+   * intermittent crash rather than a refusal. The depth here is far past what
+   * any recursive version survives, so the regression cannot hide behind luck.
+   */
+  test('handles a tree far deeper than the call stack allows', () => {
+    let node: { +type: string, +inner: mixed } = { type: 'Leaf', inner: null };
+    for (let i = 0; i < 200000; i++) {
+      node = { type: 'Wrapper', inner: node };
+    }
+
+    let visited = 0;
+    expect(() => {
+      walk(node, () => {
+        visited++;
+      });
+    }).not.toThrow();
+    expect(visited).toBe(200001);
+  });
+
+  test('visits nodes in source order', () => {
+    const tree = {
+      type: 'Root',
+      body: [
+        { type: 'First', value: { type: 'FirstChild' } },
+        { type: 'Second' },
+      ],
+    };
+    const seen = [];
+    walk(tree, (node) => {
+      seen.push(node.type);
+    });
+    expect(seen).toEqual(['Root', 'First', 'FirstChild', 'Second']);
+  });
+});
 
 describe('robustness', () => {
   test.each(AWKWARD_INPUTS)(
