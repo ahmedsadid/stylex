@@ -118,6 +118,9 @@ It admits two separate, bounded modifier capabilities:
 - Flat `::before` and `::after` objects under model `pseudo-element-referee-v1`.
   Declarations are compared by their exact root, before, or after selector
   target.
+- One `@media` object under model `media-query-referee-v1`. The query emitted by
+  Emotion and StyleX must match exactly, and the default and query-active winner
+  states are compared independently.
 
 These are not general selector claims. A disagreement in any admitted state or
 target is a refusal. In particular, reversing two otherwise identical hover and
@@ -125,9 +128,15 @@ focus branches can be refused because Emotion and StyleX may then choose
 different winners when both states are active. Pseudo-elements cannot yet be
 combined with pseudo-class conditions in one style object.
 
+Multiple media queries are not admitted yet. StyleX can rewrite overlapping
+queries into disjoint ranges, so expanding this boundary requires a model that
+compares the rewritten activation regions rather than relying on authored key
+order. Media queries also cannot yet be mixed with pseudo-classes or
+pseudo-elements.
+
 Dynamic values, spreads, shorthands, `!important`, other pseudo-elements or
-pseudo-classes, at-rules, nesting, keyframes, component `css` props, and sites
-that also have `className`, `style`, or a JSX spread remain outside this
+pseudo-classes, other at-rules, nesting, keyframes, component `css` props, and
+sites that also have `className`, `style`, or a JSX spread remain outside this
 mechanical boundary. The comparison is local and static: it does not establish
 whole-page browser behavior, repository build success, or runtime equivalence.
 

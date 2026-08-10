@@ -18,8 +18,9 @@
  *
  * The representation grows only with independently versioned comparison
  * models. It currently admits flat literals, the first hover/focus condition
- * grammar, and flat before/after selector targets. Keyframes, shorthands, and
- * combinations of conditions with pseudo-elements remain outside it.
+ * grammar, flat before/after selector targets, and one exact media query.
+ * Keyframes, shorthands, multiple queries, and combinations of modifiers
+ * remain outside it.
  */
 
 export type StaticValue = string | number;
