@@ -20,6 +20,11 @@ import {
   writeJsonAtomic,
 } from './json';
 import type { AtomicWriteIO, JsonValue } from './json';
+import {
+  DEFAULT_EVIDENCE_CONFIG,
+  normalizeEvidenceConfig,
+} from '../evidence/config';
+import type { EvidenceConfig } from '../evidence/config';
 
 export const STATE_DIRECTORY: string = '.stylex-migrate';
 export const STATE_SCHEMA_VERSION: number = 1;
@@ -64,10 +69,17 @@ export type ArtifactReference = {
 
 export type ProjectConfig = {
   +sourceGlobs: $ReadOnlyArray<string>,
+  +evidence: EvidenceConfig,
+};
+
+export type ProjectConfigInput = {
+  +sourceGlobs: $ReadOnlyArray<string>,
+  +evidence?: mixed,
 };
 
 const DEFAULT_CONFIG: ProjectConfig = Object.freeze({
   sourceGlobs: Object.freeze(['**/*.{js,jsx,ts,tsx}']),
+  evidence: DEFAULT_EVIDENCE_CONFIG,
 });
 
 function safeSegment(value: string, label: string): void {
@@ -231,7 +243,7 @@ export function initializeProject({
   return openProject(root);
 }
 
-function configIdentity(config: ProjectConfig): string {
+function configIdentity(config: JsonValue): string {
   return hashString(
     canonicalJson({
       schemaVersion: STATE_SCHEMA_VERSION,
@@ -243,7 +255,7 @@ function configIdentity(config: ProjectConfig): string {
 
 export function writeConfig(
   project: ProjectState,
-  config: ProjectConfig,
+  config: ProjectConfigInput,
   options?: { +now?: () => string },
 ): void {
   if (
@@ -254,11 +266,15 @@ export function writeConfig(
       'Project config requires at least one non-empty source glob',
     );
   }
+  const normalized: ProjectConfig = Object.freeze({
+    sourceGlobs: Object.freeze([...config.sourceGlobs]),
+    evidence: normalizeEvidenceConfig(config.evidence),
+  });
   writeJsonAtomic(path.join(project.stateRoot, 'config.json'), {
     schemaVersion: STATE_SCHEMA_VERSION,
     kind: 'config',
-    config,
-    contentHash: configIdentity(config),
+    config: normalized,
+    contentHash: configIdentity(normalized as $FlowFixMe),
     writtenAt: (options?.now ?? (() => new Date().toISOString()))(),
   });
 }
@@ -281,12 +297,13 @@ export function readConfig(project: ProjectState): ProjectConfig {
   ) {
     throw new Error('Invalid project config');
   }
-  const typedConfig: ProjectConfig = config as $FlowFixMe;
-  if (value.contentHash !== configIdentity(typedConfig)) {
+  if (value.contentHash !== configIdentity(config as $FlowFixMe)) {
     throw new Error('Integrity check failed for project config');
   }
+  const typedConfig: ProjectConfigInput = config as $FlowFixMe;
   return Object.freeze({
     sourceGlobs: Object.freeze([...typedConfig.sourceGlobs]),
+    evidence: normalizeEvidenceConfig(typedConfig.evidence),
   });
 }
 

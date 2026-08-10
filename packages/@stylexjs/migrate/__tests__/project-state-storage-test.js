@@ -58,7 +58,10 @@ describe('M3 project-local storage', () => {
       path.join(fs.realpathSync(repo), '.stylex-migrate'),
     );
     expect(second.schemaVersion).toBe(STATE_SCHEMA_VERSION);
-    expect(readConfig(second).sourceGlobs).toEqual(['**/*.{js,jsx,ts,tsx}']);
+    expect(readConfig(second)).toMatchObject({
+      sourceGlobs: ['**/*.{js,jsx,ts,tsx}'],
+      evidence: { concurrency: 2, outputPreviewBytes: 8192, providers: [] },
+    });
     for (const name of [
       'events',
       'candidates',

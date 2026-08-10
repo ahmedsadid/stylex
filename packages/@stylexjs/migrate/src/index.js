@@ -27,9 +27,23 @@ export {
 export type {
   ArtifactReference,
   ProjectConfig,
+  ProjectConfigInput,
   ProjectState,
   RecordEnvelope,
 } from './state/project';
+
+export {
+  DEFAULT_EVIDENCE_CONFIG,
+  normalizeEvidenceConfig,
+} from './evidence/config';
+export type {
+  CommandProviderConfig,
+  EvidenceConfig,
+  EvidenceCost,
+  EvidenceProviderConfig,
+  EvidenceSubjectKind,
+  RepositoryCheck,
+} from './evidence/config';
 
 export { appendStateEvent, rebuildIndexes, replayEvents } from './state/events';
 export type {
