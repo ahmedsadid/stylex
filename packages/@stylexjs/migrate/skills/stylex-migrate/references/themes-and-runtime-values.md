@@ -36,10 +36,11 @@ local dependencies block this lane.
 
 The current deterministic boundary converts flat host-element Emotion `css`
 objects/callbacks whose dynamic leaves are exact mapped theme reads. It also
-converts an Emotion `ThemeProvider` only when it selects a declared identifier
-and wraps one otherwise unstyled host element. Spreads, class/style mixing,
-styled provider children, missing tokens, complex providers, and target-module
-collisions refuse the whole proposal without partial output.
+converts an Emotion `ThemeProvider` only when its selected identifier resolves
+directly to a declared theme source and it wraps a static host-only subtree.
+Spreads, class/style mixing, styled provider children, component or dynamic
+descendants, undeclared variant sources, missing tokens, complex providers, and
+target-module collisions refuse the whole proposal without partial output.
 
 Drafting does not authorize conversion. A named human must approve the exact
 content-addressed map. Agents must stop at this boundary and must never invoke

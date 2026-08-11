@@ -7,6 +7,7 @@
  * @flow strict
  */
 
+import path from 'path';
 import {
   collectUsedNames,
   freeName,
@@ -301,8 +302,45 @@ function identifierSpanCount(ast: $FlowFixMe, name: string): number {
   return spans.size;
 }
 
+function extensionless(file: string): string {
+  return file.replace(/\.(?:js|jsx|ts|tsx)$/, '');
+}
+
+function declaredVariantBinding(
+  file: string,
+  binding: $FlowFixMe | null,
+  draft: ThemeDecisionDraft,
+): boolean {
+  if (binding == null) return draft.sourceFiles.includes(file);
+  const source = binding.statement?.source?.value;
+  if (typeof source !== 'string' || !source.startsWith('.')) return false;
+  const resolved = path.posix.normalize(
+    path.posix.join(path.posix.dirname(file), source),
+  );
+  return draft.sourceFiles.some(
+    (declared) => extensionless(declared) === extensionless(resolved),
+  );
+}
+
+function staticHostSubtree(node: $FlowFixMe): boolean {
+  if (node?.type !== 'JSXElement' || !host(elementName(node.openingElement))) {
+    return false;
+  }
+  return (node.children ?? []).every((child) => {
+    if (child.type === 'JSXText') return true;
+    if (
+      child.type === 'JSXExpressionContainer' &&
+      child.expression?.type === 'JSXEmptyExpression'
+    ) {
+      return true;
+    }
+    return child.type === 'JSXElement' && staticHostSubtree(child);
+  });
+}
+
 function providerEdits(
   ast: $FlowFixMe,
+  file: string,
   draft: ThemeDecisionDraft,
 ): { +edits: $ReadOnlyArray<ProviderEdit>, +problem: string | null } {
   const imports = emotionProviderImports(ast);
@@ -330,9 +368,11 @@ function providerEdits(
       selected?.type === 'Identifier' ? String(selected.name) : null;
     const variantExport =
       selectedName == null ? null : variants.get(selectedName);
+    const selectedBinding =
+      selectedName == null ? null : (localImports.get(selectedName) ?? null);
     const selectedImport =
       selectedName != null && identifierSpanCount(ast, selectedName) === 2
-        ? localImports.get(selectedName)
+        ? selectedBinding
         : null;
     const children = (node.children ?? []).filter(
       (child) => child.type !== 'JSXText' || String(child.value).trim() !== '',
@@ -344,6 +384,8 @@ function providerEdits(
       variantExport == null ||
       child?.type !== 'JSXElement' ||
       !host(childName) ||
+      !staticHostSubtree(child) ||
+      !declaredVariantBinding(file, selectedBinding, draft) ||
       child.openingElement.attributes?.some(
         (attribute) =>
           attribute.type === 'JSXSpreadAttribute' ||
@@ -359,7 +401,7 @@ function providerEdits(
       typeof child.openingElement.name?.end !== 'number'
     ) {
       problem =
-        'ThemeProvider is outside the approved unstyled single-host-child boundary';
+        'ThemeProvider is outside the approved declared-variant static-host-subtree boundary';
       return;
     }
     edits.push(
@@ -432,7 +474,7 @@ function rewriteConsumer(
   if (!parsed.ok) return { ok: false, reason: parsed.reason };
   const ast = parsed.ast;
   const style = styleSites(ast, file, draft);
-  const providers = providerEdits(ast, draft);
+  const providers = providerEdits(ast, file, draft);
   if (style.problem != null) return { ok: false, reason: style.problem };
   if (providers.problem != null)
     return { ok: false, reason: providers.problem };

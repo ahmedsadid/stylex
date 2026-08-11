@@ -140,6 +140,18 @@ export const Account = () => (
        const darkTheme = {};
        export const App = () => <ThemeProvider theme={darkTheme}><div css={{color: 'red'}} /></ThemeProvider>;`,
     ],
+    [
+      'a provider with a component descendant',
+      `import {ThemeProvider} from '@emotion/react';
+       import {darkTheme} from './theme/themes';
+       export const App = () => <ThemeProvider theme={darkTheme}><main><Card /></main></ThemeProvider>;`,
+    ],
+    [
+      'a provider variant from an undeclared source',
+      `import {ThemeProvider} from '@emotion/react';
+       import {darkTheme} from './other/themes';
+       export const App = () => <ThemeProvider theme={darkTheme}><main>App</main></ThemeProvider>;`,
+    ],
   ])('refuses %s without a partial proposal', (_label, source) => {
     const decision = approved(['src/Card.tsx']);
     expect(
