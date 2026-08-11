@@ -490,6 +490,11 @@ export {
   verifyConversion,
 } from './proposers/emotionStatic';
 export type { Proposal, ProposedEntry } from './proposers/emotionStatic';
+export {
+  evaluateCorpusSources,
+  formatCorpusSummary,
+} from './evaluation/corpus';
+export type { CorpusSource, CorpusSummary } from './evaluation/corpus';
 
 export {
   discover,
