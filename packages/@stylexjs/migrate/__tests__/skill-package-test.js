@@ -29,6 +29,16 @@ describe('M7 vendor-neutral skill package', () => {
     expect(skill).toContain('provider subtree');
     expect(skill).toContain('stylex-migrate theme bridge open');
     expect(skill).toContain('task.requiredOutputs');
+    expect(skill).toContain('emotion-styled-dynamic-value');
+    expect(skill).toContain('styled-dynamic-intrinsic');
+    const dynamicReference = fs.readFileSync(
+      path.join(SKILL_ROOT, 'references', 'themes-and-runtime-values.md'),
+      'utf8',
+    );
+    expect(dynamicReference).toContain('Use StyleX variants');
+    expect(dynamicReference).toContain('CSS custom-property');
+    expect(dynamicReference).toContain('Retain Emotion');
+    expect(dynamicReference).toContain('Preserve styling-prop filtering');
     for (const reference of [
       'protocol.md',
       'commands.md',

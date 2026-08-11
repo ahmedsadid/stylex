@@ -35,6 +35,13 @@ boundary is closed; `flatTemplateGrammarEligible` adds only the bounded CSS
 syntax screen. Neither alone authorizes an edit. Continue only when the current
 plan contains an isolated `styled-intrinsic` cluster.
 
+For prop-dependent styled callbacks, `dynamicValueFacts` counts exact syntax
+observations, `dynamicSliceEligible` counts definitions that pass the first
+local intrinsic/consumer boundary, and `plannedDynamicSites` counts contextual
+sites. These are not deterministic eligibility. Open only a planned
+`styled-dynamic-intrinsic` cluster through `context open` and preserve every
+unknown listed by its fact.
+
 `mechanical propose` accepts only a current planned mechanical cluster. It runs
 the deterministic conversion and its static comparison checks, then freezes the
 exact checked bytes without modifying the source checkout. `candidate diff`

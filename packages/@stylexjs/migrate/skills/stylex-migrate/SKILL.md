@@ -2,7 +2,8 @@
 name: stylex-migrate
 description:
   'Guide agents through vendor-neutral stylex-migrate repository readiness,
-  mechanical and contextual tasks, and approved theme token-map migrations.'
+  mechanical and contextual tasks, dynamic styled values, and approved theme
+  token-map migrations.'
 ---
 
 # StyleX Migrate
@@ -30,6 +31,14 @@ consumer may instead be selected explicitly in a human-reviewed theme draft; the
 draft must pin bridge boundary files and cover the consumer path. Route either
 form through `theme propose`, never through `styled propose` or an ad hoc
 rewrite.
+
+`dynamicSliceEligible` is the bounded contextual route for a local, non-exported
+intrinsic styled definition with prop-dependent callbacks and a closed same-file
+consumer graph. Read its `emotion-styled-dynamic-value` fact before editing. The
+fact records syntax, prop paths, finite literal branches, operation risks, and
+existing merge surfaces; its `unknowns` remain unknown. Open the planned
+`styled-dynamic-intrinsic` cluster with `context open`. Never pass it to
+`styled propose`.
 
 Use `stylex-migrate explain <cluster-id>` to follow the current plan's route.
 Use the mechanical workflow only for a planned `mechanical` cluster. Use the

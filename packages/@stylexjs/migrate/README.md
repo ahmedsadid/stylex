@@ -86,6 +86,16 @@ by classification and state; it does not report a conversion percentage.
 `explain` makes routing and blocking reasons available after restarting the
 process.
 
+Prop-dependent intrinsic styled callbacks have a separate contextual lane. The
+scan records `emotion-styled-dynamic-value` syntax facts, including observed
+prop paths, finite literal conditionals, risky operations, consumer merge
+surfaces, and explicit unknowns. A local non-exported definition with a closed
+same-file consumer graph may become a planned `styled-dynamic-intrinsic` site.
+That site must use `context open`; it is never accepted by `styled propose` and
+has no deterministic semantic claim. Mixed theme/prop callbacks, exports,
+component targets, options, escapes, spreads, and polymorphic or Emotion `css`
+consumers remain outside this first dynamic lane.
+
 Every command also accepts `--json`. Run `init` before the other commands.
 `mechanical propose` accepts only a current planned mechanical cluster and
 freezes the exact bytes that passed its static comparison checks.

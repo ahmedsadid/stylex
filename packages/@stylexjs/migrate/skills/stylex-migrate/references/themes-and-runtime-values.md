@@ -87,19 +87,48 @@ dependent candidates.
 
 ## Runtime expressions
 
-Classify each value:
+Open only a planned `styled-dynamic-intrinsic` contextual cluster. Read every
+`emotion-styled-dynamic-value` fact and the complete usage fact. The dynamic
+fact is a syntax observation: `propPaths`, conditional counts, calls,
+assignments, computed accesses, and merge flags do not establish types, purity,
+domains, or runtime behavior.
 
-- A stable literal can usually live in `stylex.create`.
-- A finite boolean or enum state may select among predeclared styles when all
-  branches and precedence are visible.
-- A truly runtime numeric/string value may require a supported inline-style or
-  dynamic StyleX pattern, subject to local lint/types and component semantics.
-- An effectful, mutable, environment-dependent, or unresolved expression must
-  not be hoisted or evaluated by the migration.
+Before choosing a strategy, resolve or explicitly retain as unknown:
 
-Preserve evaluation count and timing. Moving a function call from render time to
-module initialization is a behavior change even if its current result looks
-constant.
+1. The value domain, including nullish and fallback behavior.
+2. Getter/function purity, evaluation count, and evaluation timing.
+3. Whether styling-only props reach the rendered element today.
+4. Existing `style`, `className`, and spread merge order.
+5. Server/client, hydration, and serialization behavior.
+6. The repository evidence that observes the affected states.
+
+Choose the narrowest strategy whose preconditions are established:
+
+- Use StyleX variants for a finite boolean or enum only when every branch and
+  precedence relationship is known. Do not infer an enum merely because a
+  conditional has literal branches.
+- Use a StyleX-supported CSS custom-property pattern for a runtime scalar only
+  when the property accepts it, serialization/null handling is preserved, and
+  the repository compiler supports that pattern.
+- Merge an inline `style` value only when StyleX cannot represent the value and
+  exact existing style precedence is preserved. Never overwrite an existing
+  style object or silently change which side wins.
+- Move computation upward only when the new location preserves count, timing,
+  effects, and server/client behavior.
+- Refactor an API only when ownership and the complete local contract are in
+  scope.
+- Retain Emotion when none of the above is bounded and evidence-backed.
+
+Preserve styling-prop filtering. Removing a styled host can leak props to the
+DOM even when the visual result looks correct. Preserve element type, DOM shape,
+refs, attributes, class/style order, and falsy/null behavior. Moving a function
+call from render time to module initialization is a behavior change even if its
+current result looks constant.
+
+At handoff, name the chosen strategy per prop path, every fact used, every
+remaining unknown, the checks/cases that exercised each branch, and any retained
+Emotion boundary. Do not report a conversion percentage or generalize sampled
+runtime evidence beyond its named cases.
 
 ## Evidence boundary
 
