@@ -119,9 +119,19 @@ export const Card = () => <ThemeProvider theme={darkTheme}><CardRoot data-card="
     ]);
     expect(drafted.code).toBe(0);
     const draftId = drafted.json.draft.id;
-    expect(syncCli(repo, ['theme', 'inspect', draftId]).json.state).toBe(
-      'drafted',
-    );
+    expect(drafted.json.draft).toMatchObject({
+      mappings: [
+        {
+          sourcePath: 'colors.foreground',
+          targetName: 'foreground',
+          values: { lightTheme: '#111', darkTheme: '#eee' },
+        },
+      ],
+    });
+    expect(drafted.json.draft.tokens).toBeUndefined();
+    const inspected = syncCli(repo, ['theme', 'inspect', draftId]);
+    expect(inspected.json.state).toBe('drafted');
+    expect(inspected.json.draft.mappings).toEqual(drafted.json.draft.mappings);
 
     const unconfirmed = syncCli(repo, [
       'theme',

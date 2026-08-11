@@ -66,6 +66,7 @@ import { scaffoldThemeDecisionDefinition } from './theme/scaffold';
 import { proposeMechanicalCandidate } from './mechanical/candidate';
 import { proposeStyledCandidate } from './styled/candidate';
 import type { CandidatePatch } from './candidate/patch';
+import type { ThemeDecisionDraft } from './theme/model';
 
 type WriteOutput = (text: string) => mixed;
 
@@ -147,6 +148,14 @@ function presentCandidateDiff(
   } else {
     stdout(candidate.patchText);
   }
+}
+
+function reviewableThemeDraft(draft: ThemeDecisionDraft): JsonValue {
+  const { tokens, ...detail } = draft;
+  // Structured output redacts fields named "token" because command payloads
+  // may contain credentials. Theme token maps are the object under review, so
+  // expose them under a domain-specific key without weakening global redaction.
+  return { ...detail, mappings: tokens } as $FlowFixMe;
 }
 
 function counts(indexes: $FlowFixMe): { [string]: JsonValue } {
@@ -571,7 +580,7 @@ export function runCli(
         {
           command: 'theme draft',
           state: 'drafted',
-          draft: draft as $FlowFixMe,
+          draft: reviewableThemeDraft(draft),
           next: `A human must inspect this map, then run stylex-migrate theme approve ${draft.id} <reviewer> --human-confirm.`,
         },
         json,
@@ -584,7 +593,10 @@ export function runCli(
       present(
         {
           command: 'theme inspect',
-          ...inspection,
+          draft: reviewableThemeDraft(inspection.draft),
+          approval: inspection.approval as $FlowFixMe,
+          state: inspection.state,
+          activeArtifactHash: inspection.activeArtifactHash,
         } as $FlowFixMe,
         json,
         stdout,
