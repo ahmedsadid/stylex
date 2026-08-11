@@ -36,7 +36,16 @@ export type ThemeProposal = {
   +status: 'proposed',
   +files: { +[file: string]: string },
   +changedFiles: $ReadOnlyArray<string>,
+  +siteSpansByFile: {
+    +[file: string]: $ReadOnlyArray<ThemeProposalSiteSpan>,
+  },
   +decisionArtifactHash: string,
+};
+
+export type ThemeProposalSiteSpan = {
+  +kind: 'theme-css' | 'theme-provider',
+  +start: number,
+  +end: number,
 };
 
 export type ThemeProposalOutcome =
@@ -412,7 +421,13 @@ function rewriteConsumer(
   source: string,
   file: string,
   draft: ThemeDecisionDraft,
-): { +ok: true, +code: string } | { +ok: false, +reason: string } {
+):
+  | {
+      +ok: true,
+      +code: string,
+      +siteSpans: $ReadOnlyArray<ThemeProposalSiteSpan>,
+    }
+  | { +ok: false, +reason: string } {
   const parsed = parseSource(source, file);
   if (!parsed.ok) return { ok: false, reason: parsed.reason };
   const ast = parsed.ast;
@@ -529,7 +544,23 @@ function rewriteConsumer(
     }
   }
   try {
-    return { ok: true, code: applyEditsWithPlacements(source, edits).code };
+    const siteSpans: Array<ThemeProposalSiteSpan> = [
+      ...style.sites.map((site) => ({
+        kind: 'theme-css' as 'theme-css',
+        start: site.attributeStart,
+        end: site.attributeEnd,
+      })),
+      ...providers.edits.map((provider) => ({
+        kind: 'theme-provider' as 'theme-provider',
+        start: provider.openingStart,
+        end: provider.openingEnd,
+      })),
+    ];
+    return {
+      ok: true,
+      code: applyEditsWithPlacements(source, edits).code,
+      siteSpans: Object.freeze(siteSpans.map((span) => Object.freeze(span))),
+    };
   } catch (error) {
     return {
       ok: false,
@@ -553,6 +584,9 @@ export function proposeApprovedThemeFiles({
     approval: inputApproval,
   });
   const proposed: { [file: string]: string } = {};
+  const siteSpansByFile: {
+    [file: string]: $ReadOnlyArray<ThemeProposalSiteSpan>,
+  } = {};
   for (const consumer of draft.consumerFiles) {
     const source = files[consumer];
     if (typeof source !== 'string') {
@@ -567,6 +601,7 @@ export function proposeApprovedThemeFiles({
       return { status: 'refused', reason: rewritten.reason, file: consumer };
     }
     proposed[consumer] = rewritten.code;
+    siteSpansByFile[consumer] = rewritten.siteSpans;
   }
   const moduleSource = emitThemeModule(draft);
   const existingModule = files[draft.targetModule];
@@ -592,6 +627,7 @@ export function proposeApprovedThemeFiles({
     status: 'proposed',
     files: Object.freeze(proposed),
     changedFiles: Object.freeze(changedFiles),
+    siteSpansByFile: Object.freeze(siteSpansByFile),
     decisionArtifactHash: approval.artifactHash,
   });
 }

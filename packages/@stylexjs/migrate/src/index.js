@@ -156,7 +156,11 @@ export {
 export { discoverThemeFacts } from './theme/discover';
 export { emitThemeModule } from './theme/emit';
 export { proposeApprovedThemeFiles } from './theme/rewrite';
-export type { ThemeProposal, ThemeProposalOutcome } from './theme/rewrite';
+export type {
+  ThemeProposal,
+  ThemeProposalOutcome,
+  ThemeProposalSiteSpan,
+} from './theme/rewrite';
 export {
   THEME_NO_RUNTIME_LIMITATION,
   approvePersistedThemeDecision,
@@ -168,6 +172,8 @@ export {
   validateThemeDecisionAgainstInventory,
 } from './theme/decisions';
 export type { ThemeDecisionInspection } from './theme/decisions';
+export { proposeThemeDecisionCandidate } from './theme/candidate';
+export type { ThemeCandidateProposalResult } from './theme/candidate';
 export type {
   ThemeDecisionApproval,
   ThemeDecisionDraft,

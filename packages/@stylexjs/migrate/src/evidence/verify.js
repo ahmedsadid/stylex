@@ -12,6 +12,7 @@ import {
   removeCandidateWorkspace,
 } from '../candidate/workspace';
 import { recordContextVerificationOutcome } from '../context/lifecycle';
+import { assertActiveThemeCandidateDecisions } from '../theme/decisions';
 import { appendStateEvent } from '../state/events';
 import { readConfig } from '../state/project';
 import {
@@ -66,6 +67,9 @@ export async function verifyPersistedCandidates({
   +monotonicNow?: () => number,
 }): Promise<VerificationResult> {
   const candidates = loadVerificationCandidates(project, candidateIds);
+  for (const record of candidates) {
+    assertActiveThemeCandidateDecisions(project, record.candidate);
+  }
   const subjectInputs = candidates.map((record) => ({
     candidate: record.candidate,
     snapshot: record.snapshot,

@@ -409,6 +409,46 @@ export function scanRepository({
         fileSiteIds.push(site.id);
       }
     }
+    for (const providerFact of themeFacts.filter(
+      (fact) => fact.kind === 'theme-provider',
+    )) {
+      const value: $FlowFixMe = providerFact.value;
+      if (typeof value.start !== 'number' || typeof value.end !== 'number') {
+        continue;
+      }
+      const span = { start: value.start, end: value.end };
+      const classification: Classification = dependencyResolutionFailed
+        ? 'owner-decision'
+        : 'repeatable-contextual';
+      const site: Site = Object.freeze({
+        id: siteIdentity({
+          adapter: 'emotion',
+          kind: 'theme-provider',
+          file,
+          span,
+          sourceHash,
+        }),
+        adapter: 'emotion',
+        kind: 'theme-provider',
+        file,
+        span: Object.freeze(span),
+        sourceHash,
+        syntax: 'refused',
+        refusalReason: 'theme-provider-decision-required',
+        factIds: Object.freeze([
+          ...dependencyFactIds,
+          ...themeFacts.map((fact) => fact.id),
+        ]),
+        classification,
+        routingReasons: Object.freeze([
+          dependencyResolutionFailed
+            ? 'one or more local dependencies could not be resolved'
+            : 'ThemeProvider requires an approved token map',
+        ]),
+      });
+      sites.push(site);
+      fileSiteIds.push(site.id);
+    }
     files.push({
       path: file,
       sourceHash,

@@ -99,6 +99,15 @@ function assertInventoryFiles(
         `Theme decision input ${file} is not a scanned source file`,
       );
     }
+    if (
+      found.dependencies.some(
+        (dependency) => dependency.status === 'resolution-failed',
+      )
+    ) {
+      throw new Error(
+        `Theme decision input ${file} has an unresolved local dependency`,
+      );
+    }
   }
   const snapshot = createSnapshot({
     repositoryRoot: inventory.repositoryRoot,
