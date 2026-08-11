@@ -16,6 +16,37 @@ default theme does not prove dark mode, nested providers, tenant variants, or
 runtime overrides. If a required provider or variant is outside declared inputs,
 stop for replanning.
 
+## Approved token-map workflow
+
+Use the deterministic theme lane only when the inventory records exactly one
+known literal definition for every declared variant and every consumer is one of
+the bounded forms accepted by the proposer. The draft must declare:
+
+- the current `inventoryId`;
+- a new canonical `.stylex.js` or `.stylex.ts` target module;
+- the variables export, default variant, and collision-free variant exports;
+- every source token path, target token name, and concrete value for every
+  variant;
+- source-definition files and consumer files.
+
+Values must reproduce the discovered definitions exactly. Do not insert
+placeholders, infer missing variants, ignore unmapped reads, or declare an
+existing CSS variable unless every mapped variant actually uses it. Unresolved
+local dependencies block this lane.
+
+The current deterministic boundary converts flat host-element Emotion `css`
+objects/callbacks whose dynamic leaves are exact mapped theme reads. It also
+converts an Emotion `ThemeProvider` only when it selects a declared identifier
+and wraps one otherwise unstyled host element. Spreads, class/style mixing,
+styled provider children, missing tokens, complex providers, and target-module
+collisions refuse the whole proposal without partial output.
+
+Drafting does not authorize conversion. A named human must approve the exact
+content-addressed map. Agents must stop at this boundary and must never invoke
+the approval command. After approval, the kernel binds the approval hash to the
+snapshot, candidate, evidence, and verdict; a newer active map invalidates older
+dependent candidates.
+
 ## Runtime expressions
 
 Classify each value:

@@ -9,6 +9,10 @@ stylex-migrate context open <task-id>
 stylex-migrate context inspect <task-id>
 stylex-migrate context submit <task-id> <agent|human> <name> <version> [skill-version]
 stylex-migrate context abandon <task-id>
+stylex-migrate theme draft <json-file> <author>
+stylex-migrate theme inspect <draft-id>
+stylex-migrate theme approve <draft-id> <reviewer> --human-confirm
+stylex-migrate theme propose <draft-id>
 stylex-migrate verify <candidate-id>
 stylex-migrate review <candidate-or-verdict-id>
 stylex-migrate explain <cluster-or-candidate-id>
@@ -23,6 +27,16 @@ an owner decision, blocked task, abandoned task, or exhausted task.
 content-addressed candidate, removes the external worktree, and returns the
 candidate ID. The name and versions describe the proposer; they grant no
 authority.
+
+`theme draft` validates a complete token map against the current inventory and
+stores an immutable draft. `theme inspect` reports whether it is drafted,
+active, or superseded. The agent may use both commands.
+
+`theme approve` is a human-only boundary. An agent must never invoke it or pass
+`--human-confirm`, including when operating with broad shell permissions. The
+named reviewer must inspect the map and run the command. `theme propose` is
+allowed only after inspection reports `active`; it deterministically freezes a
+candidate and does not write the source checkout.
 
 `verify` executes configured repository checks in an isolated candidate
 worktree. Runtime providers additionally execute the same argv against a

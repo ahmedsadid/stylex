@@ -14,11 +14,17 @@ The kernel is authoritative for:
 - candidate, snapshot, evidence, and verdict identities;
 - configured repository checks;
 - task and attempt state;
-- the maximum of two attempts.
+- the maximum of two attempts;
+- active decision artifacts and their binding to snapshots, candidates,
+  evidence, and verdicts.
 
 The proposer is responsible only for editing files in the supplied worktree. An
 explanation cannot widen scope, turn missing evidence into a pass, or create an
 additional attempt.
+
+Theme token-map approval is reserved for a named human. Agents may draft,
+inspect, propose from an already active decision, and verify; they may not run
+the approval command or pass its human-confirmation flag.
 
 ## Fact certainty
 

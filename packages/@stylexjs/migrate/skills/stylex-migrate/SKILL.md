@@ -1,7 +1,8 @@
 ---
 name: stylex-migrate
 description:
-  'Guide agents through a vendor-neutral stylex-migrate contextual task.'
+  'Guide agents through vendor-neutral stylex-migrate contextual tasks and
+  approved theme token-map migrations.'
 ---
 
 # StyleX Migrate
@@ -10,7 +11,14 @@ Use the task capsule as the contract. The kernel owns scope, candidate identity,
 checks, outcomes, and the two-attempt limit; do not replace those controls with
 prose or agent judgment.
 
-## Run the workflow
+## Choose the workflow
+
+Use the theme-decision workflow when inventory facts show bounded literal theme
+definitions plus mapped Emotion theme reads or providers. Use the contextual
+task workflow for other non-mechanical clusters. Do not force an unsupported
+theme shape into the decision lane.
+
+## Run a contextual task
 
 1. Run `stylex-migrate context inspect <task-id>` and read the entire task and
    current attempt.
@@ -42,6 +50,28 @@ prose or agent judgment.
      `stylex-migrate context open <task-id>` and address the recorded failure.
    - `needs-owner-decision`: stop and report the decision or evidence required.
    - `blocked`: stop. Do not create another attempt outside the protocol.
+
+## Run a theme decision
+
+1. Run `stylex-migrate scan`, then read
+   [themes-and-runtime-values.md](references/themes-and-runtime-values.md) and
+   the relevant facts with `stylex-migrate explain`.
+2. Draft a complete token map from known literal definitions. Put the temporary
+   JSON input outside the source checkout and run
+   `stylex-migrate theme draft <json-file> <agent-name>`.
+3. Run `stylex-migrate theme inspect <draft-id>` and present the exact map,
+   limitations, and approval command to a human.
+4. Stop. Never run `stylex-migrate theme approve`, never pass `--human-confirm`,
+   and never describe agent assent as human approval. Resume only after a human
+   says they ran the approval command.
+5. Inspect the draft again. Continue only when its state is `active`; then run
+   `stylex-migrate theme propose <draft-id>`.
+6. Run `stylex-migrate verify <candidate-id>` and
+   `stylex-migrate review <candidate-id>`. Report the decision artifact hash,
+   exact claims and checks, site/runtime coverage, and every warning.
+
+Changing or superseding the active map makes prior dependent candidates stale.
+Do not reuse their evidence or try to recreate the older activation.
 
 Do not apply, commit, or claim runtime equivalence. A `runtime-matched` claim is
 sampled evidence for named cases, not equivalence. The tool converts and tests;
