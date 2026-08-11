@@ -43,6 +43,7 @@ export type RepositoryEvidenceVerdict = {
   +id: string,
   +subjectId: string,
   +candidateIds: $ReadOnlyArray<string>,
+  +decisionArtifactHashes?: $ReadOnlyArray<string>,
   +evidenceBundleId: string,
   +policyId: string,
   +classification: Classification,
@@ -191,6 +192,7 @@ function staticRequirements(
 function verdictIdentity(verdict: {
   +subjectId: string,
   +candidateIds: $ReadOnlyArray<string>,
+  +decisionArtifactHashes?: $ReadOnlyArray<string>,
   +evidenceBundleId: string,
   +policyId: string,
   +classification: Classification,
@@ -398,6 +400,11 @@ export function evaluateRepositoryEvidence({
   const stable = {
     subjectId: bundle.subject.id,
     candidateIds: bundle.candidateIds,
+    ...(bundle.subject.decisionArtifactHashes == null
+      ? {}
+      : {
+          decisionArtifactHashes: bundle.subject.decisionArtifactHashes,
+        }),
     evidenceBundleId: bundle.id,
     policyId,
     classification,
@@ -424,6 +431,13 @@ function parseVerdict(
     typeof verdict.id !== 'string' ||
     typeof verdict.subjectId !== 'string' ||
     !Array.isArray(verdict.candidateIds) ||
+    !(
+      verdict.decisionArtifactHashes == null ||
+      (Array.isArray(verdict.decisionArtifactHashes) &&
+        verdict.decisionArtifactHashes.every(
+          (value) => typeof value === 'string',
+        ))
+    ) ||
     typeof verdict.evidenceBundleId !== 'string' ||
     typeof verdict.policyId !== 'string' ||
     typeof verdict.classification !== 'string' ||
@@ -439,6 +453,13 @@ function parseVerdict(
     id: verdict.id,
     subjectId: verdict.subjectId,
     candidateIds: Object.freeze([...verdict.candidateIds]),
+    ...(verdict.decisionArtifactHashes == null
+      ? {}
+      : {
+          decisionArtifactHashes: Object.freeze([
+            ...verdict.decisionArtifactHashes,
+          ]),
+        }),
     evidenceBundleId: verdict.evidenceBundleId,
     policyId: verdict.policyId,
     classification: verdict.classification,
@@ -451,6 +472,9 @@ function parseVerdict(
   const id = verdictIdentity({
     subjectId: parsed.subjectId,
     candidateIds: parsed.candidateIds,
+    ...(parsed.decisionArtifactHashes == null
+      ? {}
+      : { decisionArtifactHashes: parsed.decisionArtifactHashes }),
     evidenceBundleId: parsed.evidenceBundleId,
     policyId: parsed.policyId,
     classification: parsed.classification,

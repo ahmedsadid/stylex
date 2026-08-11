@@ -26,6 +26,7 @@ export type CandidateEvidenceSubject = {
   +candidateId: string,
   +candidateIds: $ReadOnlyArray<string>,
   +changes: $ReadOnlyArray<EvidenceChange>,
+  +decisionArtifactHashes?: $ReadOnlyArray<string>,
 };
 
 export type ApplyPlanEvidenceSubject = {
@@ -33,6 +34,7 @@ export type ApplyPlanEvidenceSubject = {
   +id: string,
   +candidateIds: $ReadOnlyArray<string>,
   +changes: $ReadOnlyArray<EvidenceChange>,
+  +decisionArtifactHashes?: $ReadOnlyArray<string>,
 };
 
 export type RepositoryEvidenceSubject =
@@ -92,16 +94,19 @@ export function createCandidateEvidenceSubject(
   input: CandidateSubjectInput,
 ): CandidateEvidenceSubject {
   const changes = changesFor(input);
+  const decisionArtifactHashes = input.candidate.decisionArtifactHashes;
   const stable: $ReadOnly<{
     kind: 'candidate',
     candidateId: string,
     candidateIds: $ReadOnlyArray<string>,
     changes: $ReadOnlyArray<EvidenceChange>,
+    decisionArtifactHashes?: $ReadOnlyArray<string>,
   }> = {
     kind: 'candidate',
     candidateId: input.candidate.id,
     candidateIds: Object.freeze([input.candidate.id]),
     changes,
+    ...(decisionArtifactHashes.length === 0 ? {} : { decisionArtifactHashes }),
   };
   return Object.freeze({
     ...stable,
@@ -125,6 +130,7 @@ export function createApplyPlanEvidenceSubject(
   const commit = inputs[0].candidate.baseCommit;
   const changes = [];
   const owners = new Map<string, string>();
+  const decisionArtifactHashes = new Set<string>();
   for (const input of inputs) {
     if (
       input.candidate.repositoryRoot !== repository ||
@@ -134,6 +140,9 @@ export function createApplyPlanEvidenceSubject(
         'apply-plan evidence candidates must share a repository and base commit',
       );
     }
+    input.candidate.decisionArtifactHashes.forEach((hash) =>
+      decisionArtifactHashes.add(hash),
+    );
     for (const change of changesFor(input)) {
       const existing = owners.get(change.path);
       if (existing != null) {
@@ -150,10 +159,18 @@ export function createApplyPlanEvidenceSubject(
     kind: 'apply-plan',
     candidateIds: $ReadOnlyArray<string>,
     changes: $ReadOnlyArray<EvidenceChange>,
+    decisionArtifactHashes?: $ReadOnlyArray<string>,
   }> = {
     kind: 'apply-plan',
     candidateIds: Object.freeze(candidateIds),
     changes: Object.freeze(changes),
+    ...(decisionArtifactHashes.size === 0
+      ? {}
+      : {
+          decisionArtifactHashes: Object.freeze(
+            [...decisionArtifactHashes].sort(),
+          ),
+        }),
   };
   return Object.freeze({
     ...stable,

@@ -13,6 +13,7 @@ import {
   THEME_DECISION_PROTOCOL_VERSION,
   approvePersistedThemeDecision,
   assertActiveThemeCandidateDecisions,
+  createCandidateEvidenceSubject,
   initializeProject,
   persistThemeDecisionDraft,
   proposeThemeDecisionCandidate,
@@ -118,6 +119,13 @@ export const Card = () => <div css={(theme) => ({color: theme.colors.foreground}
     expect(result.record.snapshot.decisionArtifactHashes).toEqual([
       approval.artifactHash,
     ]);
+    expect(
+      createCandidateEvidenceSubject({
+        candidate: result.record.candidate,
+        snapshot: result.record.snapshot,
+        siteIdsByFile: result.record.siteIdsByFile,
+      }).decisionArtifactHashes,
+    ).toEqual([approval.artifactHash]);
     expect(candidateSource(result, 'src/Card.tsx')).toContain(
       'color: themeVars.foreground',
     );
