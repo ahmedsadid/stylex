@@ -1,0 +1,130 @@
+/**
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
+ *
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
+ *
+ * @flow strict
+ */
+
+import {
+  CONTEXT_MAX_ATTEMPTS,
+  CONTEXT_PROTOCOL_VERSION,
+  createContextAttemptCapsule,
+  createContextTaskCapsule,
+  createFact,
+  validateContextAttemptCapsule,
+  validateContextTaskCapsule,
+} from '../src/index';
+
+function task(): $FlowFixMe {
+  const fact = createFact({
+    kind: 'project-activation',
+    status: 'known',
+    value: { active: true },
+    provenance: [{ kind: 'config', file: 'babel.config.js', detail: 'plugin' }],
+    inputFiles: ['babel.config.js'],
+  });
+  return createContextTaskCapsule({
+    goal: 'Convert this cluster without changing its public behavior.',
+    inventoryId: 'inventory-1',
+    planId: 'plan-1',
+    cluster: {
+      id: 'cluster-1',
+      siteIds: ['site-1'],
+      changeFiles: ['src/card.js'],
+      couplingFiles: ['src/tokens.js'],
+      declaredInputs: ['babel.config.js', 'src/card.js', 'src/tokens.js'],
+      factIds: [fact.id],
+      classification: 'repeatable-contextual',
+      routingReasons: ['theme values require repository context'],
+      state: 'planned',
+      blockedReasons: [],
+    },
+    repositoryRoot: '/repo',
+    commit: 'a'.repeat(40),
+    snapshotHash: 'b'.repeat(64),
+    configHash: 'c'.repeat(64),
+    declaredInputs: [
+      { path: 'src/card.js', contentHash: 'd'.repeat(64), mode: '100644' },
+      { path: 'babel.config.js', contentHash: 'e'.repeat(64), mode: '100644' },
+    ],
+    facts: [fact],
+    scope: {
+      allowedPaths: ['src/card.js'],
+      protectedPaths: ['babel.config.js', '.stylex-migrate/**'],
+      allowedDeletions: [],
+      ownerDecisionPaths: [],
+    },
+    requiredChecks: [
+      {
+        id: 'repo-test',
+        check: 'focused-test',
+        checkVersion: 'v1',
+        subject: 'candidate',
+        limitations: ['does not render a browser'],
+      },
+    ],
+    limitations: ['No runtime-matched claim is available in M7.'],
+    stopConditions: ['Stop when a required fact is unknown.'],
+    now: () => '2026-08-10T00:00:00.000Z',
+  });
+}
+
+describe('M7 contextual task capsules', () => {
+  test('binds facts, input hashes, scope, checks and the kernel attempt limit', () => {
+    const capsule = task();
+    expect(capsule.protocolVersion).toBe(CONTEXT_PROTOCOL_VERSION);
+    expect(capsule.maxAttempts).toBe(CONTEXT_MAX_ATTEMPTS);
+    expect(capsule.declaredInputs.map((input) => input.path)).toEqual([
+      'babel.config.js',
+      'src/card.js',
+    ]);
+    expect(capsule.facts[0].status).toBe('known');
+    expect(validateContextTaskCapsule(capsule)).toEqual(capsule);
+  });
+
+  test('detects changes to any task field', () => {
+    const capsule = task();
+    const changed = JSON.parse(JSON.stringify(capsule));
+    changed.facts[0].status = 'unknown';
+    expect(() => validateContextTaskCapsule(changed)).toThrow(
+      'integrity check failed',
+    );
+  });
+
+  test('binds attempt workspaces and prior failures', () => {
+    const first = createContextAttemptCapsule({
+      task: task(),
+      attemptNumber: 1,
+      workspacePath: '/tmp/attempt-1',
+      now: () => '2026-08-10T00:01:00.000Z',
+    });
+    expect(validateContextAttemptCapsule(first)).toEqual(first);
+
+    const second = createContextAttemptCapsule({
+      task: task(),
+      attemptNumber: 2,
+      workspacePath: '/tmp/attempt-2',
+      previousCandidateId: 'candidate-1',
+      priorFailures: [
+        {
+          attemptId: first.id,
+          outcome: 'rejected',
+          reasons: ['repository test failed'],
+          candidateId: 'candidate-1',
+          verdictId: 'verdict-1',
+        },
+      ],
+    });
+    expect(second.priorFailures).toHaveLength(1);
+    expect(() =>
+      createContextAttemptCapsule({
+        task: task(),
+        attemptNumber: 3,
+        workspacePath: '/tmp/attempt-3',
+        priorFailures: second.priorFailures,
+      }),
+    ).toThrow('Invalid contextual attempt');
+  });
+});

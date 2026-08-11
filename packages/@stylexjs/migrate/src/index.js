@@ -135,6 +135,23 @@ export type { CleanupResult, MigrationResult } from './state/maintenance';
 export { canonicalJson, immutableJson, parseJson } from './state/json';
 export type { JsonValue } from './state/json';
 
+export {
+  CONTEXT_MAX_ATTEMPTS,
+  CONTEXT_PROTOCOL_VERSION,
+  createContextAttemptCapsule,
+  createContextTaskCapsule,
+  validateContextAttemptCapsule,
+  validateContextTaskCapsule,
+} from './context/capsule';
+export type {
+  ContextAttemptCapsule,
+  ContextDeclaredInput,
+  ContextFailure,
+  ContextRequiredCheck,
+  ContextScope,
+  ContextTaskCapsule,
+} from './context/capsule';
+
 export { redact, redactText } from './state/redact';
 
 export {
