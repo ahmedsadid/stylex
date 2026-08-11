@@ -40,17 +40,90 @@ manifest, policy version, end-to-end candidate test, and exit review.
 
 ## Required before Phase C closes
 
-- [ ] Corpus closeout.
+- [x] Corpus closeout. See `[codex] M6-phase-c-corpus-closeout.md`.
   - Run the correctness-gated capabilities over representative repositories.
   - Report coverage and refusal reasons without presenting a conversion
     percentage as a safety claim.
   - Use the results to order the post-Phase-C backlog.
+
+Phase C closed on 2026-08-10. The permanent capability corpus exercises all nine
+approved comparison models. Pinned react-select and Sentry runs recorded
+real-repository coverage, refusal boundaries, and the project-activation seam.
+
+## Ordered work after Phase C
+
+This is the default pickup order. The detailed contracts and exit criteria live
+in `[codex] stylex-migrate-implementation-plan-m2-forward.md`.
+
+### M7 — Vendor-neutral contextual protocol
+
+- [ ] Bind known project-activation facts and every inspected config hash into
+      deterministic proposal inputs, candidates, evidence, and stale checks.
+      Never reduce the fact to an unbound boolean.
+- [ ] Add the versioned task-capsule schema: goal, cluster, declared inputs,
+      certainty-bearing facts, allowed/protected paths, decisions, required
+      checks, limitations, stop conditions, and prior failures.
+- [ ] Add vendor-neutral `SKILL.md`, protocol references, concept playbooks, and
+      stable `stylex-migrate` command reference with no vendor manifest in core.
+- [ ] Add commands to open, inspect, submit, and abandon contextual candidate
+      workspaces.
+- [ ] Implement the kernel-owned two-attempt lifecycle and structured
+      `needs-replan`, `needs-owner-decision`, and `blocked` outcomes.
+- [ ] Prove manual, Codex-assisted, and simulated external-agent work enters the
+      same candidate/evidence boundary; prove explanations cannot excuse
+      out-of-scope edits.
+
+### M8 — Optional runtime evidence
+
+- [ ] Add comparator contracts for computed styles, DOM shape, forwarded
+      attributes, refs, interactions, themes, and viewports.
+- [ ] Add lazy provider interfaces for repository-native tests, Storybook,
+      Playwright/component tests, and project-supplied harnesses.
+- [ ] Bind original and candidate builds to the same snapshot and record
+      per-site/per-case coverage.
+- [ ] Preserve permissive contextual acceptance with ample warnings: runtime
+      failure rejects; unavailable never passes; explicit approval may accept
+      repository-check-only evidence with the no-runtime limitation.
+- [ ] Mutation-test partial coverage and seeded render regressions.
+
+### M9 — Theme decision workflow
+
+- [ ] Discover theme definitions, providers, reads, aliases, variants, casts,
+      and existing CSS variables for pinned repository shapes.
+- [ ] Add a token-map decision schema, collision detection, canonical target
+      identity, separate approval events, and deterministic application.
+- [ ] Bind decision hashes into snapshots, candidates, evidence, and verdicts;
+      changing a map must invalidate dependents.
+- [ ] Complete two pinned repository slices without placeholder values or false
+      runtime claims.
+
+### M10 — Pilot and scope decision
+
+- [ ] Compare ordinary agent-assisted work with the control-plane workflow on
+      pinned repositories.
+- [ ] Measure human time, attempts, evidence availability, wall time, token
+      cost, mutation score, reviewer interventions, and accepted regressions.
+- [ ] Decide from observed value whether to broaden contextual automation,
+      narrow to mechanical plus decisions, or stop the agent layer.
+
+### Later milestones, gated by M10
+
+- [ ] M11 dynamic-values playbook.
+- [ ] M12 styled-component clusters.
+- [ ] M13 composition and pattern promotion.
+- [ ] M14 styled-components source adapter.
+- [ ] M15 CSS Modules source adapter.
+- [ ] M16 publication, packaging, schema stabilization, and public corpus
+      report.
 
 ## Post-Phase-C deterministic backlog
 
 These are not prerequisites for M7. Promote one only when repository evidence
 shows that the expected coverage justifies a new comparison model.
 
+- [ ] Additional shorthand families or directional constructs excluded by the
+      first conflict models. This is first in the deterministic queue because
+      the react-select corpus recorded seven shorthand refusals.
 - [ ] Additional pseudo-classes, including `:active` and `:focus-visible`.
 - [ ] Additional pseudo-elements such as `::placeholder`, `::marker`, and
       `::selection`.
@@ -62,8 +135,9 @@ shows that the expected coverage justifies a new comparison model.
 - [ ] Compound, functional, relational, and more deeply nested selectors.
 - [ ] Additional at-rules beyond the explicitly modeled supports/media subset.
 - [ ] Keyframe syntax beyond the first alpha-renamable grammar.
-- [ ] Additional shorthand families or directional constructs excluded by the
-      first conflict models.
+- [ ] Classify Emotion-only metadata such as `label` during discovery instead of
+      waiting for the StyleX lint gate. This is diagnostic quality, not a new
+      conversion capability.
 
 ## Contextual-only boundary
 
@@ -72,6 +146,10 @@ supplies new independent evidence. They should route through M7 rather than be
 quietly added to Phase C.
 
 - Module-level or shared `css()` binding inlining.
+- `@emotion/styled` definitions and their consumer clusters.
+- JSX spreads, existing `className`/`style`, and custom-component prop
+  forwarding where merge behavior or public contracts require context.
+- Template-literal styles outside a separately modeled static grammar.
 - Dynamic identifiers whose values require JavaScript evaluation.
 - Effectful expressions or getters.
 - Changes to evaluation frequency or timing.
