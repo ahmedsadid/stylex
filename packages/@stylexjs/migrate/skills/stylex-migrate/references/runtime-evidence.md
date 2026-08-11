@@ -21,6 +21,11 @@ ref outcomes, interactions, and the renderer/browser environment.
 - `not-configured` or `unavailable`: continue only under the reported permissive
   policy and repeat the prominent no-runtime warning.
 
+For an approved styled theme candidate, declare separate cases for each
+light/dark state whose mapped values matter. A default-theme case cannot stand
+in for dark mode, and repository tests alone cannot establish that the
+replacement variables are selected under the same provider scope.
+
 Read `runtimeCoverage.entries` for exact path/site/case coverage. Read the
 `runtime-matched` claim for its scope and environment. Never generalize a match
 beyond the named cases, states, viewports, and environment, and never call it

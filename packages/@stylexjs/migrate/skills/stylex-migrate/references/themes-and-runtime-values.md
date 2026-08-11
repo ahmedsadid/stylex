@@ -38,9 +38,19 @@ The current deterministic boundary converts flat host-element Emotion `css`
 objects/callbacks whose dynamic leaves are exact mapped theme reads. It also
 converts an Emotion `ThemeProvider` only when its selected identifier resolves
 directly to a declared theme source and it wraps a static host-only subtree.
+It may also convert one local, non-exported intrinsic `@emotion/styled` tagged
+template per consumer file when every interpolation is a synchronous
+one-parameter callback whose body is exactly `props.theme.<mapped.path>`, every
+interpolation occupies the whole declaration value, and the complete same-file
+usage graph contains only direct safe JSX consumers. The definition and all of
+those consumers are one atomic edit.
+
 Spreads, class/style mixing, styled provider children, component or dynamic
-descendants, undeclared variant sources, missing tokens, complex providers, and
-target-module collisions refuse the whole proposal without partial output.
+descendants, props reads, computed theme expressions, selectors, at-rules,
+embedded interpolations, exports, escapes, multiple eligible styled definitions
+in one consumer file, undeclared variant sources, missing tokens, complex
+providers, and target-module collisions refuse the whole proposal without
+partial output.
 
 Drafting does not authorize conversion. A named human must approve the exact
 content-addressed map. Agents must stop at this boundary and must never invoke
@@ -71,3 +81,10 @@ provider may compare named theme states, interactions, and viewports against the
 retained baseline. Report `runtime-matched` only when the verdict contains that
 claim, and name its case scope. Typecheck, lint, build, snapshots, an
 unavailable browser, or partial case coverage never earn the claim.
+
+For styled theme work, require cases for the relevant approved light/dark states
+when rendered token behavior is part of the review claim. Under the permissive
+policy, missing runtime evidence may leave an otherwise passing candidate
+eligible for human review, but only with the exact no-runtime warning. It does
+not verify theme substitution, provider scope, hover/state behavior, or rendered
+values.

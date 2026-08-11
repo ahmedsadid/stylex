@@ -22,6 +22,13 @@ that a styled definition is convertible. A styled edit is authorized only when
 the current plan contains an isolated `styled-intrinsic` cluster. Stop if the
 requested work has no planned cluster.
 
+`themeSliceEligible` is a separate structural observation for an intrinsic
+styled template whose only modeled runtime input is the theme. It does not
+approve a token map or authorize an edit. Continue only when the plan contains
+a `styled-theme-intrinsic` site and the exact token map is the active
+human-approved theme decision. Route that site through `theme propose`, never
+through `styled propose` or an ad hoc rewrite.
+
 Use `stylex-migrate explain <cluster-id>` to follow the current plan's route.
 Use the mechanical workflow only for a planned `mechanical` cluster. Use the
 theme-decision workflow when inventory facts show bounded literal theme
@@ -105,11 +112,20 @@ different lane.
    and never describe agent assent as human approval. Resume only after a human
    says they ran the approval command.
 5. Inspect the draft again. Continue only when its state is `active`; then run
-   `stylex-migrate theme propose <draft-id>`.
+   `stylex-migrate theme propose <draft-id>`. This command also owns eligible
+   `styled-theme-intrinsic` consumers. It must rewrite the styled definition and
+   every closed same-file JSX consumer atomically; a partial rewrite is a bug.
 6. Run `stylex-migrate verify <candidate-id>` and
    `stylex-migrate review <candidate-id>`. Inspect the frozen patch with
    `stylex-migrate candidate diff <candidate-id>`. Report the decision artifact
    hash, exact claims and checks, site/runtime coverage, and every warning.
+
+For styled theme candidates, inspect the configured runtime cases for every
+declared light/dark state that matters to the approved map. Repository checks
+may still make a permissive verdict eligible for human review when runtime is
+not configured, but that verdict carries a prominent no-runtime warning and no
+`runtime-matched` claim. Never summarize that outcome as theme behavior having
+been verified.
 
 Changing or superseding the active map makes prior dependent candidates stale.
 Do not reuse their evidence or try to recreate the older activation.

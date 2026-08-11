@@ -23,6 +23,9 @@ describe('M7 vendor-neutral skill package', () => {
     expect(skill).toContain('stylex-migrate context inspect');
     expect(skill).toContain('Do not apply, commit');
     expect(skill).toContain('runtime-matched');
+    expect(skill).toContain('styled-theme-intrinsic');
+    expect(skill).toContain('theme propose');
+    expect(skill).toContain('no-runtime warning');
     for (const reference of [
       'protocol.md',
       'commands.md',
