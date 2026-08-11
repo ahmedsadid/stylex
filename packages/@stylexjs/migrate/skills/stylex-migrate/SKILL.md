@@ -13,10 +13,25 @@ prose or agent judgment.
 
 ## Choose the workflow
 
-Use the theme-decision workflow when inventory facts show bounded literal theme
+Use `stylex-migrate explain <cluster-id>` to follow the current plan's route.
+Use the mechanical workflow only for a planned `mechanical` cluster. Use the
+theme-decision workflow when inventory facts show bounded literal theme
 definitions plus mapped Emotion theme reads or providers. Use the contextual
-task workflow for other non-mechanical clusters. Do not force an unsupported
-theme shape into the decision lane.
+task workflow for other non-mechanical clusters. Do not force a cluster into a
+different lane.
+
+## Run a mechanical proposal
+
+1. Run `stylex-migrate mechanical propose <cluster-id>`. A refusal is a result;
+   do not bypass it with an untracked rewrite.
+2. Run `stylex-migrate candidate diff <candidate-id>` and inspect the exact
+   frozen patch. This command emits source verbatim and intentionally does not
+   redact it.
+3. Run `stylex-migrate verify <candidate-id>`, then
+   `stylex-migrate review <candidate-id>`.
+4. Report the exact claims, comparison models, repository checks, coverage,
+   warnings, and limitations. Static CSS matching is bounded to the named models
+   and does not imply runtime equivalence.
 
 ## Run a contextual task
 
@@ -67,8 +82,9 @@ theme shape into the decision lane.
 5. Inspect the draft again. Continue only when its state is `active`; then run
    `stylex-migrate theme propose <draft-id>`.
 6. Run `stylex-migrate verify <candidate-id>` and
-   `stylex-migrate review <candidate-id>`. Report the decision artifact hash,
-   exact claims and checks, site/runtime coverage, and every warning.
+   `stylex-migrate review <candidate-id>`. Inspect the frozen patch with
+   `stylex-migrate candidate diff <candidate-id>`. Report the decision artifact
+   hash, exact claims and checks, site/runtime coverage, and every warning.
 
 Changing or superseding the active map makes prior dependent candidates stale.
 Do not reuse their evidence or try to recreate the older activation.

@@ -44,6 +44,16 @@ Migration records live under `.stylex-migrate/`. The directory is added to
 stylex-migrate init
 stylex-migrate scan
 stylex-migrate plan
+stylex-migrate mechanical propose <cluster-id>
+stylex-migrate candidate diff <candidate-id>
+stylex-migrate context open <cluster-id> "<goal>"
+stylex-migrate context inspect <task-id>
+stylex-migrate context submit <task-id> <agent|human> <name> <version> [skill-version]
+stylex-migrate context abandon <task-id>
+stylex-migrate theme draft <json-file> <author>
+stylex-migrate theme inspect <draft-id>
+stylex-migrate theme approve <draft-id> <reviewer> --human-confirm
+stylex-migrate theme propose <draft-id>
 stylex-migrate config set ./stylex-migrate.config.json
 stylex-migrate config show
 stylex-migrate verify <candidate-id> [candidate-id...]
@@ -64,6 +74,11 @@ conversion percentage. `explain` makes routing and blocking reasons available
 after restarting the process.
 
 Every command also accepts `--json`. Run `init` before the other commands.
+`mechanical propose` accepts only a current planned mechanical cluster and
+freezes the exact bytes that passed its static comparison checks.
+`candidate diff` prints that frozen patch verbatim for developer review; it does
+not apply it. Theme approval requires an explicit named human and cannot be
+delegated to an agent.
 
 Repository checks are configured as argv arrays; shell command strings are
 rejected. Each provider declares whether it applies to one candidate or an exact
@@ -150,10 +165,10 @@ warning and cannot earn `runtime-matched`.
 
 ## Current mechanical boundary
 
-The development API can propose a conversion for an Emotion `css` prop on a host
-element when the file has an exact Emotion JSX pragma and the style is an object
-literal containing supported camelCase longhands with string or finite numeric
-literal values.
+The CLI and development API can propose a conversion for an Emotion `css` prop
+on a host element when the file has an exact Emotion JSX pragma and the style is
+an object literal containing supported camelCase longhands with string or finite
+numeric literal values.
 
 It admits separate, bounded modifier capabilities:
 
@@ -211,10 +226,11 @@ sites that also have `className`, `style`, or a JSX spread remain outside this
 mechanical boundary. The comparison is local and static: it does not establish
 whole-page browser behavior, repository build success, or runtime equivalence.
 
-The candidate persistence API is available for deterministic integrations. The
-contextual task protocol and bundled vendor-neutral agent skill operate through
-the same frozen candidate and evidence boundary. They do not apply or commit the
-result; source-tree integration remains the developer's responsibility.
+The candidate persistence API is also available for deterministic integrations.
+The mechanical CLI, contextual task protocol, theme-decision workflow, and
+bundled vendor-neutral agent skill operate through the same frozen candidate and
+evidence boundary. They do not apply or commit the result; source-tree
+integration remains the developer's responsibility.
 
 ## Development
 
