@@ -149,8 +149,36 @@ export const App = () => <><ComponentTarget /><Theme /></>;
         'runtime-style-input',
       ]),
     );
+    expect(factNamed(facts, 'Theme').value).toMatchObject({
+      themeSliceEligible: true,
+      themeBlockedReasons: [],
+    });
     expect(factNamed(facts, 'Unused').value.blockedReasons).toContain(
       'no-direct-jsx-consumers',
+    );
+  });
+
+  test('keeps the theme slice closed against props and risky consumers', () => {
+    repo = createTempRepo({
+      'src/theme-runtime.tsx': `import styled from '@emotion/styled';
+const ThemeOnly = styled.div\`color: \${p => p.theme.colors.foreground};\`;
+const Mixed = styled.div\`color: \${p => p.theme.colors.foreground}; padding: \${p => p.padding};\`;
+const Spread = styled.div\`color: \${p => p.theme.colors.foreground};\`;
+export const App = props => <><ThemeOnly /><Mixed /><Spread {...props} /></>;
+`,
+    });
+    const facts = usageByName(scanRepository({ repositoryRoot: repo }));
+
+    expect(factNamed(facts, 'ThemeOnly').value).toMatchObject({
+      firstSliceEligible: false,
+      themeSliceEligible: true,
+      themeBlockedReasons: [],
+    });
+    expect(factNamed(facts, 'Mixed').value.themeBlockedReasons).toContain(
+      'not-theme-only-runtime-input',
+    );
+    expect(factNamed(facts, 'Spread').value.themeBlockedReasons).toContain(
+      'jsx-spread',
     );
   });
 

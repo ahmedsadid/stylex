@@ -8,6 +8,7 @@
  */
 
 import { createFact } from '../inventory/model';
+import { discoverStyledReadinessFacts } from '../adapters/emotion/styledReadiness';
 import { walk } from '../static/walk';
 import type { Fact, FactStatus } from '../inventory/model';
 import type { JsonValue } from '../state/json';
@@ -25,6 +26,14 @@ type MemberPath = {
   +cast: string | null,
   +start: number,
   +end: number,
+};
+
+type StyledThemeRead = {
+  +binding: string,
+  +sourcePath: string,
+  +start: number,
+  +end: number,
+  +cast: string | null,
 };
 
 const CAST_NODES = new Set([
@@ -98,6 +107,82 @@ function memberPath(input: $FlowFixMe): MemberPath | null {
     start: input.start,
     end: input.end,
   });
+}
+
+function styledThemeReads(
+  ast: $FlowFixMe,
+  file: string,
+): $ReadOnlyArray<StyledThemeRead> {
+  const starts = new Set(
+    discoverStyledReadinessFacts({ ast, file })
+      .map((item) => item.value)
+      .filter(
+        (value: $FlowFixMe) =>
+          value.syntax === 'tagged-template' &&
+          value.themeDependent === true &&
+          typeof value.span?.start === 'number',
+      )
+      .map((value: $FlowFixMe) => Number(value.span.start)),
+  );
+  const output = [];
+  walk(ast, (node) => {
+    if (
+      node.type !== 'TaggedTemplateExpression' ||
+      !starts.has(Number(node.start))
+    ) {
+      return;
+    }
+    for (const expression of node.quasi?.expressions ?? []) {
+      if (
+        expression?.type !== 'ArrowFunctionExpression' ||
+        expression.async === true ||
+        expression.params?.length !== 1 ||
+        expression.params[0]?.type !== 'Identifier'
+      ) {
+        continue;
+      }
+      const binding = String(expression.params[0].name);
+      const candidates = [];
+      walk(expression.body, (child) => {
+        if (
+          child.type !== 'MemberExpression' &&
+          child.type !== 'OptionalMemberExpression' &&
+          !CAST_NODES.has(child.type)
+        ) {
+          return;
+        }
+        const found = memberPath(child);
+        if (
+          found != null &&
+          found.root === binding &&
+          found.segments[0] === 'theme' &&
+          found.segments.length > 1
+        ) {
+          candidates.push(found);
+        }
+      });
+      for (const read of candidates.filter(
+        (candidate) =>
+          !candidates.some(
+            (other) =>
+              other !== candidate &&
+              other.start === candidate.start &&
+              other.end > candidate.end,
+          ),
+      )) {
+        output.push(
+          Object.freeze({
+            binding,
+            sourcePath: read.segments.slice(1).join('.'),
+            start: read.start,
+            end: read.end,
+            cast: read.cast,
+          }),
+        );
+      }
+    }
+  });
+  return Object.freeze(output);
 }
 
 function patternNames(pattern: $FlowFixMe): $ReadOnlyArray<string> {
@@ -436,6 +521,7 @@ export function discoverThemeFacts({
       .filter((name): name is string => name != null),
   );
   const facts = [];
+  const styledReads = styledThemeReads(ast, file);
 
   for (const binding of foundBindings) {
     facts.push(
@@ -570,6 +656,41 @@ export function discoverThemeFacts({
             span: { start: read.start, end: read.end },
           },
           `theme read ${sourcePath} carries ${read.cast}`,
+        ),
+      );
+    }
+  }
+  for (const read of [...styledReads].sort((a, b) => a.start - b.start)) {
+    const key = `${read.start}:${read.end}:${read.sourcePath}`;
+    if (seenReads.has(key)) continue;
+    seenReads.add(key);
+    facts.push(
+      fact(
+        file,
+        'theme-read',
+        'known',
+        {
+          binding: read.binding,
+          sourcePath: read.sourcePath,
+          span: { start: read.start, end: read.end },
+          cast: read.cast,
+          source: 'styled-callback',
+        },
+        `styled theme read ${read.binding}.theme.${read.sourcePath}`,
+      ),
+    );
+    if (read.cast != null) {
+      facts.push(
+        fact(
+          file,
+          'theme-cast',
+          'known',
+          {
+            sourcePath: read.sourcePath,
+            cast: read.cast,
+            span: { start: read.start, end: read.end },
+          },
+          `styled theme read ${read.sourcePath} carries ${read.cast}`,
         ),
       );
     }

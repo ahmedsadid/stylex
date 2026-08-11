@@ -142,3 +142,87 @@ const Box = styled.div\`&:hover { color: blue; }\`;
     expect(inventory.sites).toEqual([]);
   });
 });
+
+describe('@emotion/styled theme template grammar', () => {
+  let repo: string | null = null;
+
+  afterEach(() => {
+    if (repo != null) removeTempDir(repo);
+    repo = null;
+  });
+
+  test('records exact whole-value theme callbacks as a contextual site', () => {
+    repo = createTempRepo({
+      'src/theme.tsx': `import styled from '@emotion/styled';
+const Card = styled.div\`
+  color: \${p => p.theme.colors.foreground};
+  padding-top: 4px;
+\`;
+export const App = () => <Card />;
+`,
+    });
+    const inventory = scanRepository({ repositoryRoot: repo });
+    const grammar = inventory.facts.find(
+      (fact) => fact.kind === 'emotion-styled-theme-template-grammar',
+    );
+    expect(grammar).toMatchObject({
+      status: 'known',
+      value: {
+        name: 'Card',
+        supported: true,
+        declarations: [
+          {
+            property: 'color',
+            value: null,
+            sourcePath: 'colors.foreground',
+          },
+          {
+            property: 'paddingTop',
+            value: '4px',
+            sourcePath: null,
+          },
+        ],
+      },
+    });
+    expect(
+      inventory.facts.find((fact) => {
+        const value: $FlowFixMe = fact.value;
+        return (
+          fact.kind === 'theme-read' && value.sourcePath === 'colors.foreground'
+        );
+      }),
+    ).toMatchObject({ value: { source: 'styled-callback' } });
+    expect(inventory.sites).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: 'styled-theme-intrinsic',
+          classification: 'repeatable-contextual',
+          refusalReason: 'approved-theme-decision-required',
+        }),
+      ]),
+    );
+  });
+
+  test.each([
+    [
+      'embedded interpolation',
+      'color: color-mix(in srgb, red, ${p => p.theme.colors.foreground});',
+    ],
+    ['computed callback', 'color: ${p => darken(p.theme.colors.foreground)};'],
+    [
+      'nested selector',
+      '&:hover { color: ${p => p.theme.colors.foreground}; }',
+    ],
+  ])('refuses %s', (_label, body) => {
+    repo = createTempRepo({
+      'src/refused.tsx': `import styled from '@emotion/styled';
+const Card = styled.div\`${body}\`;
+export const App = () => <Card />;
+`,
+    });
+    const grammar = scanRepository({ repositoryRoot: repo }).facts.find(
+      (fact) => fact.kind === 'emotion-styled-theme-template-grammar',
+    );
+    expect(grammar).toMatchObject({ value: { supported: false } });
+  });
+});

@@ -15,7 +15,10 @@ import { matchesGlob } from '../candidate/scope';
 import { discoverSyntax, usesEmotion } from '../adapters/emotion/discover';
 import { discoverStyledReadinessFacts } from '../adapters/emotion/styledReadiness';
 import { discoverStyledUsageFacts } from '../adapters/emotion/styledUsage';
-import { discoverStyledTemplateFacts } from '../adapters/emotion/styledTemplate';
+import {
+  discoverStyledTemplateFacts,
+  discoverStyledThemeTemplateFacts,
+} from '../adapters/emotion/styledTemplate';
 import { parseSource } from '../static/parse';
 import { discoverThemeFacts } from '../theme/discover';
 import { analyzeProjectActivation } from './activation';
@@ -333,11 +336,19 @@ export function scanRepository({
       readinessFacts: styledReadinessFacts,
       usageFacts: styledUsageFacts,
     });
+    const styledThemeTemplateFacts = discoverStyledThemeTemplateFacts({
+      ast: parsed.ast,
+      file,
+      readinessFacts: styledReadinessFacts,
+      usageFacts: styledUsageFacts,
+      themeFacts,
+    });
     facts.push(
       ...themeFacts,
       ...styledReadinessFacts,
       ...styledUsageFacts,
       ...styledTemplateFacts,
+      ...styledThemeTemplateFacts,
     );
     const dependencyAnalysis = analyzeLocalDependencies({
       ast: parsed.ast,
@@ -363,6 +374,7 @@ export function scanRepository({
       ...styledReadinessFacts.map((fact) => fact.id),
       ...styledUsageFacts.map((fact) => fact.id),
       ...styledTemplateFacts.map((fact) => fact.id),
+      ...styledThemeTemplateFacts.map((fact) => fact.id),
     ];
     if (activation != null) {
       facts.push(activation);
@@ -544,6 +556,85 @@ export function scanRepository({
           dependencyResolutionFailed
             ? 'one or more local dependencies could not be resolved'
             : 'closed intrinsic styled definition requires an atomic component-boundary candidate and repository evidence',
+        ]),
+      });
+      sites.push(site);
+      fileSiteIds.push(site.id);
+    }
+    const styledThemeCandidates: Array<{
+      +grammarFact: Fact,
+      +usageFact: Fact,
+      +readinessFact: Fact,
+      +usage: $FlowFixMe,
+    }> = [];
+    for (const grammarFact of styledThemeTemplateFacts) {
+      const grammar: $FlowFixMe = grammarFact.value;
+      if (grammar.supported !== true) continue;
+      const usageFact = styledUsageFacts.find(
+        (fact) => fact.id === grammar.usageFactId,
+      );
+      const readinessFact = styledReadinessFacts.find(
+        (fact) => fact.id === grammar.definitionFactId,
+      );
+      const usage: $FlowFixMe = usageFact?.value;
+      if (
+        usageFact == null ||
+        readinessFact == null ||
+        typeof usage?.definitionSpan?.start !== 'number' ||
+        typeof usage?.definitionSpan?.end !== 'number'
+      ) {
+        continue;
+      }
+      styledThemeCandidates.push({
+        grammarFact,
+        usageFact,
+        readinessFact,
+        usage,
+      });
+    }
+    styledThemeCandidates.sort(
+      (left, right) =>
+        left.usage.definitionSpan.start - right.usage.definitionSpan.start,
+    );
+    // Like the static styled slice, freeze no more than one definition per
+    // file. Theme decisions may group files, but never create overlapping
+    // independently reviewable edits within one file.
+    const styledThemeCandidate = styledThemeCandidates[0] ?? null;
+    if (styledThemeCandidate != null) {
+      const span = {
+        start: styledThemeCandidate.usage.definitionSpan.start,
+        end: styledThemeCandidate.usage.definitionSpan.end,
+      };
+      const classification: Classification = dependencyResolutionFailed
+        ? 'owner-decision'
+        : 'repeatable-contextual';
+      const site: Site = Object.freeze({
+        id: siteIdentity({
+          adapter: 'emotion',
+          kind: 'styled-theme-intrinsic',
+          file,
+          span,
+          sourceHash,
+        }),
+        adapter: 'emotion',
+        kind: 'styled-theme-intrinsic',
+        file,
+        span: Object.freeze(span),
+        sourceHash,
+        syntax: 'refused',
+        refusalReason: 'approved-theme-decision-required',
+        factIds: Object.freeze([
+          styledThemeCandidate.readinessFact.id,
+          styledThemeCandidate.usageFact.id,
+          styledThemeCandidate.grammarFact.id,
+          ...themeFacts.map((fact) => fact.id),
+          ...dependencyFactIds,
+        ]),
+        classification,
+        routingReasons: Object.freeze([
+          dependencyResolutionFailed
+            ? 'one or more local dependencies could not be resolved'
+            : 'closed intrinsic styled theme callback requires an approved token map and repository or runtime evidence',
         ]),
       });
       sites.push(site);

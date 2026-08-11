@@ -301,6 +301,57 @@ function blockedReasons(
   return Object.freeze([...new Set(reasons)].sort());
 }
 
+function themeBlockedReasons(
+  definition: $FlowFixMe,
+  topLevel: TopLevelDefinition | null,
+  shadowed: boolean,
+  consumers: $ReadOnlyArray<$FlowFixMe>,
+  escapes: $ReadOnlyArray<$FlowFixMe>,
+): $ReadOnlyArray<string> {
+  const reasons = [];
+  if (!/^[A-Z]/.test(String(definition.name))) {
+    reasons.push('non-component-jsx-binding');
+  }
+  if (topLevel == null) reasons.push('definition-not-top-level');
+  else {
+    if (topLevel.kind !== 'const') reasons.push('definition-not-const');
+    if (!topLevel.standalone) reasons.push('multi-declarator-definition');
+  }
+  if (definition.exported === true) reasons.push('exported-definition');
+  if (definition.targetKind !== 'intrinsic') {
+    reasons.push('non-intrinsic-target');
+  }
+  if (
+    definition.syntax !== 'tagged-template' ||
+    !(definition.templateExpressions > 0)
+  ) {
+    reasons.push('not-a-theme-template');
+  }
+  if (
+    definition.callback !== true ||
+    definition.themeDependent !== true ||
+    definition.propDependent === true
+  ) {
+    reasons.push('not-theme-only-runtime-input');
+  }
+  if (definition.hasOptions === true) reasons.push('styled-options');
+  if (shadowed) reasons.push('shadowed-binding');
+  if (consumers.length === 0) reasons.push('no-direct-jsx-consumers');
+  if (escapes.length > 0) reasons.push('binding-escapes');
+  if (consumers.some((consumer) => consumer.spread === true)) {
+    reasons.push('jsx-spread');
+  }
+  const riskyAttributes = new Set(['as', 'className', 'css', 'style']);
+  if (
+    consumers.some((consumer) =>
+      consumer.attributes.some((name) => riskyAttributes.has(name)),
+    )
+  ) {
+    reasons.push('jsx-style-or-polymorphic-prop');
+  }
+  return Object.freeze([...new Set(reasons)].sort());
+}
+
 /**
  * Build same-file component-boundary facts for every styled definition.
  *
@@ -406,6 +457,13 @@ export function discoverStyledUsageFacts({
           consumers,
           uniqueEscapes,
         );
+        const themeReasons = themeBlockedReasons(
+          definition,
+          topLevel,
+          shadowed,
+          consumers,
+          uniqueEscapes,
+        );
         return createFact({
           kind: 'emotion-styled-usage',
           status: 'known',
@@ -424,6 +482,8 @@ export function discoverStyledUsageFacts({
             escapes: uniqueEscapes,
             firstSliceEligible: reasons.length === 0,
             blockedReasons: reasons,
+            themeSliceEligible: themeReasons.length === 0,
+            themeBlockedReasons: themeReasons,
           },
           provenance: [
             {
