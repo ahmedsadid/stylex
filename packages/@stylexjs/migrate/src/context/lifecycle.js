@@ -46,6 +46,7 @@ import {
   loadDynamicStrategyDraft,
 } from '../dynamic/decisions';
 import { inspectDynamicStrategyCandidate } from '../dynamic/guard';
+import { inspectBootstrapCandidate } from '../bootstrap/guard';
 import { createFact } from '../inventory/model';
 import {
   CONTEXT_MAX_ATTEMPTS,
@@ -1294,6 +1295,25 @@ export function submitContextAttempt({
         limitations: [bridge.limitation],
       }),
     );
+  }
+  if (record.task.origin.kind === 'bootstrap') {
+    const guard = inspectBootstrapCandidate({
+      candidate: result.candidate,
+      origin: record.task.origin,
+      bootstrapPaths: record.task.scope.bootstrapPaths ?? [],
+    });
+    if (!guard.complete) {
+      removeCandidateWorkspace(workspace);
+      return failAttempt({
+        project,
+        task: record.task,
+        attempt,
+        outcome: 'rejected',
+        reasons: guard.violations,
+        now,
+      });
+    }
+    staticEvidence.push(...guard.evidence);
   }
   const siteIdsByFile = Object.fromEntries(
     result.candidate.touchedFiles.map((file) => [

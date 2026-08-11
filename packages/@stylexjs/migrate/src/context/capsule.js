@@ -15,6 +15,14 @@ import type { Cluster, Fact } from '../inventory/model';
 export const CONTEXT_PROTOCOL_VERSION: string = 'stylex-migrate-context-v3';
 export const CONTEXT_MAX_ATTEMPTS: number = 2;
 
+export type BootstrapContextTaskOrigin = {
+  +kind: 'bootstrap',
+  +inspectionId: string,
+  +packageRoot: string,
+  +packageManager: 'pnpm' | 'yarn' | 'npm',
+  +integration: 'rspack' | 'webpack' | 'vite' | 'babel' | 'next-swc',
+};
+
 export type ContextTaskOrigin =
   | {
       +kind: 'plan-cluster',
@@ -32,13 +40,7 @@ export type ContextTaskOrigin =
       +definitionHash: string,
       +clusterId: string,
     }
-  | {
-      +kind: 'bootstrap',
-      +inspectionId: string,
-      +packageRoot: string,
-      +packageManager: 'pnpm' | 'yarn' | 'npm',
-      +integration: 'rspack' | 'webpack' | 'vite' | 'babel' | 'next-swc',
-    };
+  | BootstrapContextTaskOrigin;
 
 export type ContextRequiredOutput = {
   +path: string,

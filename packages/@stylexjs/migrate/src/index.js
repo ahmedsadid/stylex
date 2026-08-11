@@ -21,6 +21,16 @@ export type {
   PackageManagerInspection,
   PackageManagerName,
 } from './bootstrap/discover';
+export {
+  BOOTSTRAP_WIRING_LIMITATION,
+  BOOTSTRAP_WIRING_MODEL,
+  inspectBootstrapCandidate,
+} from './bootstrap/guard';
+export type { BootstrapGuardResult } from './bootstrap/guard';
+export {
+  BOOTSTRAP_TASK_PROTOCOL_VERSION,
+  openBootstrapTask,
+} from './bootstrap/task';
 
 export {
   RECORD_COLLECTIONS,
