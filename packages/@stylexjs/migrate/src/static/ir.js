@@ -103,3 +103,12 @@ export function hasBoxShorthands(style: StyleObject): boolean {
     (declaration) => declaration.expandedFrom != null,
   );
 }
+
+const DIRECTIONAL_PROPERTY =
+  /^(?:(?:margin|padding)(?:Inline|Block)(?:Start|End)|(?:inline|block)Size)$/;
+
+export function hasDirectionalProperties(style: StyleObject): boolean {
+  return style.declarations.some((declaration) =>
+    DIRECTIONAL_PROPERTY.test(declaration.property),
+  );
+}

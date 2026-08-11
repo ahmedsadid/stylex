@@ -53,6 +53,7 @@ export type RefusalReason =
   | 'shorthand-property'
   | 'invalid-box-shorthand'
   | 'mixed-shorthand-modifier'
+  | 'unsupported-logical-property'
   | 'non-finite-number'
   | 'css-with-jsx-spread';
 
@@ -112,6 +113,8 @@ const SUPPORTED_PSEUDO_ELEMENTS: $ReadOnlySet<string> = new Set([
 const MEDIA_QUERY = /^@media [^\r\n{}]+$/;
 const SUPPORTS_QUERY = /^@supports [^\r\n{}]+$/;
 const KEYFRAMES = /^@keyframes ([A-Za-z_][A-Za-z0-9_-]*)$/;
+const SUPPORTED_DIRECTIONAL_PROPERTY =
+  /^(?:(?:margin|padding)(?:Inline|Block)(?:Start|End)|(?:inline|block)Size)$/;
 
 type DeclarationTarget =
   | { +kind: 'root' }
@@ -339,6 +342,15 @@ function readLiteralDeclarations(
     ) {
       if (!SUPPORTED_PROPERTY_NAME.test(name)) {
         return { ok: false, reason: 'unsupported-property-name' };
+      }
+      if (
+        (name.includes('Inline') ||
+          name.includes('Block') ||
+          name === 'inlineSize' ||
+          name === 'blockSize') &&
+        !SUPPORTED_DIRECTIONAL_PROPERTY.test(name)
+      ) {
+        return { ok: false, reason: 'unsupported-logical-property' };
       }
       if (typeof value.value === 'number' && !Number.isFinite(value.value)) {
         return { ok: false, reason: 'non-finite-number' };

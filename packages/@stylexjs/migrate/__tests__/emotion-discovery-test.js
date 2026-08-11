@@ -473,6 +473,11 @@ describe('emotion discovery', () => {
         'shorthand-property',
       ],
       [
+        'an unmodeled logical property family',
+        `${PRAGMA}const App = () => <div css={{ insetInlineStart: 0 }} />;`,
+        'unsupported-logical-property',
+      ],
+      [
         'a box shorthand with more than four components',
         `${PRAGMA}const App = () => <div css={{ margin: '1px 2px 3px 4px 5px' }} />;`,
         'invalid-box-shorthand',

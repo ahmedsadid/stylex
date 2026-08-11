@@ -60,9 +60,6 @@ export const DIRECTIONAL_STATES: $ReadOnlyArray<DirectionalState> =
   ]);
 
 const LOGICAL = /^(margin|padding)-(inline|block)-(start|end)$/;
-const PHYSICAL = /^(margin|padding)-(top|right|bottom|left)$/;
-const LOGICAL_SIZE = /^(inline|block)-size$/;
-const PHYSICAL_SIZE = /^(width|height)$/;
 
 function physicalProperty(property: string, state: DirectionalState): string {
   const match = property.match(LOGICAL);
@@ -214,14 +211,6 @@ export function refereeDirectional(
 ): DirectionalRefereeResult {
   const reasons = [];
   for (const declaration of [...source, ...target]) {
-    if (
-      !LOGICAL.test(declaration.property) &&
-      !PHYSICAL.test(declaration.property) &&
-      !LOGICAL_SIZE.test(declaration.property) &&
-      !PHYSICAL_SIZE.test(declaration.property)
-    ) {
-      reasons.push(`unsupported directional property ${declaration.property}`);
-    }
     if (declaration.important)
       reasons.push('!important is outside the directional grammar');
   }
