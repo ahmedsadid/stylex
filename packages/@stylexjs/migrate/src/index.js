@@ -416,6 +416,20 @@ export type {
   BoxShorthandObservation,
   BoxShorthandRefereeResult,
 } from './referee/shorthands';
+export {
+  DIRECTIONAL_REFEREE_MODEL,
+  DIRECTIONAL_STATES,
+  observeEmotionDirectional,
+  observeStyleXDirectionalRules,
+  refereeDirectional,
+} from './referee/directional';
+export type {
+  DirectionalDeclaration,
+  DirectionalDifference,
+  DirectionalObservation,
+  DirectionalRefereeResult,
+  DirectionalState,
+} from './referee/directional';
 export { CONDITIONAL_MUTATION_MANIFEST } from './referee/mutations';
 export type {
   ConditionalMutationGate,
