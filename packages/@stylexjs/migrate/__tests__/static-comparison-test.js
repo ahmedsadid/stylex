@@ -33,6 +33,7 @@ import {
 import { KEYFRAMES_REFEREE_MODEL } from '../src/referee/keyframes';
 import { BOX_SHORTHAND_REFEREE_MODEL } from '../src/referee/shorthands';
 import { DIRECTIONAL_REFEREE_MODEL } from '../src/referee/directional';
+import { RENDER_LOCAL_CSS_MODEL } from '../src/referee/renderLocal';
 
 const PRAGMA = '/** @jsxImportSource @emotion/react */\n';
 const FILENAME = 'Component.jsx';
@@ -431,6 +432,31 @@ describe('proposing a conversion', () => {
       result: 'pass',
       subject: { model: BOX_SHORTHAND_REFEREE_MODEL },
     });
+  });
+
+  test('a direct render-local css call carries call-integrity evidence', () => {
+    const result = proposeStaticConversion({
+      source: `${PRAGMA}import { css as emotionCss } from '@emotion/react';
+export const App = () => <div css={emotionCss({ color: 'red' })} />;`,
+      filename: FILENAME,
+    });
+    expect(result.status).toBe('proposed');
+    if (result.status !== 'proposed') return;
+    expect(result.model).toBe(RENDER_LOCAL_CSS_MODEL);
+    expect(result.evidence).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          check: 'render-local-call-integrity',
+          result: 'pass',
+          subject: expect.objectContaining({ model: RENDER_LOCAL_CSS_MODEL }),
+        }),
+        expect.objectContaining({
+          check: 'static-css-comparison',
+          result: 'pass',
+          subject: expect.objectContaining({ model: RENDER_LOCAL_CSS_MODEL }),
+        }),
+      ]),
+    );
   });
 
   test.each([

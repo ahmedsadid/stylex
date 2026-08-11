@@ -432,6 +432,7 @@ export type {
   DirectionalRefereeResult,
   DirectionalState,
 } from './referee/directional';
+export { RENDER_LOCAL_CSS_MODEL } from './referee/renderLocal';
 export { CONDITIONAL_MUTATION_MANIFEST } from './referee/mutations';
 export type {
   ConditionalMutationGate,

@@ -299,6 +299,15 @@ const App = (css) => <div css={css({ color: 'red' })} />;`);
     }
   });
 
+  test('keeps the first render-local grammar flat', () => {
+    const result = read(`${PRAGMA}import { css } from '@emotion/react';
+const App = () => <div css={css({ ':hover': { color: 'red' } })} />;`);
+    expect(result.sites).toEqual([]);
+    expect(result.refusals.map((item) => item.reason)).toEqual([
+      'render-local-css-non-flat',
+    ]);
+  });
+
   test('refuses an effectful value hidden by a later pseudo-element block', () => {
     const result = read(`${PRAGMA}const App = () => (
   <div css={{ '::after': { color: sideEffect() }, '::after': { opacity: 1 } }} />

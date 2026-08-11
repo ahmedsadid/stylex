@@ -67,6 +67,7 @@ import {
   DIRECTIONAL_REFEREE_MODEL,
   refereeDirectional,
 } from '../referee/directional';
+import { RENDER_LOCAL_CSS_MODEL } from '../referee/renderLocal';
 import type { EvidenceResult } from '../evidence/claims';
 import type { EmotionRefusal } from '../adapters/emotion/discover';
 import type { ConvertedOutcome } from '../adapters/emotion/convert';
@@ -760,13 +761,31 @@ export function verifyConversion({
       });
       continue;
     }
+    const renderLocal = entry.site.form === 'render-local-css-call';
+    const flatModel = renderLocal ? RENDER_LOCAL_CSS_MODEL : COMPARISON_MODEL;
+    if (renderLocal) {
+      results.push(
+        evidence({
+          check: 'render-local-call-integrity',
+          provider: 'stylex-migrate',
+          subject: { ...subject, model: RENDER_LOCAL_CSS_MODEL },
+          scope: [`${filename}#${entry.key}`],
+          result: 'pass',
+          limitations: [
+            'source was one direct unshadowed @emotion/react css call with one closed literal argument',
+            'the call result was consumed only by this host-element css prop and could not expose binding identity',
+            'the generated stylex.props call remains at the same render-local site; the pure literal object is hoisted into stylex.create',
+          ],
+        }),
+      );
+    }
     const baseline = emotionBaseline(objectSource);
     if (!baseline.ok) {
       results.push(
         evidence({
           check: 'static-css-comparison',
           provider: EMOTION_PROVIDER,
-          subject: { ...subject, model: COMPARISON_MODEL },
+          subject: { ...subject, model: flatModel },
           scope: [`${filename}#${entry.key}`],
           result: 'unavailable',
           detail: baseline.reason,
@@ -786,12 +805,12 @@ export function verifyConversion({
     ) {
       const reason =
         `CSS for ${entry.key} contains !important, which is outside ` +
-        `comparison model ${COMPARISON_MODEL}`;
+        `comparison model ${flatModel}`;
       results.push(
         evidence({
           check: 'static-css-comparison',
           provider: 'stylex-migrate',
-          subject: { ...subject, model: COMPARISON_MODEL },
+          subject: { ...subject, model: flatModel },
           scope: [`${filename}#${entry.key}`],
           result: 'not-applicable',
           detail: reason,
@@ -815,7 +834,7 @@ export function verifyConversion({
         evidence({
           check: 'static-css-comparison',
           provider: STYLEX_PROVIDER,
-          subject: { ...subject, model: COMPARISON_MODEL },
+          subject: { ...subject, model: flatModel },
           scope: [`${filename}#${entry.key}`],
           result: 'unavailable',
           detail: target.reason,
@@ -836,14 +855,17 @@ export function verifyConversion({
       evidence({
         check: 'static-css-comparison',
         provider: 'stylex-migrate',
-        subject: { ...subject, model: COMPARISON_MODEL },
+        subject: { ...subject, model: flatModel },
         scope: [`${filename}#${entry.key}`],
         result: comparison.equal ? 'pass' : 'fail',
         ...(comparison.equal
           ? {}
           : { detail: describeDifferences(comparison.differences) }),
         limitations: [
-          `compared under model ${COMPARISON_MODEL}`,
+          `compared CSS under model ${COMPARISON_MODEL}`,
+          ...(renderLocal
+            ? [`wrapped by call-integrity model ${RENDER_LOCAL_CSS_MODEL}`]
+            : []),
           `source CSS from ${EMOTION_PROVIDER} ${packageVersion(EMOTION_PROVIDER)}, ` +
             `target CSS from ${STYLEX_PROVIDER} ${packageVersion(STYLEX_PROVIDER)}`,
           'declaration-level comparison only: no runtime, no cascade with other rules',
@@ -860,7 +882,7 @@ export function verifyConversion({
       };
     }
 
-    comparisonModels.add(COMPARISON_MODEL);
+    comparisonModels.add(flatModel);
     entries.push({
       key: entry.key,
       elementName: entry.site.elementName,

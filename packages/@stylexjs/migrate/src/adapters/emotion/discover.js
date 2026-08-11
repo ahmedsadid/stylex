@@ -56,6 +56,7 @@ export type RefusalReason =
   | 'unsupported-logical-property'
   | 'render-local-css-binding-unresolved'
   | 'render-local-css-call-shape'
+  | 'render-local-css-non-flat'
   | 'non-finite-number'
   | 'css-with-jsx-spread';
 
@@ -872,6 +873,27 @@ function discoverActive(ast: $FlowFixMe): DiscoveryResult {
         end: attribute.end,
         elementName,
         reason: read.reason,
+      });
+      return;
+    }
+    if (
+      form === 'render-local-css-call' &&
+      read.style.declarations.some(
+        (declaration) =>
+          declaration.condition != null ||
+          declaration.pseudoElement != null ||
+          declaration.mediaQuery != null ||
+          declaration.supportsQuery != null ||
+          declaration.expandedFrom != null ||
+          typeof declaration.value === 'object' ||
+          SUPPORTED_DIRECTIONAL_PROPERTY.test(declaration.property),
+      )
+    ) {
+      refusals.push({
+        start: attribute.start,
+        end: attribute.end,
+        elementName,
+        reason: 'render-local-css-non-flat',
       });
       return;
     }
