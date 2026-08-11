@@ -350,6 +350,7 @@ export type { LintMessage, LintResult } from './evidence/lint';
 export {
   stylexCascadeForKey,
   stylexCssForKey,
+  stylexDirectionalForKey,
   stylexKeyframesForKey,
 } from './evidence/staticCss';
 
@@ -357,6 +358,7 @@ export {
   emotionBaseline,
   emotionConditionalBaseline,
   emotionBoxShorthandBaseline,
+  emotionDirectionalBaseline,
   emotionKeyframesBaseline,
   emotionMediaQueryBaseline,
   emotionPseudoElementBaseline,

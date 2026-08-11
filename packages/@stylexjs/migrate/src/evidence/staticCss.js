@@ -13,9 +13,14 @@ import { walk } from '../static/walk';
 import { parseRule } from '../compare/model';
 import { observeStyleXRules } from '../referee/observations';
 import { observeStyleXKeyframes } from '../referee/keyframes';
+import { observeStyleXDirectionalRules } from '../referee/directional';
 import type { CssDeclaration } from '../compare/model';
 import type { CascadeObservation } from '../referee/observations';
 import type { KeyframesObservation } from '../referee/keyframes';
+import type {
+  DirectionalDeclaration,
+  DirectionalObservation,
+} from '../referee/directional';
 
 /**
  * The CSS StyleX actually produces for one style key.
@@ -207,5 +212,53 @@ export function stylexKeyframesForKey({
   const observed = observeStyleXKeyframes(probe, 'keyframes-probe.js');
   return observed.ok
     ? { ok: true, classNames, observation: observed.observation }
+    : observed;
+}
+
+export function stylexDirectionalForKey({
+  importText,
+  registryName,
+  createCallText,
+  namespace,
+  key,
+}: {
+  +importText: string,
+  +registryName: string,
+  +createCallText: string,
+  +namespace: string,
+  +key: string,
+}):
+  | {
+      +ok: true,
+      +classNames: $ReadOnlyArray<string>,
+      +declarations: $ReadOnlyArray<DirectionalDeclaration>,
+    }
+  | { +ok: false, +reason: string } {
+  const probe = [
+    importText,
+    `const ${registryName} = ${createCallText};`,
+    `export const probe = ${namespace}.props(${registryName}.${key});`,
+    '',
+  ].join('\n');
+  const compiled = compileStyleX(probe, 'directional-probe.js');
+  if (!compiled.ok) return compiled;
+  const classNames = probeClassNames(compiled.code);
+  if (classNames == null) {
+    return { ok: false, reason: 'could not read compiled directional classes' };
+  }
+  const rules = new Map(
+    compiled.ruleMetadata.map((rule) => [rule.className, rule]),
+  );
+  const selected = [];
+  for (const className of classNames) {
+    const rule = rules.get(className);
+    if (rule == null)
+      return { ok: false, reason: `missing directional rule ${className}` };
+    selected.push(rule);
+  }
+  const observed: DirectionalObservation =
+    observeStyleXDirectionalRules(selected);
+  return observed.ok
+    ? { ok: true, classNames, declarations: observed.declarations }
     : observed;
 }

@@ -32,6 +32,7 @@ import {
 } from '../src/referee/model';
 import { KEYFRAMES_REFEREE_MODEL } from '../src/referee/keyframes';
 import { BOX_SHORTHAND_REFEREE_MODEL } from '../src/referee/shorthands';
+import { DIRECTIONAL_REFEREE_MODEL } from '../src/referee/directional';
 
 const PRAGMA = '/** @jsxImportSource @emotion/react */\n';
 const FILENAME = 'Component.jsx';
@@ -430,6 +431,34 @@ describe('proposing a conversion', () => {
       result: 'pass',
       subject: { model: BOX_SHORTHAND_REFEREE_MODEL },
     });
+  });
+
+  test.each([
+    "{ marginInlineStart: '2px' }",
+    "{ marginInlineStart: '2px', marginLeft: '1px' }",
+  ])('directional styles pass only when all six states agree: %s', (object) => {
+    const result = proposeStaticConversion({
+      source: file(object),
+      filename: FILENAME,
+    });
+    expect(result.status).toBe('proposed');
+    if (result.status === 'proposed')
+      expect(result.model).toBe(DIRECTIONAL_REFEREE_MODEL);
+  });
+
+  test.each([
+    "{ marginLeft: '1px', marginInlineStart: '2px' }",
+    "{ marginBlockStart: '2px' }",
+    "{ inlineSize: '10px' }",
+  ])('directional styles refuse when a runtime state differs: %s', (object) => {
+    const result = proposeStaticConversion({
+      source: file(object),
+      filename: FILENAME,
+    });
+    expect(result.status).toBe('refused');
+    if (result.status === 'refused') {
+      expect(result.reason).toContain('directional CSS differs');
+    }
   });
 
   test('values the two libraries print differently still compare equal', () => {

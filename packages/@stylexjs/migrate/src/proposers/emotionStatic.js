@@ -12,6 +12,7 @@ import {
   emotionBaseline,
   emotionConditionalBaseline,
   emotionBoxShorthandBaseline,
+  emotionDirectionalBaseline,
   emotionKeyframesBaseline,
   emotionMediaQueryBaseline,
   emotionPseudoElementBaseline,
@@ -22,6 +23,7 @@ import { describeLintMessages, lintStyleX } from '../evidence/lint';
 import {
   stylexCascadeForKey,
   stylexCssForKey,
+  stylexDirectionalForKey,
   stylexKeyframesForKey,
 } from '../evidence/staticCss';
 import { allPassed, evidence, packageVersion } from '../evidence/claims';
@@ -37,6 +39,7 @@ import { STYLEX_MODULE } from '../static/emit';
 import {
   hasConditions,
   hasBoxShorthands,
+  hasDirectionalProperties,
   hasKeyframes,
   hasMediaQueries,
   hasPseudoElements,
@@ -60,6 +63,10 @@ import {
   BOX_SHORTHAND_REFEREE_MODEL,
   refereeBoxShorthands,
 } from '../referee/shorthands';
+import {
+  DIRECTIONAL_REFEREE_MODEL,
+  refereeDirectional,
+} from '../referee/directional';
 import type { EvidenceResult } from '../evidence/claims';
 import type { EmotionRefusal } from '../adapters/emotion/discover';
 import type { ConvertedOutcome } from '../adapters/emotion/convert';
@@ -379,6 +386,87 @@ export function verifyConversion({
       entry.site.objectStart,
       entry.site.objectEnd,
     );
+    if (hasDirectionalProperties(entry.style)) {
+      const baseline = emotionDirectionalBaseline(objectSource);
+      const target = stylexDirectionalForKey({
+        importText: structure.structure.importText,
+        registryName: converted.registryName,
+        createCallText: structure.structure.createCallText,
+        namespace: converted.namespace,
+        key: entry.key,
+      });
+      if (!baseline.ok || !target.ok) {
+        const reason = !baseline.ok
+          ? baseline.reason
+          : !target.ok
+            ? target.reason
+            : 'directional evidence unexpectedly unavailable';
+        const provider = !baseline.ok ? EMOTION_PROVIDER : STYLEX_PROVIDER;
+        results.push(
+          evidence({
+            check: 'static-css-comparison',
+            provider,
+            subject: { ...subject, model: DIRECTIONAL_REFEREE_MODEL },
+            scope: [`${filename}#${entry.key}`],
+            result: 'unavailable',
+            detail: reason,
+          }),
+        );
+        return {
+          status: 'refused',
+          reason: `no directional comparison for ${entry.key}: ${reason}`,
+          evidence: results,
+        };
+      }
+      const comparison = refereeDirectional(
+        baseline.declarations,
+        target.declarations,
+      );
+      const detail =
+        comparison.status === 'unsupported'
+          ? comparison.reasons.join('; ')
+          : comparison.differences
+              .map(
+                (item) =>
+                  `${item.property} in ${item.stateId}: Emotion=${item.sourceValue ?? '(absent)'}, StyleX=${item.targetValue ?? '(absent)'}`,
+              )
+              .join('; ');
+      results.push(
+        evidence({
+          check: 'static-css-comparison',
+          provider: 'stylex-migrate',
+          subject: { ...subject, model: DIRECTIONAL_REFEREE_MODEL },
+          scope: [`${filename}#${entry.key}`],
+          result:
+            comparison.status === 'equivalent'
+              ? 'pass'
+              : comparison.status === 'mismatch'
+                ? 'fail'
+                : 'not-applicable',
+          ...(detail === '' ? {} : { detail }),
+          limitations: [
+            `compared under model ${DIRECTIONAL_REFEREE_MODEL}`,
+            'enumerated LTR and RTL under horizontal-tb, vertical-rl, and vertical-lr writing modes',
+            'only margin/padding inline/block edges and inline/block size are admitted as logical properties',
+            'no runtime evidence and no CSS outside this local style object was compared',
+          ],
+        }),
+      );
+      if (comparison.status !== 'equivalent') {
+        return {
+          status: 'refused',
+          reason: `directional CSS differs for ${entry.key}: ${detail || 'unsupported'}`,
+          evidence: results,
+        };
+      }
+      comparisonModels.add(DIRECTIONAL_REFEREE_MODEL);
+      entries.push({
+        key: entry.key,
+        elementName: entry.site.elementName,
+        classNames: target.classNames,
+      });
+      continue;
+    }
     if (hasKeyframes(entry.style)) {
       const baseline = emotionKeyframesBaseline(objectSource);
       if (!baseline.ok) {

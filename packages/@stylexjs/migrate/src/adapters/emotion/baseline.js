@@ -14,10 +14,12 @@ import { parseDeclarations } from '../../compare/model';
 import { observeEmotionSerialization } from '../../referee/observations';
 import { observeEmotionKeyframes } from '../../referee/keyframes';
 import { observeEmotionBoxShorthands } from '../../referee/shorthands';
+import { observeEmotionDirectional } from '../../referee/directional';
 import type { CssDeclaration } from '../../compare/model';
 import type { CascadeObservation } from '../../referee/observations';
 import type { KeyframesObservationResult } from '../../referee/keyframes';
 import type { BoxShorthandObservation } from '../../referee/shorthands';
+import type { DirectionalObservation } from '../../referee/directional';
 
 /**
  * The independent Emotion baseline.
@@ -260,6 +262,29 @@ function isApprovedBoxShorthandObject(objectSource: string): boolean {
   return shorthand;
 }
 
+function isApprovedDirectionalObject(objectSource: string): boolean {
+  const parsed = parseSource(
+    `(${objectSource})`,
+    'directional-baseline-guard.js',
+  );
+  if (!parsed.ok) return false;
+  const expression = parsed.ast.program?.body?.[0]?.expression;
+  if (expression?.type !== 'ObjectExpression') return false;
+  let directional = false;
+  for (const property of expression.properties ?? []) {
+    const name = staticKey(property);
+    if (name == null || !literalValue(property.value)) return false;
+    if (
+      /^(?:(?:margin|padding)(?:Inline|Block)(?:Start|End)|(?:inline|block)Size)$/.test(
+        name,
+      )
+    ) {
+      directional = true;
+    }
+  }
+  return directional;
+}
+
 export function emotionBaseline(objectSource: string): BaselineResult {
   if (!isLiteralOnlyObject(objectSource)) {
     return {
@@ -450,4 +475,27 @@ export function emotionBoxShorthandBaseline(
     };
   }
   return observeEmotionBoxShorthands(styleValue);
+}
+
+export function emotionDirectionalBaseline(
+  objectSource: string,
+): DirectionalObservation {
+  if (!isApprovedDirectionalObject(objectSource)) {
+    return {
+      ok: false,
+      reason:
+        'refusing to evaluate directional styles outside the approved flat literal grammar',
+    };
+  }
+  let styleValue: mixed;
+  try {
+    // eslint-disable-next-line no-new-func
+    styleValue = new Function(`return (${objectSource});`)();
+  } catch (error) {
+    return {
+      ok: false,
+      reason: `could not evaluate the directional style object: ${String(error)}`,
+    };
+  }
+  return observeEmotionDirectional(styleValue);
 }
