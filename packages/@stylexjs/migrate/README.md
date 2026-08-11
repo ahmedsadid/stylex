@@ -100,11 +100,14 @@ named human and cannot be delegated to an agent.
 paths, local-provider readiness, bridge readiness, and blockers. Bridge-ready is
 a bounded syntax/usage result, not evidence that a repository bridge exists.
 `theme draft` can scaffold a token map from known reads in exact declared
-consumer files. It resolves only those requested paths through bounded object
-composition and configured-path imports, records each variant's root module, and
-pins every transitive source file it consulted. `theme inspect` exposes the
-exact reviewable entries under `mappings`; an agent must stop before
-`theme approve`.
+consumer files. Instead of listing files, draft input may use a bounded
+`consumerSelection` with mode `bridge-ready` or `local-provider-ready`, explicit
+include globs, and `maxFiles` from 1 to 100. Scaffolded variable names derive
+from the full source path so later batches do not rename earlier entries. The
+CLI resolves only those requested paths through bounded object composition and
+configured-path imports, records each variant's root module, and pins every
+transitive source file it consulted. `theme inspect` exposes the exact
+reviewable entries under `mappings`; an agent must stop before `theme approve`.
 
 For repositories with a separately implemented dual Emotion/StyleX theme bridge,
 a draft may declare coverage globs and exact bridge boundary files. Those files

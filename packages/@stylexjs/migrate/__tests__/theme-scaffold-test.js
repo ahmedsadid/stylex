@@ -39,7 +39,7 @@ export const Card = () => <CardRoot />;
       },
       {
         sourcePath: 'border.secondary',
-        targetName: 'secondary',
+        targetName: 'borderSecondary',
         existingCssVariable: null,
       },
       {
@@ -60,5 +60,71 @@ export const Card = () => <CardRoot />;
     expect(scaffoldThemeDecisionDefinition({ inventory, definition })).toBe(
       definition,
     );
+  });
+
+  test('selects a bounded deterministic batch from bridge-ready consumers', () => {
+    repo = createTempRepo({
+      'src/A.tsx': `import styled from '@emotion/styled';
+const Root = styled.div\`color: \${p => p.theme.colors.a};\`;
+export const A = () => <Root />;
+`,
+      'src/B.tsx': `import styled from '@emotion/styled';
+const Root = styled.div\`color: \${p => p.theme.colors.b};\`;
+export const B = () => <Root />;
+`,
+      'other/C.tsx': `import styled from '@emotion/styled';
+const Root = styled.div\`color: \${p => p.theme.colors.c};\`;
+export const C = () => <Root />;
+`,
+    });
+    const inventory = scanRepository({ repositoryRoot: repo });
+    const result: $FlowFixMe = scaffoldThemeDecisionDefinition({
+      inventory,
+      definition: {
+        consumerSelection: {
+          mode: 'bridge-ready',
+          includeGlobs: ['src/**'],
+          maxFiles: 1,
+        },
+      },
+    });
+    expect(result.consumerFiles).toEqual(['src/A.tsx']);
+    expect(result.tokens).toEqual([
+      {
+        sourcePath: 'colors.a',
+        targetName: 'colorsA',
+        existingCssVariable: null,
+      },
+    ]);
+  });
+
+  test('refuses unbounded, empty, or conflicting candidate selection', () => {
+    repo = createTempRepo({ 'src/file.ts': 'export const value = 1;\n' });
+    const inventory = scanRepository({ repositoryRoot: repo });
+    expect(() =>
+      scaffoldThemeDecisionDefinition({
+        inventory,
+        definition: {
+          consumerSelection: {
+            mode: 'bridge-ready',
+            includeGlobs: ['src/**'],
+            maxFiles: 0,
+          },
+        },
+      }),
+    ).toThrow('maxFiles from 1 to 100');
+    expect(() =>
+      scaffoldThemeDecisionDefinition({
+        inventory,
+        definition: {
+          consumerFiles: ['src/file.ts'],
+          consumerSelection: {
+            mode: 'bridge-ready',
+            includeGlobs: ['src/**'],
+            maxFiles: 1,
+          },
+        },
+      }),
+    ).toThrow('either consumerFiles or consumerSelection');
   });
 });

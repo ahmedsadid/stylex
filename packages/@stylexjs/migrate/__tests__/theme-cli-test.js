@@ -144,7 +144,7 @@ export const Card = () => <ThemeProvider theme={darkTheme}><CardRoot data-card="
       mappings: [
         {
           sourcePath: 'colors.foreground',
-          targetName: 'foreground',
+          targetName: 'colorsForeground',
           values: { lightTheme: '#111', darkTheme: '#eee' },
         },
       ],
@@ -198,7 +198,7 @@ export const Card = () => <ThemeProvider theme={darkTheme}><CardRoot data-card="
     ]);
     expect(diff.code).toBe(0);
     expect(diff.json.patchText).toContain('stylex.create');
-    expect(diff.json.patchText).toContain('themeVars.foreground');
+    expect(diff.json.patchText).toContain('themeVars.colorsForeground');
     expect(diff.json.patchText).toContain('stylex.props(styles.cardRoot)');
     expect(diff.json.patchText).toContain('stylex.props(darkTheme)');
     expect(diff.json.patchText).not.toContain('+const CardRoot = styled.div');

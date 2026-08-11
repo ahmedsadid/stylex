@@ -8,6 +8,8 @@
  */
 
 import { hashString, shortHash } from '../kernel/hash';
+import { matchesGlob } from '../candidate/scope';
+import { themeConsumerCandidates } from './candidates';
 import type { Inventory } from '../inventory/model';
 
 function object(value: mixed): boolean {
@@ -30,18 +32,10 @@ function fullName(sourcePath: string): string {
 }
 
 function targetNames(paths: $ReadOnlyArray<string>): Map<string, string> {
-  const leaves = new Map<string, Array<string>>();
-  for (const sourcePath of paths) {
-    const leaf = identifierPart(sourcePath.split('.').at(-1) ?? sourcePath);
-    const values = leaves.get(leaf) ?? [];
-    values.push(sourcePath);
-    leaves.set(leaf, values);
-  }
   const output = new Map<string, string>();
   const allocated = new Set<string>();
   for (const sourcePath of paths) {
-    const leaf = identifierPart(sourcePath.split('.').at(-1) ?? sourcePath);
-    let target = leaves.get(leaf)?.length === 1 ? leaf : fullName(sourcePath);
+    let target = fullName(sourcePath);
     if (allocated.has(target)) {
       target = `${target}_${shortHash(hashString(sourcePath))}`;
     }
@@ -63,19 +57,63 @@ export function scaffoldThemeDecisionDefinition({
   if (!object(definition)) {
     throw new Error('Theme draft input must be an object');
   }
+  let consumerFiles = definition.consumerFiles;
+  if (definition.consumerSelection != null) {
+    if (Array.isArray(consumerFiles) && consumerFiles.length > 0) {
+      throw new Error(
+        'Theme draft must use either consumerFiles or consumerSelection, not both',
+      );
+    }
+    const selection: $FlowFixMe = definition.consumerSelection;
+    if (
+      !object(selection) ||
+      (selection.mode !== 'bridge-ready' &&
+        selection.mode !== 'local-provider-ready') ||
+      !Array.isArray(selection.includeGlobs) ||
+      selection.includeGlobs.length === 0 ||
+      !selection.includeGlobs.every(
+        (glob) => typeof glob === 'string' && glob !== '',
+      ) ||
+      !Number.isInteger(selection.maxFiles) ||
+      selection.maxFiles < 1 ||
+      selection.maxFiles > 100
+    ) {
+      throw new Error(
+        'Theme consumerSelection requires a readiness mode, include globs, and maxFiles from 1 to 100',
+      );
+    }
+    const report = themeConsumerCandidates(inventory);
+    consumerFiles = report.candidates
+      .filter(
+        (candidate) =>
+          (selection.mode === 'bridge-ready'
+            ? candidate.bridgeReady
+            : candidate.localProviderReady) &&
+          selection.includeGlobs.some((glob) =>
+            matchesGlob(String(glob), candidate.file),
+          ),
+      )
+      .slice(0, selection.maxFiles)
+      .map((candidate) => candidate.file);
+    if (consumerFiles.length === 0) {
+      throw new Error('Theme consumerSelection matched no ready files');
+    }
+  }
   if (Array.isArray(definition.tokens) && definition.tokens.length > 0) {
-    return definition;
+    return consumerFiles === definition.consumerFiles
+      ? definition
+      : { ...definition, consumerFiles };
   }
   if (
-    !Array.isArray(definition.consumerFiles) ||
-    definition.consumerFiles.length === 0 ||
-    !definition.consumerFiles.every((file) => typeof file === 'string')
+    !Array.isArray(consumerFiles) ||
+    consumerFiles.length === 0 ||
+    !consumerFiles.every((file) => typeof file === 'string')
   ) {
     throw new Error(
       'Automatic theme token discovery requires explicit consumer files',
     );
   }
-  const consumers = new Set(definition.consumerFiles);
+  const consumers = new Set(consumerFiles);
   const paths = [
     ...new Set(
       inventory.facts
@@ -100,6 +138,7 @@ export function scaffoldThemeDecisionDefinition({
   const names = targetNames(paths);
   return {
     ...definition,
+    consumerFiles,
     tokens: paths.map((sourcePath) => ({
       sourcePath,
       targetName: String(names.get(sourcePath)),

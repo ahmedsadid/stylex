@@ -110,9 +110,11 @@ different lane.
    exists.
 2. Put the temporary JSON input outside the source checkout. Declare variants,
    their root source module, the target module, and exact consumer files. The
-   `tokens` array may be omitted: the tool will scaffold known consumer reads,
-   resolve only those requested paths through bounded object composition and
-   imports, and pin every transitive source file. Run
+   input may instead declare a bounded `consumerSelection` with a readiness
+   mode, explicit include globs, and `maxFiles` from 1 to 100. The `tokens`
+   array may be omitted: the tool will scaffold known consumer reads with stable
+   full-path names, resolve only those requested paths through bounded object
+   composition and imports, and pin every transitive source file. Run
    `stylex-migrate theme draft <json-file> <agent-name>`.
 3. Run `stylex-migrate theme inspect <draft-id>` and present every exact
    `mappings` entry, variant source, bridge declaration, limitation, and the
