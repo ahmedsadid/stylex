@@ -26,6 +26,7 @@ import {
   createTempRepo,
   readFile,
   removeTempDir,
+  writeFiles,
 } from './utils/tempRepo';
 
 function definition(
@@ -106,6 +107,7 @@ export const Card = () => <div css={(theme) => ({color: theme.colors.foreground}
       { 'src/Card.tsx': card },
       'src/Card.tsx',
     );
+    writeFiles(repo, { 'notes/unrelated.txt': 'developer work\n' });
     const result = proposeThemeDecisionCandidate({
       project,
       draftId: draft.id,
@@ -134,6 +136,7 @@ export const Card = () => <div css={(theme) => ({color: theme.colors.foreground}
     );
     expect(result.record.siteIdsByFile['src/Card.tsx']).toHaveLength(1);
     expect(readFile(repo, 'src/Card.tsx')).toBe(card);
+    expect(readFile(repo, 'notes/unrelated.txt')).toBe('developer work\n');
     expect(fs.existsSync(path.join(repo, draft.targetModule))).toBe(false);
   });
 

@@ -126,6 +126,7 @@ export function proposeThemeDecisionCandidate({
     repositoryRoot: project.repositoryRoot,
     allowedPaths: [...draft.consumerFiles, draft.targetModule],
     baseCommit: snapshot.gitCommit,
+    requireClean: false,
     rootDir: workspaceRoot,
   });
   try {
