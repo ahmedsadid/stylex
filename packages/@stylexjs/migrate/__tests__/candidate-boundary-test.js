@@ -22,6 +22,7 @@ import {
   removeCandidateWorkspace,
   transition,
   applyPlan,
+  snapshotHash,
 } from '../src/index';
 import { writeCandidate } from '../src/candidate/write';
 import type {
@@ -199,6 +200,46 @@ describe('the candidate boundary', () => {
       'cluster-b',
     ]);
     expect(new Set([agent, deterministic, anotherCluster]).size).toBe(3);
+  });
+
+  test('decision artifacts are inputs to both snapshot and candidate identity', () => {
+    const workspace = openWorkspace(['src/**']);
+    writeFiles(workspace.path, {
+      'src/Button.js': 'export const Button = 42;\n',
+    });
+    const unbound = createSnapshot({
+      repositoryRoot: repo,
+      files: ['src/Button.js'],
+    });
+    const decisionHash = hashString('approved theme map');
+    const refused = createCandidatePatch({
+      workspace,
+      snapshot: unbound,
+      proposer: PROPOSER,
+      decisionArtifactHashes: [decisionHash],
+    });
+    expect(refused).toMatchObject({
+      ok: false,
+      reason:
+        'candidate decision artifacts are not bound to the supplied snapshot',
+    });
+
+    const bound = createSnapshot({
+      repositoryRoot: repo,
+      files: ['src/Button.js'],
+      decisionArtifactHashes: [decisionHash],
+    });
+    expect(snapshotHash(bound)).not.toBe(snapshotHash(unbound));
+    const accepted = createCandidatePatch({
+      workspace,
+      snapshot: bound,
+      proposer: PROPOSER,
+      decisionArtifactHashes: [decisionHash],
+    });
+    expect(accepted.ok).toBe(true);
+    if (accepted.ok) {
+      expect(accepted.candidate.decisionArtifactHashes).toEqual([decisionHash]);
+    }
   });
 
   test('a no-op candidate traverses the lifecycle and changes nothing', () => {

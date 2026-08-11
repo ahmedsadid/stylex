@@ -279,6 +279,7 @@ export {
 } from './kernel/hash';
 
 export {
+  bindSnapshotDecisionArtifacts,
   canonicalRoot,
   createSnapshot,
   detectMovedHead,
@@ -286,6 +287,7 @@ export {
   extendSnapshot,
   gitCommitOf,
   isWorktreeClean,
+  snapshotDecisionArtifactHashes,
   snapshotHash,
 } from './kernel/snapshot';
 export type { WorkspaceSnapshot } from './kernel/snapshot';

@@ -11,6 +11,7 @@ import {
   git,
   gitBuffer,
   extendSnapshot,
+  snapshotDecisionArtifactHashes,
   snapshotHash,
 } from '../kernel/snapshot';
 import { hashFields, hashString, shortHash } from '../kernel/hash';
@@ -234,6 +235,21 @@ export function createCandidatePatch({
   // deterministic proposer; agent and human candidates use the approval lane.
   +expectedContent?: { +[path: string]: string },
 }): CandidateResult {
+  const stableDecisions = Object.freeze(
+    [...new Set(decisionArtifactHashes)].sort(),
+  );
+  const snapshotDecisions = snapshotDecisionArtifactHashes(snapshot);
+  if (
+    stableDecisions.length !== snapshotDecisions.length ||
+    stableDecisions.some((value, index) => value !== snapshotDecisions[index])
+  ) {
+    return {
+      ok: false,
+      reason:
+        'candidate decision artifacts are not bound to the supplied snapshot',
+      paths: [],
+    };
+  }
   if (workspace.repositoryRoot !== snapshot.repositoryRoot) {
     return {
       ok: false,
@@ -391,9 +407,6 @@ export function createCandidatePatch({
   );
 
   const stableClusterIds = Object.freeze([...new Set(clusterIds)].sort());
-  const stableDecisions = Object.freeze(
-    [...new Set(decisionArtifactHashes)].sort(),
-  );
   const stableProposer = Object.freeze({ ...proposer });
   const candidate: CandidatePatch = Object.freeze({
     id: candidateIdentity({
@@ -445,6 +458,15 @@ export function validateCandidatePatch(
   }
   if (candidate.baseCommit !== snapshot.gitCommit) {
     return 'candidate and snapshot describe different base commits';
+  }
+  const snapshotDecisions = snapshotDecisionArtifactHashes(snapshot);
+  if (
+    candidate.decisionArtifactHashes.length !== snapshotDecisions.length ||
+    candidate.decisionArtifactHashes.some(
+      (value, index) => value !== snapshotDecisions[index],
+    )
+  ) {
+    return 'candidate decision artifacts are not bound to its snapshot';
   }
   if (
     candidate.proposer.version === '' ||

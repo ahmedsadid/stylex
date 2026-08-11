@@ -41,7 +41,37 @@ export type WorkspaceSnapshot = {
   // Git-relevant file mode at `gitCommit`. Content alone cannot distinguish a
   // regular source file from an executable one.
   +fileModes: { +[path: string]: string | null },
+  // Human decisions are immutable inputs just like source bytes. This field is
+  // optional only so candidates persisted before the decision protocol remain
+  // readable; new decision-backed snapshots always carry it.
+  +decisionArtifactHashes?: $ReadOnlyArray<string>,
 };
+
+function canonicalDecisionArtifactHashes(
+  values: $ReadOnlyArray<string> = [],
+): $ReadOnlyArray<string> {
+  if (values.some((value) => typeof value !== 'string' || value === '')) {
+    throw new Error('Decision artifact hashes must be non-empty strings');
+  }
+  return Object.freeze([...new Set(values)].sort());
+}
+
+export function snapshotDecisionArtifactHashes(
+  snapshot: WorkspaceSnapshot,
+): $ReadOnlyArray<string> {
+  return canonicalDecisionArtifactHashes(snapshot.decisionArtifactHashes);
+}
+
+export function bindSnapshotDecisionArtifacts(
+  snapshot: WorkspaceSnapshot,
+  decisionArtifactHashes: $ReadOnlyArray<string>,
+): WorkspaceSnapshot {
+  const stable = canonicalDecisionArtifactHashes(decisionArtifactHashes);
+  return Object.freeze({
+    ...snapshot,
+    decisionArtifactHashes: stable,
+  });
+}
 
 export function git(
   repositoryRoot: string,
@@ -200,10 +230,12 @@ export function createSnapshot({
   repositoryRoot,
   files,
   configHash,
+  decisionArtifactHashes = [],
 }: {
   +repositoryRoot: string,
   +files: $ReadOnlyArray<string>,
   +configHash?: string,
+  +decisionArtifactHashes?: $ReadOnlyArray<string>,
 }): WorkspaceSnapshot {
   const root = canonicalRoot(repositoryRoot);
   const gitCommit = gitCommitOf(root);
@@ -213,6 +245,7 @@ export function createSnapshot({
     fileHashes[file] = commitHashAt(root, gitCommit, file);
     fileModes[file] = commitModeAt(root, gitCommit, file);
   }
+  const decisions = canonicalDecisionArtifactHashes(decisionArtifactHashes);
   return Object.freeze({
     repositoryRoot: root,
     gitCommit,
@@ -220,6 +253,7 @@ export function createSnapshot({
     configHash: configHash ?? hashString(''),
     fileHashes: Object.freeze(fileHashes),
     fileModes: Object.freeze(fileModes),
+    ...(decisions.length === 0 ? {} : { decisionArtifactHashes: decisions }),
   });
 }
 
@@ -272,6 +306,10 @@ export function snapshotHash(snapshot: WorkspaceSnapshot): string {
     snapshot.gitCommit,
     snapshot.configHash,
   ];
+  const decisions = snapshotDecisionArtifactHashes(snapshot);
+  if (decisions.length > 0) {
+    fields.push('decision-artifacts', ...decisions);
+  }
   for (const file of paths) {
     fields.push(
       file,
