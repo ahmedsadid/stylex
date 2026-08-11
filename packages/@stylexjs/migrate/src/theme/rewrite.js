@@ -284,89 +284,84 @@ function styledThemeSites(
       problem: null,
     });
   }
-  if (grammarFacts.length !== 1) {
-    return Object.freeze({
-      sites: Object.freeze([]),
-      readinessFacts,
-      problem: 'theme consumer has more than one eligible styled definition',
-    });
-  }
-  const grammarFact = grammarFacts[0];
-  const grammar = factValue(grammarFact);
-  const usageFact = usageFacts.find((fact) => fact.id === grammar.usageFactId);
-  const readinessFact = readinessFacts.find(
-    (fact) => fact.id === grammar.definitionFactId,
-  );
-  const usage = usageFact == null ? null : factValue(usageFact);
-  const readiness = readinessFact == null ? null : factValue(readinessFact);
-  const declaration = usage?.declarationSpan;
-  if (
-    usageFact == null ||
-    readinessFact == null ||
-    usage?.themeSliceEligible !== true ||
-    typeof declaration?.start !== 'number' ||
-    typeof declaration?.end !== 'number' ||
-    typeof readiness?.span?.start !== 'number' ||
-    typeof readiness?.span?.end !== 'number' ||
-    typeof usage?.targetName !== 'string'
-  ) {
-    return Object.freeze({
-      sites: Object.freeze([]),
-      readinessFacts,
-      problem: 'styled theme graph is incomplete or stale',
-    });
-  }
   const tokens = new Map(
     draft.tokens.map((token) => [token.sourcePath, token.targetName]),
   );
-  const properties = [];
-  for (const item of grammar.declarations ?? []) {
-    if (typeof item.property !== 'string') {
-      return Object.freeze({
-        sites: Object.freeze([]),
-        readinessFacts,
-        problem: 'styled theme declaration property is unavailable',
-      });
-    }
-    if (typeof item.value === 'string') {
-      properties.push(
-        Object.freeze({
-          name: item.property,
-          value: serializeValue(item.value),
-        }),
-      );
-      continue;
-    }
-    const targetName = tokens.get(String(item.sourcePath));
-    const readKey = `${String(item.readSpan?.start)}:${String(item.readSpan?.end)}`;
+  const sites = [];
+  for (const grammarFact of grammarFacts) {
+    const grammar = factValue(grammarFact);
+    const usageFact = usageFacts.find(
+      (fact) => fact.id === grammar.usageFactId,
+    );
+    const readinessFact = readinessFacts.find(
+      (fact) => fact.id === grammar.definitionFactId,
+    );
+    const usage = usageFact == null ? null : factValue(usageFact);
+    const readiness = readinessFact == null ? null : factValue(readinessFact);
+    const declaration = usage?.declarationSpan;
     if (
-      targetName == null ||
-      !themeFacts.some((fact) => {
-        const value = factValue(fact);
-        return (
-          fact.kind === 'theme-read' &&
-          `${String(value.span?.start)}:${String(value.span?.end)}` ===
-            readKey &&
-          value.sourcePath === item.sourcePath
-        );
-      })
+      usageFact == null ||
+      readinessFact == null ||
+      usage?.themeSliceEligible !== true ||
+      typeof declaration?.start !== 'number' ||
+      typeof declaration?.end !== 'number' ||
+      typeof readiness?.span?.start !== 'number' ||
+      typeof readiness?.span?.end !== 'number' ||
+      typeof usage?.targetName !== 'string'
     ) {
       return Object.freeze({
         sites: Object.freeze([]),
         readinessFacts,
-        problem: 'styled theme callback uses an unmapped or stale token read',
+        problem: 'styled theme graph is incomplete or stale',
       });
     }
-    usedReads.add(readKey);
-    properties.push(
-      Object.freeze({
-        name: item.property,
-        value: `${draft.varsExport}.${targetName}`,
-      }),
-    );
-  }
-  return Object.freeze({
-    sites: Object.freeze([
+    const properties = [];
+    for (const item of grammar.declarations ?? []) {
+      if (typeof item.property !== 'string') {
+        return Object.freeze({
+          sites: Object.freeze([]),
+          readinessFacts,
+          problem: 'styled theme declaration property is unavailable',
+        });
+      }
+      if (typeof item.value === 'string') {
+        properties.push(
+          Object.freeze({
+            name: item.property,
+            value: serializeValue(item.value),
+          }),
+        );
+        continue;
+      }
+      const targetName = tokens.get(String(item.sourcePath));
+      const readKey = `${String(item.readSpan?.start)}:${String(item.readSpan?.end)}`;
+      if (
+        targetName == null ||
+        !themeFacts.some((fact) => {
+          const value = factValue(fact);
+          return (
+            fact.kind === 'theme-read' &&
+            `${String(value.span?.start)}:${String(value.span?.end)}` ===
+              readKey &&
+            value.sourcePath === item.sourcePath
+          );
+        })
+      ) {
+        return Object.freeze({
+          sites: Object.freeze([]),
+          readinessFacts,
+          problem: 'styled theme callback uses an unmapped or stale token read',
+        });
+      }
+      usedReads.add(readKey);
+      properties.push(
+        Object.freeze({
+          name: item.property,
+          value: `${draft.varsExport}.${targetName}`,
+        }),
+      );
+    }
+    sites.push(
       Object.freeze({
         definitionStart: readiness.span.start,
         definitionEnd: readiness.span.end,
@@ -377,7 +372,10 @@ function styledThemeSites(
         properties: Object.freeze(properties),
         consumers: Object.freeze(usage.consumers ?? []),
       }),
-    ]),
+    );
+  }
+  return Object.freeze({
+    sites: Object.freeze(sites),
     readinessFacts,
     problem: null,
   });
@@ -436,8 +434,21 @@ function identifierSpanCount(ast: $FlowFixMe, name: string): number {
 function removableStyledImport(
   ast: $FlowFixMe,
   readinessFacts: $ReadOnlyArray<Fact>,
+  convertedSites: $ReadOnlyArray<StyledThemeSite>,
 ): { +start: number, +end: number } | null {
-  if (readinessFacts.length !== 1) return null;
+  if (
+    readinessFacts.length !== convertedSites.length ||
+    readinessFacts.some((fact) => {
+      const value = factValue(fact);
+      return !convertedSites.some(
+        (site) =>
+          site.definitionStart === value.span?.start &&
+          site.definitionEnd === value.span?.end,
+      );
+    })
+  ) {
+    return null;
+  }
   let declaration = null;
   let localName = null;
   for (const statement of ast.program?.body ?? []) {
@@ -456,7 +467,7 @@ function removableStyledImport(
   walk(ast, (node) => {
     if (node.type === 'Identifier' && node.name === localName) uses++;
   });
-  return uses === 2
+  return uses === convertedSites.length + 1
     ? Object.freeze({ start: declaration.start, end: declaration.end })
     : null;
 }
@@ -853,7 +864,7 @@ function rewriteConsumer(
   }
   const styledImport =
     styled.sites.length > 0
-      ? removableStyledImport(ast, styled.readinessFacts)
+      ? removableStyledImport(ast, styled.readinessFacts, styled.sites)
       : null;
   if (styledImport != null) {
     edits.push({ start: styledImport.start, end: styledImport.end, text: '' });

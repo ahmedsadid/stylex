@@ -188,7 +188,7 @@ export const Card = () => <ThemeProvider theme={darkTheme}><CardRoot /></ThemePr
     }
   });
 
-  test('refuses multiple styled theme definitions in one consumer file', () => {
+  test('converts multiple styled theme definitions in one consumer file', () => {
     const decision = approved(['src/components/Card.tsx']);
     const result = proposeApprovedThemeFiles({
       files: {
@@ -203,11 +203,15 @@ export const Card = () => <ThemeProvider theme={darkTheme}><A><B /></A></ThemePr
       },
       ...decision,
     });
-    expect(result).toMatchObject({
-      status: 'refused',
-      file: 'src/components/Card.tsx',
-      reason: 'theme consumer has more than one eligible styled definition',
-    });
+    expect(result.status).toBe('proposed');
+    if (result.status === 'refused') throw new Error(result.reason);
+    const output = result.files['src/components/Card.tsx'];
+    expect(output).not.toContain("from '@emotion/styled'");
+    expect(output).not.toContain('ThemeProvider');
+    expect(output).toContain(
+      '<div {...stylex.props(styles.a)} {...stylex.props(darkTheme)}>',
+    );
+    expect(output).toContain('<span {...stylex.props(styles.b)} />');
   });
 
   test('refuses a styled theme consumer without converted provider scope', () => {
