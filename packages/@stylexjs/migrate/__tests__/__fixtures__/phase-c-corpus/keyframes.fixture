@@ -1,0 +1,13 @@
+/** @jsxImportSource @emotion/react */
+export const Keyframes = () => (
+  <div
+    css={{
+      animationDuration: '1s',
+      animationName: 'fade',
+      '@keyframes fade': {
+        from: { opacity: 0 },
+        to: { opacity: 1 },
+      },
+    }}
+  />
+);

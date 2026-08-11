@@ -1,0 +1,4 @@
+/** @jsxImportSource @emotion/react */
+export const Directional = () => (
+  <div css={{ marginInlineStart: '2px', marginLeft: '1px' }} />
+);

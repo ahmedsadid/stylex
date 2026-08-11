@@ -1,0 +1,12 @@
+/** @jsxImportSource @emotion/react */
+export const SupportsMedia = () => (
+  <div
+    css={{
+      color: 'black',
+      '@supports (display: grid)': {
+        color: 'blue',
+        '@media (min-width: 800px)': { color: 'purple' },
+      },
+    }}
+  />
+);

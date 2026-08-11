@@ -1,0 +1,10 @@
+/** @jsxImportSource @emotion/react */
+export const PseudoElements = () => (
+  <div
+    css={{
+      color: 'black',
+      '::before': { color: 'red', content: '"before"' },
+      '::after': { color: 'blue', content: '"after"' },
+    }}
+  />
+);

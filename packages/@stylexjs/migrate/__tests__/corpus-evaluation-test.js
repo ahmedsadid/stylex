@@ -16,7 +16,7 @@ import {
 import type { CorpusSource } from '../src/evaluation/corpus';
 
 const PRAGMA = '/** @jsxImportSource @emotion/react */\n';
-const SOURCE_EXTENSIONS = new Set(['.js', '.jsx', '.ts', '.tsx']);
+const SOURCE_EXTENSIONS = new Set(['.fixture', '.js', '.jsx', '.ts', '.tsx']);
 const IGNORED_DIRECTORIES = new Set([
   '.git',
   '.next',
@@ -61,6 +61,38 @@ function collectSources(root: string): $ReadOnlyArray<CorpusSource> {
 }
 
 describe('Phase C corpus evaluation', () => {
+  test('keeps every Phase C comparison model live in the capability corpus', () => {
+    const root = path.join(__dirname, '__fixtures__', 'phase-c-corpus');
+    const summary = evaluateCorpusSources(collectSources(root));
+
+    expect(summary.files).toEqual({
+      scanned: 9,
+      mentioningEmotion: 9,
+      recognizedEmotion: 9,
+      proposed: 9,
+      partiallyProposed: 0,
+      noSupportedSites: 0,
+      refused: 0,
+      notEmotion: 0,
+      crashed: 0,
+    });
+    expect(summary.sites).toEqual({
+      proposed: 9,
+      refusedDuringDiscovery: 0,
+    });
+    expect(summary.comparisonModels).toEqual({
+      'box-shorthand-referee-v1': 1,
+      'cascade-referee-v1': 1,
+      'directional-referee-v1': 1,
+      'keyframes-referee-v1': 1,
+      'media-query-referee-v1': 1,
+      'pseudo-element-referee-v1': 1,
+      'render-local-css-v1': 1,
+      'static-css-v3': 1,
+      'supports-nesting-referee-v1': 1,
+    });
+  });
+
   test('reports passing models and precise discovery refusals', () => {
     const summary = evaluateCorpusSources([
       { filename: 'Plain.js', source: 'export const plain = true;\n' },

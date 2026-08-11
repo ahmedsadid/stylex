@@ -1,0 +1,4 @@
+/** @jsxImportSource @emotion/react */
+export const Shorthand = () => (
+  <div css={{ marginTop: 20, margin: '4px 8px' }} />
+);
