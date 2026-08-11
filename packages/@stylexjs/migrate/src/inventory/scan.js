@@ -475,6 +475,80 @@ export function scanRepository({
       sites.push(site);
       fileSiteIds.push(site.id);
     }
+    const styledCandidates: Array<{
+      +grammarFact: Fact,
+      +usageFact: Fact,
+      +readinessFact: Fact,
+      +usage: $FlowFixMe,
+    }> = [];
+    for (const grammarFact of styledTemplateFacts) {
+      const grammar: $FlowFixMe = grammarFact.value;
+      if (grammar.supported !== true) continue;
+      const usageFact = styledUsageFacts.find(
+        (fact) => fact.id === grammar.usageFactId,
+      );
+      const readinessFact = styledReadinessFacts.find(
+        (fact) => fact.id === grammar.definitionFactId,
+      );
+      const usage: $FlowFixMe = usageFact?.value;
+      if (
+        usageFact == null ||
+        readinessFact == null ||
+        typeof usage?.definitionSpan?.start !== 'number' ||
+        typeof usage?.definitionSpan?.end !== 'number'
+      ) {
+        continue;
+      }
+      styledCandidates.push({ grammarFact, usageFact, readinessFact, usage });
+    }
+    styledCandidates.sort(
+      (left, right) =>
+        left.usage.definitionSpan.start - right.usage.definitionSpan.start,
+    );
+    // The first vertical slice owns at most one styled definition per file.
+    // A later scan may plan the next definition after the developer applies
+    // this candidate. This avoids pretending independent edits to one file can
+    // be reviewed, verified, or applied as separate atomic candidates.
+    const styledCandidate = styledCandidates[0] ?? null;
+    if (styledCandidate != null) {
+      const span = {
+        start: styledCandidate.usage.definitionSpan.start,
+        end: styledCandidate.usage.definitionSpan.end,
+      };
+      const classification: Classification = dependencyResolutionFailed
+        ? 'owner-decision'
+        : 'repeatable-contextual';
+      const site: Site = Object.freeze({
+        id: siteIdentity({
+          adapter: 'emotion',
+          kind: 'styled-intrinsic',
+          file,
+          span,
+          sourceHash,
+        }),
+        adapter: 'emotion',
+        kind: 'styled-intrinsic',
+        file,
+        span: Object.freeze(span),
+        sourceHash,
+        syntax: 'supported',
+        refusalReason: null,
+        factIds: Object.freeze([
+          styledCandidate.readinessFact.id,
+          styledCandidate.usageFact.id,
+          styledCandidate.grammarFact.id,
+          ...dependencyFactIds,
+        ]),
+        classification,
+        routingReasons: Object.freeze([
+          dependencyResolutionFailed
+            ? 'one or more local dependencies could not be resolved'
+            : 'closed intrinsic styled definition requires an atomic component-boundary candidate and repository evidence',
+        ]),
+      });
+      sites.push(site);
+      fileSiteIds.push(site.id);
+    }
     files.push({
       path: file,
       sourceHash,

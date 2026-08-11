@@ -175,6 +175,9 @@ export function inventoryReadiness(
   const cssPropSites = inventory.sites.filter(
     (site) => site.adapter === 'emotion' && site.kind === 'css-prop',
   );
+  const styledSites = inventory.sites.filter(
+    (site) => site.adapter === 'emotion' && site.kind === 'styled-intrinsic',
+  );
   for (const site of cssPropSites) classification[site.classification]++;
   const sampleLimit = options?.sampleLimit ?? 20;
   if (!Number.isInteger(sampleLimit) || sampleLimit < 0) {
@@ -199,9 +202,7 @@ export function inventoryReadiness(
     styled: Object.freeze({
       definitions,
       files: styledFiles.size,
-      // Styled facts are readiness observations only. M10B must build the
-      // definition/consumer graph before they become plan-owned sites.
-      plannedSites: 0,
+      plannedSites: styledSites.length,
       targets: Object.freeze(targetCounts),
       syntax: Object.freeze(syntaxCounts),
       styleForms: Object.freeze(

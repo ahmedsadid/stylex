@@ -62,6 +62,7 @@ import {
 } from './theme/decisions';
 import { proposeThemeDecisionCandidate } from './theme/candidate';
 import { proposeMechanicalCandidate } from './mechanical/candidate';
+import { proposeStyledCandidate } from './styled/candidate';
 import type { CandidatePatch } from './candidate/patch';
 
 type WriteOutput = (text: string) => mixed;
@@ -81,6 +82,8 @@ Commands:
   plan                    form migration clusters from the latest inventory
   mechanical propose <cluster>
                           freeze a checked candidate from a mechanical cluster
+  styled propose <cluster>
+                          freeze a checked closed-intrinsic styled candidate
   candidate diff <candidate>
                           print the exact frozen patch without applying it
   theme draft <json-file> <author>
@@ -486,6 +489,37 @@ export function runCli(
             }
           : {
               command: 'mechanical propose',
+              state: 'refused',
+              reason: result.reason,
+              file: result.file,
+              evidence: result.evidence,
+            },
+        json,
+        stdout,
+      );
+      return result.ok ? 0 : 3;
+    }
+    if (args[0] === 'styled' && args[1] === 'propose' && args.length === 3) {
+      const result = proposeStyledCandidate({
+        project: openProject(cwd),
+        clusterId: args[2],
+      });
+      present(
+        result.ok
+          ? {
+              command: 'styled propose',
+              state: 'frozen',
+              candidateId: result.record.candidate.id,
+              clusterId: result.clusterId,
+              changedFiles: result.record.candidate.touchedFiles,
+              model: result.model,
+              limitations: result.limitations,
+              next:
+                `Inspect with stylex-migrate candidate diff ${result.record.candidate.id}, ` +
+                `then configure repository checks and run stylex-migrate verify ${result.record.candidate.id}.`,
+            }
+          : {
+              command: 'styled propose',
               state: 'refused',
               reason: result.reason,
               file: result.file,

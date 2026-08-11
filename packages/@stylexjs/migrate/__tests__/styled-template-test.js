@@ -119,7 +119,7 @@ const Pre = styled.pre\`margin: 0; overflow: auto;\`;
       templateGrammarFacts: 1,
       flatTemplateGrammarEligible: 1,
       templateGrammarBlockedReasons: {},
-      plannedSites: 0,
+      plannedSites: 1,
     });
   });
 
