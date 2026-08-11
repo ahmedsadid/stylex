@@ -15,6 +15,7 @@ import { matchesGlob } from '../candidate/scope';
 import { discoverSyntax, usesEmotion } from '../adapters/emotion/discover';
 import { discoverStyledReadinessFacts } from '../adapters/emotion/styledReadiness';
 import { discoverStyledUsageFacts } from '../adapters/emotion/styledUsage';
+import { discoverStyledTemplateFacts } from '../adapters/emotion/styledTemplate';
 import { parseSource } from '../static/parse';
 import { discoverThemeFacts } from '../theme/discover';
 import { analyzeProjectActivation } from './activation';
@@ -326,7 +327,18 @@ export function scanRepository({
       file,
       readinessFacts: styledReadinessFacts,
     });
-    facts.push(...themeFacts, ...styledReadinessFacts, ...styledUsageFacts);
+    const styledTemplateFacts = discoverStyledTemplateFacts({
+      ast: parsed.ast,
+      file,
+      readinessFacts: styledReadinessFacts,
+      usageFacts: styledUsageFacts,
+    });
+    facts.push(
+      ...themeFacts,
+      ...styledReadinessFacts,
+      ...styledUsageFacts,
+      ...styledTemplateFacts,
+    );
     const dependencyAnalysis = analyzeLocalDependencies({
       ast: parsed.ast,
       repositoryRoot: root,
@@ -350,6 +362,7 @@ export function scanRepository({
       ...themeFacts.map((fact) => fact.id),
       ...styledReadinessFacts.map((fact) => fact.id),
       ...styledUsageFacts.map((fact) => fact.id),
+      ...styledTemplateFacts.map((fact) => fact.id),
     ];
     if (activation != null) {
       facts.push(activation);

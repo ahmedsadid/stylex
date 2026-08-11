@@ -270,6 +270,11 @@ export { scanRepository } from './inventory/scan';
 export { inventoryReadiness } from './inventory/readiness';
 export type { ReadinessSummary } from './inventory/readiness';
 export { discoverStyledUsageFacts } from './adapters/emotion/styledUsage';
+export {
+  analyzeClosedStyledTemplate,
+  discoverStyledTemplateFacts,
+  STYLED_TEMPLATE_GRAMMAR_MODEL,
+} from './adapters/emotion/styledTemplate';
 export { analyzeProjectActivation } from './inventory/activation';
 export type { ProjectActivation } from './inventory/activation';
 export { analyzeLocalDependencies } from './inventory/resolve';

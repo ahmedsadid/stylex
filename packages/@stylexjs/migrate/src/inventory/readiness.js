@@ -30,6 +30,9 @@ export type ReadinessSummary = {
     +directJsxConsumers: number,
     +withEscapes: number,
     +blockedReasons: { +[string]: number },
+    +templateGrammarFacts: number,
+    +flatTemplateGrammarEligible: number,
+    +templateGrammarBlockedReasons: { +[string]: number },
   },
   +theme: {
     +definitions: number,
@@ -86,6 +89,9 @@ export function inventoryReadiness(
   let directJsxConsumers = 0;
   let withEscapes = 0;
   const blockedReasons = {};
+  let templateGrammarFacts = 0;
+  let flatTemplateGrammarEligible = 0;
+  const templateGrammarBlockedReasons = {};
   let themeDefinitions = 0;
   let providers = 0;
   let reads = 0;
@@ -111,6 +117,13 @@ export function inventoryReadiness(
       for (const reason of usage.blockedReasons ?? []) {
         bump(blockedReasons, String(reason));
       }
+      continue;
+    }
+    if (fact.kind === 'emotion-styled-template-grammar') {
+      const grammar: $FlowFixMe = fact.value;
+      templateGrammarFacts++;
+      if (grammar.supported === true) flatTemplateGrammarEligible++;
+      else bump(templateGrammarBlockedReasons, String(grammar.reason));
       continue;
     }
     if (fact.kind !== 'emotion-styled-readiness') continue;
@@ -176,6 +189,11 @@ export function inventoryReadiness(
   for (const reason of Object.keys(blockedReasons).sort()) {
     sortedBlockedReasons[reason] = blockedReasons[reason];
   }
+  const sortedTemplateGrammarBlockedReasons: { [string]: number } = {};
+  for (const reason of Object.keys(templateGrammarBlockedReasons).sort()) {
+    sortedTemplateGrammarBlockedReasons[reason] =
+      templateGrammarBlockedReasons[reason];
+  }
 
   return Object.freeze({
     styled: Object.freeze({
@@ -206,6 +224,11 @@ export function inventoryReadiness(
       directJsxConsumers,
       withEscapes,
       blockedReasons: Object.freeze(sortedBlockedReasons),
+      templateGrammarFacts,
+      flatTemplateGrammarEligible,
+      templateGrammarBlockedReasons: Object.freeze(
+        sortedTemplateGrammarBlockedReasons,
+      ),
     }),
     theme: Object.freeze({
       definitions: themeDefinitions,
@@ -224,6 +247,7 @@ export function inventoryReadiness(
       'styled counts are binding-backed syntax observations, not convertible sites or semantic claims',
       'styled definitions with any shadowing of the imported binding are omitted conservatively',
       'usage graphs cover same-file bindings only; cross-file consumers, inherited contracts, and runtime behavior are not resolved',
+      'flat template grammar eligibility is a syntax boundary, not StyleX acceptance or semantic evidence',
       'theme-dependent and prop-dependent counts are conservative callback syntax signals',
       'counts are absolute observations, not a coverage or safety claim',
     ]),

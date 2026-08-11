@@ -102,6 +102,9 @@ export function factory(styled) {
         'runtime-style-input': 1,
         'styled-options': 1,
       },
+      templateGrammarFacts: 0,
+      flatTemplateGrammarEligible: 0,
+      templateGrammarBlockedReasons: {},
     });
     expect(summary.theme).toMatchObject({
       definitions: 1,
