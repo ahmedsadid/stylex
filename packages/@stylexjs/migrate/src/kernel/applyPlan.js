@@ -81,7 +81,7 @@ export type ApplyPlanResult =
       +writes: $ReadOnlyArray<WriteResult>,
     };
 
-export const MECHANICAL_POLICY_ID: string = 'mechanical-static-v8';
+export const MECHANICAL_POLICY_ID: string = 'mechanical-static-v9';
 const LEGACY_MECHANICAL_POLICY_ID: string = 'mechanical-static-v1';
 const CONDITIONAL_MECHANICAL_POLICY_ID: string = 'mechanical-static-v2';
 const PSEUDO_ELEMENT_MECHANICAL_POLICY_ID: string = 'mechanical-static-v3';
@@ -89,6 +89,7 @@ const MEDIA_QUERY_MECHANICAL_POLICY_ID: string = 'mechanical-static-v4';
 const SUPPORTS_NESTING_MECHANICAL_POLICY_ID: string = 'mechanical-static-v5';
 const KEYFRAMES_MECHANICAL_POLICY_ID: string = 'mechanical-static-v6';
 const SHORTHAND_MECHANICAL_POLICY_ID: string = 'mechanical-static-v7';
+const DIRECTIONAL_MECHANICAL_POLICY_ID: string = 'mechanical-static-v8';
 export const MECHANICAL_COMPARISON_MODEL: string = 'static-css-v3';
 export const MECHANICAL_COMPARISON_MODELS: $ReadOnlyArray<string> =
   Object.freeze([
@@ -100,6 +101,7 @@ export const MECHANICAL_COMPARISON_MODELS: $ReadOnlyArray<string> =
     'keyframes-referee-v1',
     'box-shorthand-referee-v1',
     'directional-referee-v1',
+    'render-local-css-v1',
   ]);
 
 export function isMechanicalComparisonModel(model: mixed): boolean {
@@ -143,6 +145,11 @@ function policyAcceptsComparisonModel(policyId: string, model: mixed): boolean {
   if (policyId === SHORTHAND_MECHANICAL_POLICY_ID) {
     return (
       isMechanicalComparisonModel(model) && model !== 'directional-referee-v1'
+    );
+  }
+  if (policyId === DIRECTIONAL_MECHANICAL_POLICY_ID) {
+    return (
+      isMechanicalComparisonModel(model) && model !== 'render-local-css-v1'
     );
   }
   return (
@@ -340,6 +347,18 @@ function validateEvidenceBundle(
       if (!checksForFile.has(`${required.check}\0${required.provider}`)) {
         return `candidate ${candidate.id} is missing required check ${required.check} from ${required.provider} for ${change.path}`;
       }
+    }
+    const requiresRenderLocalIntegrity = evidence.results.some(
+      (result) =>
+        result.subject.file === change.path &&
+        result.check === 'static-css-comparison' &&
+        result.subject.model === 'render-local-css-v1',
+    );
+    if (
+      requiresRenderLocalIntegrity &&
+      !checksForFile.has('render-local-call-integrity\0stylex-migrate')
+    ) {
+      return `candidate ${candidate.id} is missing required render-local call integrity for ${change.path}`;
     }
   }
   return null;

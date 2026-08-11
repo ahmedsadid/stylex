@@ -1225,6 +1225,29 @@ export const Button = () => <button css={{ color: 'black', '@media (min-width: 8
       }
     });
 
+    test('render-local evidence requires its call-integrity check', () => {
+      const { candidate, snapshot, scopeRules } = planFor();
+      const results = passingEvidence(candidate, snapshot).map((item) =>
+        item.check === 'static-css-comparison'
+          ? makeEvidence({
+              ...item,
+              subject: { ...item.subject, model: 'render-local-css-v1' },
+            })
+          : item,
+      );
+      const evidence = bundleEvidence(candidate, snapshot, results);
+      const result = applyPlan(
+        { entries: [{ candidate, snapshot, scopeRules, evidence }] },
+        { recoveryRoot },
+      );
+      expect(result.status).toBe('rejected');
+      if (result.status === 'rejected') {
+        expect(result.reason).toContain(
+          'missing required render-local call integrity',
+        );
+      }
+    });
+
     test('two candidates changing the same file are rejected as a conflict', () => {
       const first = planFor(42);
       const second = planFor(43);
