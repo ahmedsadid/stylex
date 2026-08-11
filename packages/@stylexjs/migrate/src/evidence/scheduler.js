@@ -276,6 +276,7 @@ async function parallelMap<T, R>(
 export async function runEvidenceSchedule({
   project,
   workspaceRoot,
+  baselineWorkspaceRoot,
   subject,
   config,
   registry = createEvidenceProviderRegistry(),
@@ -285,6 +286,7 @@ export async function runEvidenceSchedule({
 }: {
   +project: ProjectState,
   +workspaceRoot: string,
+  +baselineWorkspaceRoot?: string,
   +subject: RepositoryEvidenceSubject,
   +config: EvidenceConfig,
   +registry?: EvidenceProviderRegistry,
@@ -322,6 +324,7 @@ export async function runEvidenceSchedule({
         const executionStarted = monotonicNow();
         const execution = await registry.get(provider.kind)(provider, {
           workspaceRoot,
+          baselineWorkspaceRoot,
           subject,
           environment,
           now,

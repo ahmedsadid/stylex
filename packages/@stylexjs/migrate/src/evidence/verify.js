@@ -7,7 +7,10 @@
  * @flow strict
  */
 
-import { removeCandidateWorkspace } from '../candidate/workspace';
+import {
+  createCandidateWorkspace,
+  removeCandidateWorkspace,
+} from '../candidate/workspace';
 import { recordContextVerificationOutcome } from '../context/lifecycle';
 import { appendStateEvent } from '../state/events';
 import { readConfig } from '../state/project';
@@ -33,6 +36,7 @@ import type { RepositoryEvidenceSubject } from './subject';
 import type { RepositoryEvidenceBundle } from './bundle';
 import type { RepositoryEvidenceVerdict } from './verdict';
 import type { ProjectState } from '../state/project';
+import type { CandidateWorkspace } from '../candidate/workspace';
 
 export type VerificationResult = {
   +subject: RepositoryEvidenceSubject,
@@ -74,7 +78,15 @@ export async function verifyPersistedCandidates({
     records: candidates,
     rootDir: workspaceRoot,
   });
+  let baselineWorkspace: CandidateWorkspace | null = null;
   try {
+    baselineWorkspace = createCandidateWorkspace({
+      repositoryRoot: candidates[0].candidate.repositoryRoot,
+      baseCommit: candidates[0].candidate.baseCommit,
+      allowedPaths: [],
+      requireClean: false,
+      rootDir: workspaceRoot,
+    });
     const schedule = await runEvidenceSchedule({
       project,
       workspaceRoot: workspace.path,
@@ -84,6 +96,7 @@ export async function verifyPersistedCandidates({
       environment,
       now,
       monotonicNow,
+      baselineWorkspaceRoot: baselineWorkspace.path,
     });
     const bundle = createRepositoryEvidenceBundle({
       subject,
@@ -137,5 +150,8 @@ export async function verifyPersistedCandidates({
     return Object.freeze({ subject, schedule, coverage, bundle, verdict });
   } finally {
     removeCandidateWorkspace(workspace);
+    if (baselineWorkspace != null) {
+      removeCandidateWorkspace(baselineWorkspace);
+    }
   }
 }

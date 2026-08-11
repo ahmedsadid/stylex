@@ -8,6 +8,7 @@
  */
 
 import { runCommandProvider } from './command';
+import { runRuntimeCommandProvider } from '../runtime/provider';
 import type { CommandExecution, CommandExecutionContext } from './command';
 import type { EvidenceProviderConfig } from './config';
 
@@ -46,8 +47,17 @@ export function createEvidenceProviderRegistry(): EvidenceProviderRegistry {
       runners.set(kind, runner);
     },
   };
-  registry.register('command', (config, context) =>
-    runCommandProvider(config, context),
-  );
+  registry.register('command', (config, context) => {
+    if (config.kind !== 'command') {
+      throw new Error('Command runner received another provider kind');
+    }
+    return runCommandProvider(config, context);
+  });
+  registry.register('runtime-command', (config, context) => {
+    if (config.kind !== 'runtime-command') {
+      throw new Error('Runtime runner received another provider kind');
+    }
+    return runRuntimeCommandProvider(config, context);
+  });
   return Object.freeze(registry);
 }

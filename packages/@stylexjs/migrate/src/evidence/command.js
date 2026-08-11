@@ -13,7 +13,9 @@ import { spawn } from 'child_process';
 import { hashBytes, hashString, shortHash } from '../kernel/hash';
 import { canonicalJson } from '../state/json';
 import type { CommandProviderConfig } from './config';
+import type { RuntimeInterface } from './config';
 import type { RepositoryEvidenceSubject } from './subject';
+import type { RuntimeComparison } from '../runtime/model';
 
 export type CommandRecord = {
   +argv: $ReadOnlyArray<string>,
@@ -46,6 +48,12 @@ export type RepositoryEvidenceResult = {
   +outputSize: number,
   +outputPreview: string,
   +limitations: $ReadOnlyArray<string>,
+  +runtime?: {
+    +runtimeInterface: RuntimeInterface,
+    +baselineCommand: CommandRecord,
+    +candidateCommand: CommandRecord,
+    +comparison: RuntimeComparison,
+  },
   +detail?: string,
 };
 
@@ -76,9 +84,10 @@ export type CommandExecutionContext = {
   +monotonicNow?: () => number,
   +outputPreviewBytes?: number,
   +lookupCached?: CommandCacheLookup,
+  +baselineWorkspaceRoot?: string,
 };
 
-type ProcessResult = {
+export type ProcessResult = {
   +exitCode: number | null,
   +signal: string | null,
   +stdout: Buffer,
@@ -87,7 +96,7 @@ type ProcessResult = {
   +timedOut: boolean,
 };
 
-function runProcess({
+export function runEvidenceProcess({
   argv,
   cwd,
   environment,
@@ -167,7 +176,7 @@ function runProcess({
   });
 }
 
-function selectedEnvironment(
+export function selectedEvidenceEnvironment(
   keys: $ReadOnlyArray<string>,
   source: { +[string]: string | void },
 ): { +values: { +[string]: string }, +fingerprint: string } {
@@ -184,7 +193,10 @@ function selectedEnvironment(
   });
 }
 
-function commandDirectory(workspaceRoot: string, relative: string): string {
+export function evidenceCommandDirectory(
+  workspaceRoot: string,
+  relative: string,
+): string {
   const root = fs.realpathSync(workspaceRoot);
   const requested = path.resolve(root, relative);
   let resolved;
@@ -210,7 +222,7 @@ function commandDirectory(workspaceRoot: string, relative: string): string {
   return resolved;
 }
 
-function expandArgv(
+export function expandEvidenceArgv(
   argv: $ReadOnlyArray<string>,
   subject: RepositoryEvidenceSubject,
 ): $ReadOnlyArray<string> {
@@ -222,7 +234,7 @@ function expandArgv(
   );
 }
 
-function fullOutput(result: ProcessResult): Buffer {
+export function fullEvidenceOutput(result: ProcessResult): Buffer {
   return Buffer.concat([
     Buffer.from('[stdout]\n'),
     result.stdout,
@@ -277,11 +289,11 @@ export async function runCommandProvider(
     architecture: process.arch,
     node: process.version,
   });
-  const environment = selectedEnvironment(
+  const environment = selectedEvidenceEnvironment(
     config.allowedEnv,
     context.environment ?? process.env,
   );
-  const argv = expandArgv(config.argv, context.subject);
+  const argv = expandEvidenceArgv(config.argv, context.subject);
   let cwd = context.workspaceRoot;
   let processResult: ProcessResult;
   let providerVersion = 'unavailable';
@@ -301,12 +313,14 @@ export async function runCommandProvider(
     detail = `provider requires a ${config.subject} subject`;
   } else {
     try {
-      cwd = commandDirectory(context.workspaceRoot, config.cwd);
-      const version = await runProcess({
+      cwd = evidenceCommandDirectory(context.workspaceRoot, config.cwd);
+      const version = await runEvidenceProcess({
         argv: config.versionArgv,
         cwd,
         environment: environment.values,
-        timeoutMs: Math.min(config.timeoutMs, 30000),
+        // Very small command budgets are useful in timeout tests and focused
+        // checks, but are too short to reliably start the version probe.
+        timeoutMs: Math.min(Math.max(config.timeoutMs, 1000), 30000),
       });
       const reportedVersion = versionText(version);
       if (reportedVersion == null) {
@@ -340,7 +354,7 @@ export async function runCommandProvider(
           }
           return cached;
         }
-        processResult = await runProcess({
+        processResult = await runEvidenceProcess({
           argv,
           cwd,
           environment: environment.values,
@@ -377,7 +391,7 @@ export async function runCommandProvider(
     }
   }
 
-  const output = fullOutput(processResult);
+  const output = fullEvidenceOutput(processResult);
   const durationMs = Math.max(0, monotonicNow() - started);
   const command = Object.freeze({
     argv,

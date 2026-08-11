@@ -37,6 +37,33 @@ const TYPECHECK = {
   timeoutMs: 120000,
 };
 
+const RUNTIME = {
+  id: 'runtime-playwright',
+  kind: 'runtime-command',
+  check: 'runtime-render',
+  checkVersion: 'runtime-v1',
+  subject: 'candidate',
+  cost: 'expensive',
+  runtimeInterface: 'playwright',
+  argv: ['node', 'collect-runtime.js'],
+  versionArgv: ['node', '--version'],
+  cwd: '.',
+  allowedEnv: ['PATH'],
+  fileGlobs: ['src/**'],
+  limitations: ['declared cases only'],
+  timeoutMs: 30000,
+  cases: [
+    {
+      id: 'card-default',
+      changePaths: ['src/Card.jsx'],
+      siteIds: ['site-card'],
+      theme: 'default',
+      interaction: 'none',
+      viewport: { width: 1280, height: 720, deviceScaleFactor: 1 },
+    },
+  ],
+};
+
 describe('M5 repository evidence configuration', () => {
   let repo: string;
 
@@ -108,6 +135,32 @@ describe('M5 repository evidence configuration', () => {
       sourceGlobs: ['src/**/*.js'],
       evidence: { concurrency: 2, outputPreviewBytes: 8192, providers: [] },
     });
+  });
+
+  test('normalizes runtime harness interfaces and their declared cases', () => {
+    const config = normalizeEvidenceConfig({
+      concurrency: 1,
+      outputPreviewBytes: 1024,
+      providers: [RUNTIME],
+    });
+    expect(config.providers[0]).toMatchObject({
+      kind: 'runtime-command',
+      runtimeInterface: 'playwright',
+      cases: [
+        {
+          id: 'card-default',
+          changePaths: ['src/Card.jsx'],
+          siteIds: ['site-card'],
+        },
+      ],
+    });
+    expect(() =>
+      normalizeEvidenceConfig({
+        concurrency: 1,
+        outputPreviewBytes: 1024,
+        providers: [{ ...RUNTIME, cases: [] }],
+      }),
+    ).toThrow('at least one declared case');
   });
 
   test('the CLI validates and stores a user-authored config document', () => {

@@ -7,7 +7,11 @@
  * @flow strict
  */
 
+import { normalizeRuntimeCases } from '../runtime/model';
+import type { RuntimeCaseDefinition } from '../runtime/model';
+
 export type RepositoryCheck = 'focused-test' | 'typecheck' | 'lint' | 'build';
+export type RuntimeCheck = 'runtime-render';
 
 export type EvidenceSubjectKind = 'candidate' | 'apply-plan';
 export type EvidenceCost = 'cheap' | 'standard' | 'expensive';
@@ -28,7 +32,33 @@ export type CommandProviderConfig = {
   +timeoutMs: number,
 };
 
-export type EvidenceProviderConfig = CommandProviderConfig;
+export type RuntimeInterface =
+  | 'playwright'
+  | 'storybook'
+  | 'component-test'
+  | 'custom';
+
+export type RuntimeCommandProviderConfig = {
+  +id: string,
+  +kind: 'runtime-command',
+  +check: RuntimeCheck,
+  +checkVersion: string,
+  +subject: EvidenceSubjectKind,
+  +cost: EvidenceCost,
+  +runtimeInterface: RuntimeInterface,
+  +argv: $ReadOnlyArray<string>,
+  +versionArgv: $ReadOnlyArray<string>,
+  +cwd: string,
+  +allowedEnv: $ReadOnlyArray<string>,
+  +fileGlobs: $ReadOnlyArray<string>,
+  +limitations: $ReadOnlyArray<string>,
+  +timeoutMs: number,
+  +cases: $ReadOnlyArray<RuntimeCaseDefinition>,
+};
+
+export type EvidenceProviderConfig =
+  | CommandProviderConfig
+  | RuntimeCommandProviderConfig;
 
 export type EvidenceConfig = {
   +concurrency: number,
@@ -43,6 +73,12 @@ export const DEFAULT_EVIDENCE_CONFIG: EvidenceConfig = Object.freeze({
 });
 
 const CHECKS = new Set(['focused-test', 'typecheck', 'lint', 'build']);
+const RUNTIME_INTERFACES = new Set([
+  'playwright',
+  'storybook',
+  'component-test',
+  'custom',
+]);
 const SUBJECTS = new Set(['candidate', 'apply-plan']);
 const COSTS = new Set(['cheap', 'standard', 'expensive']);
 const ENVIRONMENT_KEY = /^[A-Za-z_][A-Za-z0-9_]*$/;
@@ -79,38 +115,33 @@ function validRelativeCwd(value: mixed): boolean {
   return !value.split(/[\\/]/).includes('..');
 }
 
-function normalizeProvider(value: mixed): CommandProviderConfig {
-  const provider: $FlowFixMe = value;
-  if (
-    !object(provider) ||
-    provider.kind !== 'command' ||
-    typeof provider.id !== 'string' ||
-    !PROVIDER_ID.test(provider.id) ||
-    !CHECKS.has(provider.check) ||
-    typeof provider.checkVersion !== 'string' ||
-    provider.checkVersion === '' ||
-    !SUBJECTS.has(provider.subject) ||
-    !COSTS.has(provider.cost) ||
-    !nonEmptyStrings(provider.argv) ||
-    !nonEmptyStrings(provider.versionArgv) ||
-    !validRelativeCwd(provider.cwd) ||
-    !strings(provider.allowedEnv) ||
-    !provider.allowedEnv.includes('PATH') ||
-    !provider.allowedEnv.every((key) => ENVIRONMENT_KEY.test(key)) ||
-    new Set(provider.allowedEnv).size !== provider.allowedEnv.length ||
-    !nonEmptyStrings(provider.fileGlobs) ||
-    !strings(provider.limitations) ||
-    typeof provider.timeoutMs !== 'number' ||
-    !Number.isInteger(provider.timeoutMs) ||
-    provider.timeoutMs < 1 ||
-    provider.timeoutMs > 60 * 60 * 1000
-  ) {
-    throw new Error('Invalid repository evidence provider configuration');
-  }
-  return Object.freeze({
+function validCommonProvider(provider: $FlowFixMe): boolean {
+  return (
+    typeof provider.id === 'string' &&
+    PROVIDER_ID.test(provider.id) &&
+    typeof provider.checkVersion === 'string' &&
+    provider.checkVersion !== '' &&
+    SUBJECTS.has(provider.subject) &&
+    COSTS.has(provider.cost) &&
+    nonEmptyStrings(provider.argv) &&
+    nonEmptyStrings(provider.versionArgv) &&
+    validRelativeCwd(provider.cwd) &&
+    strings(provider.allowedEnv) &&
+    provider.allowedEnv.includes('PATH') &&
+    provider.allowedEnv.every((key) => ENVIRONMENT_KEY.test(key)) &&
+    new Set(provider.allowedEnv).size === provider.allowedEnv.length &&
+    nonEmptyStrings(provider.fileGlobs) &&
+    strings(provider.limitations) &&
+    typeof provider.timeoutMs === 'number' &&
+    Number.isInteger(provider.timeoutMs) &&
+    provider.timeoutMs >= 1 &&
+    provider.timeoutMs <= 60 * 60 * 1000
+  );
+}
+
+function commonFields(provider: $FlowFixMe): $FlowFixMe {
+  return {
     id: provider.id,
-    kind: 'command',
-    check: provider.check,
     checkVersion: provider.checkVersion,
     subject: provider.subject,
     cost: provider.cost,
@@ -121,7 +152,35 @@ function normalizeProvider(value: mixed): CommandProviderConfig {
     fileGlobs: Object.freeze([...provider.fileGlobs]),
     limitations: Object.freeze([...provider.limitations]),
     timeoutMs: provider.timeoutMs,
-  });
+  };
+}
+
+function normalizeProvider(value: mixed): EvidenceProviderConfig {
+  const provider: $FlowFixMe = value;
+  if (!object(provider) || !validCommonProvider(provider)) {
+    throw new Error('Invalid repository evidence provider configuration');
+  }
+  if (provider.kind === 'command' && CHECKS.has(provider.check)) {
+    return Object.freeze({
+      ...commonFields(provider),
+      kind: 'command',
+      check: provider.check,
+    });
+  }
+  if (
+    provider.kind === 'runtime-command' &&
+    provider.check === 'runtime-render' &&
+    RUNTIME_INTERFACES.has(provider.runtimeInterface)
+  ) {
+    return Object.freeze({
+      ...commonFields(provider),
+      kind: 'runtime-command',
+      check: 'runtime-render',
+      runtimeInterface: provider.runtimeInterface,
+      cases: normalizeRuntimeCases(provider.cases),
+    });
+  }
+  throw new Error('Invalid repository evidence provider configuration');
 }
 
 export function normalizeEvidenceConfig(value?: mixed): EvidenceConfig {

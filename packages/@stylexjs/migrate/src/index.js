@@ -118,6 +118,9 @@ export type {
   EvidenceProviderConfig,
   EvidenceSubjectKind,
   RepositoryCheck,
+  RuntimeCheck,
+  RuntimeCommandProviderConfig,
+  RuntimeInterface,
 } from './evidence/config';
 
 export { appendStateEvent, rebuildIndexes, replayEvents } from './state/events';
@@ -141,6 +144,7 @@ export {
   normalizeRuntimeCases,
   normalizeRuntimeReport,
 } from './runtime/model';
+export { runRuntimeCommandProvider } from './runtime/provider';
 export type {
   RuntimeCaseComparison,
   RuntimeCaseDefinition,
