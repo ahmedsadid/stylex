@@ -45,6 +45,13 @@ import {
   loadRepositoryEvidenceVerdict,
 } from './evidence/verdict';
 import { verifyPersistedCandidates } from './evidence/verify';
+import {
+  abandonContextTask,
+  inspectContextTask,
+  openContextRetry,
+  openContextTask,
+  submitContextAttempt,
+} from './context/lifecycle';
 
 type WriteOutput = (text: string) => mixed;
 
@@ -60,6 +67,13 @@ Commands:
   init                    initialize local project state
   scan                    inventory configured source files
   plan                    form migration clusters from the latest inventory
+  context open <cluster> <goal>
+                          open a contextual workspace from a planned cluster
+  context open <task>     open the kernel-owned retry for a failed task
+  context inspect <task>  show the immutable capsule and current task state
+  context submit <task> <agent|human> <name> <version> [skill-version]
+                          freeze workspace bytes and submit through the kernel
+  context abandon <task>  abandon an open workspace
   verify <candidate...>   run checks against exact persisted candidate bytes
   review <id>             show a verdict, coverage, claims, and limitations
   config show             show normalized project configuration
@@ -325,6 +339,99 @@ export function runCli(
       savePlan(project, plan);
       present(
         { ...planSummary(plan, inventory), command: 'plan' } as $FlowFixMe,
+        json,
+        stdout,
+      );
+      return 0;
+    }
+    if (args[0] === 'context' && args[1] === 'open') {
+      const project = openProject(cwd);
+      const result =
+        args.length === 3
+          ? openContextRetry({ project, taskId: args[2] })
+          : args.length === 4
+            ? openContextTask({
+                project,
+                clusterId: args[2],
+                goal: args[3],
+              })
+            : null;
+      if (result == null) {
+        stderr(redactText(`Unknown command.\n${HELP}`));
+        return 64;
+      }
+      present(
+        result.ok
+          ? {
+              command: 'context open',
+              state: result.state,
+              taskId: result.task.id,
+              attemptId: result.attempt.id,
+              workspace: result.attempt.workspace.path,
+              task: result.task as $FlowFixMe,
+              attempt: result.attempt as $FlowFixMe,
+            }
+          : {
+              command: 'context open',
+              state: result.state,
+              reasons: result.reasons,
+            },
+        json,
+        stdout,
+      );
+      return result.ok ? 0 : 3;
+    }
+    if (args[0] === 'context' && args[1] === 'inspect' && args.length === 3) {
+      const result = inspectContextTask(openProject(cwd), args[2]);
+      present(
+        {
+          command: 'context inspect',
+          taskId: result.task.id,
+          state: result.state,
+          stateData: result.stateData,
+          task: result.task as $FlowFixMe,
+          attempt: result.attempt as $FlowFixMe,
+        },
+        json,
+        stdout,
+      );
+      return 0;
+    }
+    if (
+      args[0] === 'context' &&
+      args[1] === 'submit' &&
+      (args.length === 6 || args.length === 7)
+    ) {
+      const proposerKind = args[3];
+      if (proposerKind !== 'agent' && proposerKind !== 'human') {
+        throw new Error('Context proposer kind must be agent or human');
+      }
+      const result = submitContextAttempt({
+        project: openProject(cwd),
+        taskId: args[2],
+        proposerKind,
+        proposerName: args[4],
+        proposerVersion: args[5],
+        ...(args[6] == null ? {} : { skillVersion: args[6] }),
+      });
+      present(
+        { command: 'context submit', ...result } as $FlowFixMe,
+        json,
+        stdout,
+      );
+      return result.ok ? 0 : result.state === 'blocked' ? 3 : 4;
+    }
+    if (args[0] === 'context' && args[1] === 'abandon' && args.length === 3) {
+      const result = abandonContextTask({
+        project: openProject(cwd),
+        taskId: args[2],
+      });
+      present(
+        {
+          command: 'context abandon',
+          taskId: result.task.id,
+          state: result.state,
+        },
         json,
         stdout,
       );
