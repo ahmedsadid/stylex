@@ -43,7 +43,12 @@ template per consumer file when every interpolation is a synchronous
 one-parameter callback whose body is exactly `props.theme.<mapped.path>`, every
 interpolation occupies the whole declaration value, and the complete same-file
 usage graph contains only direct safe JSX consumers. The definition and all of
-those consumers are one atomic edit.
+those consumers are one atomic edit. Every converted styled consumer must also
+be inside a same-file `ThemeProvider` subtree selected by an exact declared
+variant. The proposal removes that provider and applies the matching StyleX
+theme to the same generated host subtree in the same atomic patch. A global,
+cross-file, dynamic, or otherwise unresolved provider scope is outside this
+boundary.
 
 Spreads, class/style mixing, styled provider children, component or dynamic
 descendants, props reads, computed theme expressions, selectors, at-rules,

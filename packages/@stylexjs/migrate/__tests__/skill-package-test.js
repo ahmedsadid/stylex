@@ -26,6 +26,7 @@ describe('M7 vendor-neutral skill package', () => {
     expect(skill).toContain('styled-theme-intrinsic');
     expect(skill).toContain('theme propose');
     expect(skill).toContain('no-runtime warning');
+    expect(skill).toContain('provider subtree');
     for (const reference of [
       'protocol.md',
       'commands.md',

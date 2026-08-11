@@ -114,7 +114,10 @@ different lane.
 5. Inspect the draft again. Continue only when its state is `active`; then run
    `stylex-migrate theme propose <draft-id>`. This command also owns eligible
    `styled-theme-intrinsic` consumers. It must rewrite the styled definition and
-   every closed same-file JSX consumer atomically; a partial rewrite is a bug.
+   every closed same-file JSX consumer atomically. Every consumer must remain
+   inside a provider subtree that the same proposal converts from a declared
+   Emotion variant to the corresponding StyleX theme. A token-only rewrite or
+   partial provider rewrite is a refusal, not a task for agent improvisation.
 6. Run `stylex-migrate verify <candidate-id>` and
    `stylex-migrate review <candidate-id>`. Inspect the frozen patch with
    `stylex-migrate candidate diff <candidate-id>`. Report the decision artifact
