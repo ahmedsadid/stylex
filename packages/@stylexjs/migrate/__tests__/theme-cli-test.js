@@ -106,13 +106,6 @@ export const Card = () => <ThemeProvider theme={darkTheme}><CardRoot data-card="
           { name: 'lightTheme', exportName: 'lightTheme' },
           { name: 'darkTheme', exportName: 'darkTheme' },
         ],
-        tokens: [
-          {
-            sourcePath: 'colors.foreground',
-            targetName: 'foreground',
-            existingCssVariable: null,
-          },
-        ],
         sourceFiles: ['src/theme/themes.ts'],
         consumerFiles: ['src/Card.tsx'],
       }),

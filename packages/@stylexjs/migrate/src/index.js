@@ -159,6 +159,7 @@ export {
   resolveThemeValue,
 } from './theme/resolve';
 export type { ThemeValueResolution } from './theme/resolve';
+export { scaffoldThemeDecisionDefinition } from './theme/scaffold';
 export { emitThemeModule } from './theme/emit';
 export { proposeApprovedThemeFiles } from './theme/rewrite';
 export type {
