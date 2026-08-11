@@ -75,8 +75,9 @@ describe('M9 theme CLI', () => {
       'src/theme/themes.ts': `export const lightTheme = {colors: {foreground: '#111'}};
 export const darkTheme = {colors: {foreground: '#eee'}};
 `,
-      'src/Card.tsx': `/** @jsxImportSource @emotion/react */
-export const Card = () => <div css={(theme) => ({color: theme.colors.foreground})} />;
+      'src/Card.tsx': `import styled from '@emotion/styled';
+const CardRoot = styled.div\`color: \${p => p.theme.colors.foreground};\`;
+export const Card = () => <CardRoot data-card="true" />;
 `,
     });
     inputRoot = createTempDir('stylex-migrate-theme-input-');
@@ -164,6 +165,16 @@ export const Card = () => <div css={(theme) => ({color: theme.colors.foreground}
     expect(fs.existsSync(path.join(repo, 'src/theme/tokens.stylex.ts'))).toBe(
       false,
     );
+    const diff = syncCli(repo, [
+      'candidate',
+      'diff',
+      proposed.json.candidateId,
+    ]);
+    expect(diff.code).toBe(0);
+    expect(diff.json.patchText).toContain('stylex.create');
+    expect(diff.json.patchText).toContain('themeVars.foreground');
+    expect(diff.json.patchText).toContain('stylex.props(styles.cardRoot)');
+    expect(diff.json.patchText).not.toContain('+const CardRoot = styled.div');
 
     writeConfig(openProject(repo), {
       sourceGlobs: ['src/**/*.{js,jsx,ts,tsx}'],
