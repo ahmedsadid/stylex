@@ -37,12 +37,14 @@ import {
   validateContextTaskCapsule,
 } from './capsule';
 import type { Proposer, ProposerKind } from '../candidate/patch';
+import type { CandidatePatch } from '../candidate/patch';
 import type { CandidateWorkspace } from '../candidate/workspace';
 import type { WorkspaceSnapshot } from '../kernel/snapshot';
 import type { Cluster, Inventory } from '../inventory/model';
 import type { IndexEntry } from '../state/events';
 import type { JsonValue } from '../state/json';
 import type { ProjectState } from '../state/project';
+import type { RepositoryEvidenceVerdict } from '../evidence/verdict';
 import type {
   ContextAttemptCapsule,
   ContextFailure,
@@ -71,6 +73,14 @@ export type ContextOpenResult =
       +reasons: $ReadOnlyArray<string>,
     };
 
+type ContextFailureResult = {
+  +ok: false,
+  +state: 'needs-replan' | 'needs-owner-decision' | 'blocked',
+  +reasons: $ReadOnlyArray<string>,
+  +taskId: string,
+  +attemptId: string,
+};
+
 export type ContextSubmitResult =
   | {
       +ok: true,
@@ -79,19 +89,25 @@ export type ContextSubmitResult =
       +taskId: string,
       +attemptId: string,
     }
-  | {
-      +ok: false,
-      +state: 'needs-replan' | 'blocked',
-      +reasons: $ReadOnlyArray<string>,
-      +taskId: string,
-      +attemptId: string,
-    };
+  | ContextFailureResult;
 
 export type ContextInspection = {
   +task: ContextTaskCapsule,
   +attempt: ContextAttemptCapsule | null,
   +state: ContextTaskState,
   +stateData: JsonValue,
+};
+
+export type ContextVerificationUpdate = {
+  +taskId: string,
+  +attemptId: string,
+  +candidateId: string,
+  +verdictId: string,
+  +state:
+    | 'eligible-for-review'
+    | 'needs-replan'
+    | 'needs-owner-decision'
+    | 'blocked',
 };
 
 type TaskRecord = {
@@ -580,6 +596,7 @@ function failAttempt({
   reasons,
   candidateId = null,
   verdictId = null,
+  firstFailureState = 'needs-replan',
   now,
 }: {
   +project: ProjectState,
@@ -589,8 +606,9 @@ function failAttempt({
   +reasons: $ReadOnlyArray<string>,
   +candidateId?: string | null,
   +verdictId?: string | null,
+  +firstFailureState?: 'needs-replan' | 'needs-owner-decision',
   +now?: () => string,
-}): ContextSubmitResult {
+}): ContextFailureResult {
   const failure: ContextFailure = Object.freeze({
     attemptId: attempt.id,
     outcome,
@@ -599,7 +617,9 @@ function failAttempt({
     verdictId,
   });
   const state =
-    attempt.attemptNumber >= CONTEXT_MAX_ATTEMPTS ? 'blocked' : 'needs-replan';
+    attempt.attemptNumber >= CONTEXT_MAX_ATTEMPTS
+      ? 'blocked'
+      : firstFailureState;
   appendStateEvent({
     project,
     entityKind: 'attempt',
@@ -622,6 +642,96 @@ function failAttempt({
     reasons: Object.freeze([...reasons]),
     taskId: task.id,
     attemptId: attempt.id,
+  });
+}
+
+export function recordContextVerificationOutcome({
+  project,
+  candidate,
+  verdict,
+  now = () => new Date().toISOString(),
+}: {
+  +project: ProjectState,
+  +candidate: CandidatePatch,
+  +verdict: RepositoryEvidenceVerdict,
+  +now?: () => string,
+}): ContextVerificationUpdate | null {
+  const { proposer } = candidate;
+  if (
+    proposer.protocolVersion !== CONTEXT_PROTOCOL_VERSION ||
+    proposer.taskId == null ||
+    proposer.attemptId == null
+  ) {
+    return null;
+  }
+  const taskId = proposer.taskId;
+  const attemptId = proposer.attemptId;
+  const record = loadTaskRecord(project, taskId);
+  const attempt = loadAttempt(project, attemptId);
+  const entry = taskIndex(project, taskId);
+  const data: $FlowFixMe = entry?.data;
+  if (
+    entry == null ||
+    entry.state !== 'awaiting-verification' ||
+    data.candidateId !== candidate.id ||
+    data.attemptId !== attemptId ||
+    attempt.taskId !== taskId ||
+    !verdict.candidateIds.includes(candidate.id)
+  ) {
+    throw new Error(
+      `Verdict ${verdict.id} does not match the active contextual attempt`,
+    );
+  }
+  if (
+    verdict.outcome === 'eligible-for-review' ||
+    verdict.outcome === 'auto-eligible'
+  ) {
+    appendStateEvent({
+      project,
+      entityKind: 'attempt',
+      entityId: attemptId,
+      state: 'verified',
+      data: { taskId, candidateId: candidate.id, verdictId: verdict.id },
+      now,
+    });
+    appendStateEvent({
+      project,
+      entityKind: 'task',
+      entityId: taskId,
+      state: 'eligible-for-review',
+      data: { attemptId, candidateId: candidate.id, verdictId: verdict.id },
+      now,
+    });
+    return Object.freeze({
+      taskId,
+      attemptId,
+      candidateId: candidate.id,
+      verdictId: verdict.id,
+      state: 'eligible-for-review',
+    });
+  }
+  const reasons =
+    verdict.missingRequirements.length > 0
+      ? verdict.missingRequirements
+      : [`Repository evidence verdict was ${verdict.outcome}.`];
+  const failed = failAttempt({
+    project,
+    task: record.task,
+    attempt,
+    outcome: verdict.outcome,
+    reasons,
+    candidateId: candidate.id,
+    verdictId: verdict.id,
+    firstFailureState:
+      verdict.outcome === 'blocked' ? 'needs-owner-decision' : 'needs-replan',
+    now,
+  });
+  return Object.freeze({
+    taskId,
+    attemptId,
+    candidateId: candidate.id,
+    verdictId: verdict.id,
+    state: failed.state,
   });
 }
 

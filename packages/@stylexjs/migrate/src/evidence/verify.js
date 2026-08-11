@@ -8,6 +8,7 @@
  */
 
 import { removeCandidateWorkspace } from '../candidate/workspace';
+import { recordContextVerificationOutcome } from '../context/lifecycle';
 import { appendStateEvent } from '../state/events';
 import { readConfig } from '../state/project';
 import {
@@ -125,6 +126,14 @@ export async function verifyPersistedCandidates({
       },
       now,
     });
+    for (const candidate of candidates) {
+      recordContextVerificationOutcome({
+        project,
+        candidate: candidate.candidate,
+        verdict,
+        now,
+      });
+    }
     return Object.freeze({ subject, schedule, coverage, bundle, verdict });
   } finally {
     removeCandidateWorkspace(workspace);

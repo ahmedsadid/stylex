@@ -148,6 +148,7 @@ export {
   inspectContextTask,
   openContextRetry,
   openContextTask,
+  recordContextVerificationOutcome,
   submitContextAttempt,
 } from './context/lifecycle';
 export type {
@@ -155,6 +156,7 @@ export type {
   ContextOpenResult,
   ContextSubmitResult,
   ContextTaskState,
+  ContextVerificationUpdate,
 } from './context/lifecycle';
 export type {
   ContextAttemptCapsule,

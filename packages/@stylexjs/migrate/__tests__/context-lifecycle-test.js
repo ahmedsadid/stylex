@@ -20,6 +20,8 @@ import {
   savePlan,
   scanRepository,
   submitContextAttempt,
+  verifyPersistedCandidates,
+  writeConfig,
 } from '../src/index';
 import type { ProjectState } from '../src/index';
 import {
@@ -174,6 +176,101 @@ export const Contextual = () => <Button {...stylex.props(styles.root)} />;
         workspaceRoot,
       }),
     ).toMatchObject({ ok: false, state: 'blocked' });
+  });
+
+  test('moves a passing contextual verdict to review eligibility', async () => {
+    writeConfig(project, {
+      sourceGlobs: ['src/**/*.jsx'],
+      evidence: {
+        concurrency: 1,
+        outputPreviewBytes: 1024,
+        providers: [
+          {
+            id: 'fixture-test',
+            kind: 'command',
+            check: 'focused-test',
+            checkVersion: 'fixture-v1',
+            subject: 'candidate',
+            cost: 'cheap',
+            argv: [process.execPath, '-e', 'process.exit(0)'],
+            versionArgv: [
+              process.execPath,
+              '-e',
+              "process.stdout.write('fixture-v1')",
+            ],
+            cwd: '.',
+            allowedEnv: ['PATH'],
+            fileGlobs: ['src/**'],
+            limitations: ['fixture check only'],
+            timeoutMs: 5000,
+          },
+        ],
+      },
+    });
+    const opened = openContextTask({
+      project,
+      clusterId,
+      goal: 'Produce a candidate that repository checks can review.',
+      workspaceRoot,
+    });
+    if (!opened.ok) {
+      throw new Error(opened.reasons.join('\n'));
+    }
+    writeFiles(opened.attempt.workspace.path, {
+      'src/Contextual.jsx': 'export const Contextual = () => <Button />;\n',
+    });
+    const submitted = submitContextAttempt({
+      project,
+      taskId: opened.task.id,
+      proposerKind: 'agent',
+      proposerVersion: 'fixture-v1',
+    });
+    if (!submitted.ok) {
+      throw new Error(submitted.reasons.join('\n'));
+    }
+    const verified = await verifyPersistedCandidates({
+      project,
+      candidateIds: [submitted.candidateId],
+      workspaceRoot,
+    });
+    expect(verified.verdict.outcome).toBe('eligible-for-review');
+    expect(inspectContextTask(project, opened.task.id)).toMatchObject({
+      state: 'eligible-for-review',
+      stateData: { verdictId: verified.verdict.id },
+    });
+  });
+
+  test('reports missing evidence as an owner decision, not a pass', async () => {
+    const opened = openContextTask({
+      project,
+      clusterId,
+      goal: 'Demonstrate an evidence gap.',
+      workspaceRoot,
+    });
+    if (!opened.ok) {
+      throw new Error(opened.reasons.join('\n'));
+    }
+    writeFiles(opened.attempt.workspace.path, {
+      'src/Contextual.jsx': 'export const Contextual = () => <Button />;\n',
+    });
+    const submitted = submitContextAttempt({
+      project,
+      taskId: opened.task.id,
+      proposerKind: 'human',
+      proposerVersion: 'fixture-v1',
+    });
+    if (!submitted.ok) {
+      throw new Error(submitted.reasons.join('\n'));
+    }
+    const verified = await verifyPersistedCandidates({
+      project,
+      candidateIds: [submitted.candidateId],
+      workspaceRoot,
+    });
+    expect(verified.verdict.outcome).toBe('blocked');
+    expect(inspectContextTask(project, opened.task.id).state).toBe(
+      'needs-owner-decision',
+    );
   });
 
   test('abandon removes the external workspace and records a terminal state', () => {
