@@ -470,6 +470,11 @@ export type {
   DirectionalMutation,
   DirectionalMutationId,
 } from './referee/directionalMutations';
+export { RENDER_LOCAL_MUTATION_MANIFEST } from './referee/renderLocalMutations';
+export type {
+  RenderLocalMutation,
+  RenderLocalMutationId,
+} from './referee/renderLocalMutations';
 export type {
   CompilerProbe,
   ObservedCompilerProbe,

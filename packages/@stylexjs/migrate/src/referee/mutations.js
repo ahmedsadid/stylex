@@ -20,6 +20,7 @@ export type ConditionalMutationId =
   | 'style-key-wiring-changed';
 
 export type MutationGate =
+  | 'discovery'
   | 'observer'
   | 'binding-integrity'
   | 'grammar'
