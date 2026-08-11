@@ -81,6 +81,10 @@ A draft may declare repository-managed bridge `coverageGlobs` and
 `boundaryFiles`. The boundary files are hash-pinned inputs, but the coverage is
 still a human scope assertion. It does not earn a provider-graph or runtime
 claim; configure runtime cases for the covered theme states and boundaries.
+Inspection reports whether any pinned boundary imports a generated variant and
+passes it to `stylex.props`. This observation is only a minimum implementation
+signal. When it is absent, approval records an additional warning rather than
+silently treating the bridge as implemented.
 
 `verify` executes configured repository checks in an isolated candidate
 worktree. Runtime providers additionally execute the same argv against a

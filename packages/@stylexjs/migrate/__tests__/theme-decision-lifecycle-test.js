@@ -102,7 +102,7 @@ export const Card = () => <div css={(theme) => ({color: theme.colors.foreground}
         definition: wrongValue,
         draftedBy: 'agent',
       }),
-    ).toThrow('does not match the current inventory');
+    ).toThrow('does not match source');
 
     const missingToken = definition(inventory.id);
     missingToken.tokens[0].sourcePath = 'colors.accent';

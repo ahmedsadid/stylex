@@ -616,6 +616,7 @@ export function runCli(
           approval: inspection.approval as $FlowFixMe,
           state: inspection.state,
           activeArtifactHash: inspection.activeArtifactHash,
+          bridgeEvidence: inspection.bridgeEvidence,
         } as $FlowFixMe,
         json,
         stdout,

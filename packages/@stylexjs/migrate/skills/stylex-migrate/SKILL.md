@@ -118,7 +118,9 @@ different lane.
    `stylex-migrate theme draft <json-file> <agent-name>`.
 3. Run `stylex-migrate theme inspect <draft-id>` and present every exact
    `mappings` entry, variant source, bridge declaration, limitation, and the
-   approval command to a human.
+   approval command to a human. If `bridgeEvidence.status` is not `observed`,
+   say plainly that the pinned files do not show a generated variant passed to
+   `stylex.props`; do not recommend approval as if the bridge existed.
 4. Stop. Never run `stylex-migrate theme approve`, never pass `--human-confirm`,
    and never describe agent assent as human approval. Resume only after a human
    says they ran the approval command.

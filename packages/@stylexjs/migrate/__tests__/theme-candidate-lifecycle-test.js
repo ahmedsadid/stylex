@@ -258,6 +258,9 @@ export const darkTheme = {colors: {foreground: '#eee'}};
     expect(approval.limitations).toEqual(
       expect.arrayContaining([
         expect.stringContaining('human-approved scope assertion'),
+        expect.stringContaining(
+          'no generated StyleX theme variant application',
+        ),
       ]),
     );
 
@@ -282,7 +285,8 @@ const CardLabel = styled.span\`border-color: \${p => p.theme.colors.foreground};
 export const Card = () => <CardRoot><CardLabel>Card</CardLabel></CardRoot>;
 `;
     repo = createTempRepo({
-      'src/App.tsx': 'export const App = ({children}) => <main>{children}</main>;\n',
+      'src/App.tsx':
+        'export const App = ({children}) => <main>{children}</main>;\n',
       'src/Card.tsx': styled,
       'src/theme/themes.ts': `export const lightTheme = {colors: {foreground: '#111'}};
 export const darkTheme = {colors: {foreground: '#eee'}};

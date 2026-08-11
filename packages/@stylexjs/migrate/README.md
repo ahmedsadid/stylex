@@ -114,7 +114,10 @@ a draft may declare coverage globs and exact bridge boundary files. Those files
 are hash-pinned and the human approval covers the declaration, but the scope
 remains an assertion rather than a static provider-graph proof. Covered
 candidates therefore carry a warning and cannot earn `runtime-matched` without
-configured runtime cases.
+configured runtime cases. Inspection additionally reports whether a pinned
+boundary imports a generated variant and passes it to `stylex.props`. If no such
+application is observed, approval remains permissive but records a second
+prominent warning that the declared bridge implementation was not observed.
 
 Repository checks are configured as argv arrays; shell command strings are
 rejected. Each provider declares whether it applies to one candidate or an exact

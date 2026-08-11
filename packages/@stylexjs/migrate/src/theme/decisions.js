@@ -21,6 +21,7 @@ import {
   validateThemeDecisionDraft,
 } from './model';
 import { resolveThemeDecisionDefinition } from './resolve';
+import { inspectThemeBridge } from './bridge';
 import type { CandidatePatch } from '../candidate/patch';
 import type { Inventory } from '../inventory/model';
 import type { ProjectState } from '../state/project';
@@ -30,12 +31,15 @@ export const THEME_NO_RUNTIME_LIMITATION: string =
   'WARNING: approving this token map does not establish runtime equivalence; configure runtime evidence before claiming runtime-matched.';
 export const THEME_BRIDGE_LIMITATION: string =
   'WARNING: repository-managed theme bridge coverage is a human-approved scope assertion, not a static provider-graph proof; require runtime evidence for covered consumers.';
+export const THEME_BRIDGE_UNOBSERVED_LIMITATION: string =
+  'WARNING: no generated StyleX theme variant application was observed in the pinned bridge boundary files; do not treat declared coverage as implemented.';
 
 export type ThemeDecisionInspection = {
   +draft: ThemeDecisionDraft,
   +approval: ThemeDecisionApproval | null,
   +state: 'drafted' | 'active' | 'superseded',
   +activeArtifactHash: string | null,
+  +bridgeEvidence: $FlowFixMe,
 };
 
 function isMissing(error: mixed): boolean {
@@ -335,6 +339,10 @@ export function inspectThemeDecision(
           ? 'active'
           : 'superseded',
     activeArtifactHash: active,
+    bridgeEvidence: inspectThemeBridge({
+      repositoryRoot: project.repositoryRoot,
+      draft,
+    }),
   });
 }
 
@@ -362,6 +370,10 @@ export function approvePersistedThemeDecision({
     );
   }
   validateThemeDecisionAgainstInventory(draft, inventory);
+  const bridgeEvidence = inspectThemeBridge({
+    repositoryRoot: project.repositoryRoot,
+    draft,
+  });
   const proposed = approveThemeDecision({
     draft,
     actor,
@@ -370,6 +382,9 @@ export function approvePersistedThemeDecision({
       ...limitations,
       THEME_NO_RUNTIME_LIMITATION,
       ...(draft.bridge == null ? [] : [THEME_BRIDGE_LIMITATION]),
+      ...(bridgeEvidence != null && bridgeEvidence.status !== 'observed'
+        ? [THEME_BRIDGE_UNOBSERVED_LIMITATION]
+        : []),
     ],
     now,
   });

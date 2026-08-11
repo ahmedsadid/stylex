@@ -154,6 +154,11 @@ export {
   validateThemeDecisionDraft,
 } from './theme/model';
 export { discoverThemeFacts } from './theme/discover';
+export { inspectThemeBridge } from './theme/bridge';
+export type {
+  ThemeBridgeInspection,
+  ThemeBridgeObservation,
+} from './theme/bridge';
 export {
   resolveThemeDecisionDefinition,
   resolveThemeValue,
@@ -175,6 +180,7 @@ export type {
 export {
   THEME_NO_RUNTIME_LIMITATION,
   THEME_BRIDGE_LIMITATION,
+  THEME_BRIDGE_UNOBSERVED_LIMITATION,
   approvePersistedThemeDecision,
   assertActiveThemeCandidateDecisions,
   inspectThemeDecision,
