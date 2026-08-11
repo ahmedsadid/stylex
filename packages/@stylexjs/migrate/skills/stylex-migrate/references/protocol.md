@@ -16,9 +16,9 @@ The kernel is authoritative for:
 - task and attempt state;
 - the maximum of two attempts.
 
-The proposer is responsible only for editing files in the supplied worktree.
-An explanation cannot widen scope, turn missing evidence into a pass, or create
-an additional attempt.
+The proposer is responsible only for editing files in the supplied worktree. An
+explanation cannot widen scope, turn missing evidence into a pass, or create an
+additional attempt.
 
 ## Fact certainty
 
@@ -28,9 +28,9 @@ an additional attempt.
 - `resolution-failed`: an attempted resolution failed. Never interpret as
   absence.
 
-If the proposed conversion depends on an inferred, unknown, or
-resolution-failed fact, either derive evidence from the declared inputs or stop
-under the capsule's conditions. Do not execute dynamic project configuration to
+If the proposed conversion depends on an inferred, unknown, or resolution-failed
+fact, either derive evidence from the declared inputs or stop under the
+capsule's conditions. Do not execute dynamic project configuration to
 manufacture certainty.
 
 ## State sequence

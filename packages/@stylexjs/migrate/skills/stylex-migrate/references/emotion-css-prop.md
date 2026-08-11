@@ -11,9 +11,9 @@ namespace import when present. Keep style definitions near the component unless
 the repository's local convention clearly says otherwise.
 
 Preserve composition order. Later Emotion styles can win through the CSS
-cascade, while StyleX resolves conflicts through its property-priority model.
-Do not flatten arrays, conditions, or mixed class-name/style composition unless
-the task's facts and checks cover the ordering.
+cascade, while StyleX resolves conflicts through its property-priority model. Do
+not flatten arrays, conditions, or mixed class-name/style composition unless the
+task's facts and checks cover the ordering.
 
 ## Conditions and selectors
 

@@ -1,6 +1,9 @@
 ---
 name: stylex-migrate
-description: Execute a StyleX migration through a stylex-migrate contextual task capsule. Use when asked to inspect, implement, submit, retry, or diagnose a contextual Emotion-to-StyleX candidate produced by the stylex-migrate CLI.
+description:
+  Execute a StyleX migration through a stylex-migrate contextual task capsule.
+  Use when asked to inspect, implement, submit, retry, or diagnose a contextual
+  Emotion-to-StyleX candidate produced by the stylex-migrate CLI.
 ---
 
 # StyleX Migrate
@@ -22,8 +25,9 @@ prose or agent judgment.
 5. Select only the relevant playbooks:
    - Read [emotion-css-prop.md](references/emotion-css-prop.md) for `css` prop
      conversion and declaration composition.
-   - Read [themes-and-runtime-values.md](references/themes-and-runtime-values.md)
-     for themes, identifiers, functions, and runtime-dependent values.
+   - Read
+     [themes-and-runtime-values.md](references/themes-and-runtime-values.md) for
+     themes, identifiers, functions, and runtime-dependent values.
    - Read [component-contracts.md](references/component-contracts.md) for custom
      components, class names, props, refs, and public API behavior.
 6. Keep the patch inside `task.scope.allowedPaths`. Protected paths and

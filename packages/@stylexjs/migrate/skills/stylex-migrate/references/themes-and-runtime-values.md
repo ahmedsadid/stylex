@@ -13,8 +13,8 @@ an explicit stable token contract, map it with `stylex.defineVars` and
 
 Do not invent a token map from similarly named values. A snapshot, type, or
 default theme does not prove dark mode, nested providers, tenant variants, or
-runtime overrides. If a required provider or variant is outside declared
-inputs, stop for replanning.
+runtime overrides. If a required provider or variant is outside declared inputs,
+stop for replanning.
 
 ## Runtime expressions
 
@@ -28,13 +28,13 @@ Classify each value:
 - An effectful, mutable, environment-dependent, or unresolved expression must
   not be hoisted or evaluated by the migration.
 
-Preserve evaluation count and timing. Moving a function call from render time
-to module initialization is a behavior change even if its current result looks
+Preserve evaluation count and timing. Moving a function call from render time to
+module initialization is a behavior change even if its current result looks
 constant.
 
 ## Evidence boundary
 
 Repository tests can establish only the checks they run. Until M8 runtime
 providers exercise named theme states and interactions, report the explicit
-runtime limitation. Never call a theme conversion runtime-matched merely
-because typecheck, lint, build, or snapshots passed.
+runtime limitation. Never call a theme conversion runtime-matched merely because
+typecheck, lint, build, or snapshots passed.
