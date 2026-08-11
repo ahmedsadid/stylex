@@ -143,6 +143,19 @@ export {
   validateContextAttemptCapsule,
   validateContextTaskCapsule,
 } from './context/capsule';
+export {
+  abandonContextTask,
+  inspectContextTask,
+  openContextRetry,
+  openContextTask,
+  submitContextAttempt,
+} from './context/lifecycle';
+export type {
+  ContextInspection,
+  ContextOpenResult,
+  ContextSubmitResult,
+  ContextTaskState,
+} from './context/lifecycle';
 export type {
   ContextAttemptCapsule,
   ContextDeclaredInput,

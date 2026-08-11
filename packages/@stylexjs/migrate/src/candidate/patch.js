@@ -35,6 +35,10 @@ export type Proposer = {
   +kind: ProposerKind,
   +version: string,
   +skillVersion?: string,
+  +name?: string,
+  +protocolVersion?: string,
+  +taskId?: string,
+  +attemptId?: string,
 };
 
 export type FileChange = {
