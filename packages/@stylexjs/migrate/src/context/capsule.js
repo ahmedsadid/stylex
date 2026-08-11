@@ -12,7 +12,7 @@ import { matchesGlob } from '../candidate/scope';
 import { canonicalJson, immutableJson } from '../state/json';
 import type { Cluster, Fact } from '../inventory/model';
 
-export const CONTEXT_PROTOCOL_VERSION: string = 'stylex-migrate-context-v2';
+export const CONTEXT_PROTOCOL_VERSION: string = 'stylex-migrate-context-v3';
 export const CONTEXT_MAX_ATTEMPTS: number = 2;
 
 export type ContextTaskOrigin =
@@ -31,6 +31,13 @@ export type ContextTaskOrigin =
       +strategyId: string,
       +definitionHash: string,
       +clusterId: string,
+    }
+  | {
+      +kind: 'bootstrap',
+      +inspectionId: string,
+      +packageRoot: string,
+      +packageManager: 'pnpm' | 'yarn' | 'npm',
+      +integration: 'rspack' | 'webpack' | 'vite' | 'babel' | 'next-swc',
     };
 
 export type ContextRequiredOutput = {
@@ -51,6 +58,7 @@ export type ContextScope = {
   +protectedPaths: $ReadOnlyArray<string>,
   +allowedDeletions: $ReadOnlyArray<string>,
   +ownerDecisionPaths: $ReadOnlyArray<string>,
+  +bootstrapPaths?: $ReadOnlyArray<string>,
 };
 
 export type ContextRequiredCheck = {
@@ -183,6 +191,21 @@ function normalizeOrigin(
     }
     return Object.freeze({ ...origin });
   }
+  if (origin.kind === 'bootstrap') {
+    if (
+      origin.inspectionId === '' ||
+      origin.packageRoot.includes('\0') ||
+      origin.packageRoot.startsWith('/') ||
+      origin.packageRoot.split('/').includes('..') ||
+      !['pnpm', 'yarn', 'npm'].includes(origin.packageManager) ||
+      !['rspack', 'webpack', 'vite', 'babel', 'next-swc'].includes(
+        origin.integration,
+      )
+    ) {
+      throw new Error('Invalid bootstrap task origin');
+    }
+    return Object.freeze({ ...origin });
+  }
   if (
     origin.kind !== 'theme-bridge' ||
     origin.draftId === '' ||
@@ -285,11 +308,32 @@ export function createContextTaskCapsule({
     protectedPaths: sortedStrings(scope.protectedPaths),
     allowedDeletions: sortedStrings(scope.allowedDeletions),
     ownerDecisionPaths: sortedStrings(scope.ownerDecisionPaths),
+    bootstrapPaths: sortedStrings(scope.bootstrapPaths ?? []),
   });
+  const stableOrigin = normalizeOrigin(origin, cluster);
+  if (stableOrigin.kind === 'bootstrap') {
+    if (
+      stableScope.bootstrapPaths.length === 0 ||
+      stableScope.bootstrapPaths.some(
+        (file) =>
+          !safeRelativePath(file) ||
+          file.includes('*') ||
+          file.includes('?') ||
+          !stableScope.allowedPaths.includes(file) ||
+          stableScope.protectedPaths.some((pattern) =>
+            matchesGlob(pattern, file),
+          ),
+      )
+    ) {
+      throw new Error('Bootstrap tasks require exact allowed bootstrap paths');
+    }
+  } else if (stableScope.bootstrapPaths.length > 0) {
+    throw new Error('Only bootstrap tasks may authorize bootstrap paths');
+  }
   const definition = taskDefinition({
     protocolVersion: CONTEXT_PROTOCOL_VERSION,
     goal: goal.trim(),
-    origin: normalizeOrigin(origin, cluster),
+    origin: stableOrigin,
     inventoryId,
     planId,
     cluster,

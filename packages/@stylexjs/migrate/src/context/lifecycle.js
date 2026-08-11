@@ -733,6 +733,7 @@ export function openContextTask({
       protectedPaths,
       allowedDeletions: [],
       ownerDecisionPaths: [],
+      bootstrapPaths: [],
     },
     requiredChecks: config.evidence.providers.map((provider) => ({
       id: provider.id,
@@ -1157,6 +1158,7 @@ export function submitContextAttempt({
     declaredDeletions: record.task.scope.allowedDeletions,
     forbiddenPaths: record.task.scope.protectedPaths,
     ownerDecisionPaths: record.task.scope.ownerDecisionPaths,
+    bootstrapPaths: record.task.scope.bootstrapPaths ?? [],
   });
   if (!scope.ok) {
     const reasons = scope.violations.map(

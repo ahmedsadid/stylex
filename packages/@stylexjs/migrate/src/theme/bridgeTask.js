@@ -238,6 +238,7 @@ export function openThemeBridgeTask({
       protectedPaths,
       allowedDeletions: [],
       ownerDecisionPaths: [],
+      bootstrapPaths: [],
     },
     requiredOutputs: [
       {

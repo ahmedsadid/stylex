@@ -78,6 +78,31 @@ describe('scope validation', () => {
     ]);
   });
 
+  test('permits exact bootstrap manifests, lockfiles, and build configuration', () => {
+    const paths = ['package.json', 'pnpm-lock.yaml', 'rspack.config.ts'];
+    const result = validateScope(
+      paths.map((file) => ({ path: file, status: 'modified' })),
+      { allowedPaths: paths, bootstrapPaths: paths },
+    );
+    expect(result).toEqual({ ok: true, violations: [] });
+  });
+
+  test('does not let a bootstrap exception authorize another lockfile', () => {
+    const result = validateScope(
+      [{ path: 'packages/app/pnpm-lock.yaml', status: 'modified' }],
+      {
+        allowedPaths: ['packages/app/pnpm-lock.yaml'],
+        bootstrapPaths: ['pnpm-lock.yaml'],
+      },
+    );
+    expect(result.violations).toEqual([
+      {
+        path: 'packages/app/pnpm-lock.yaml',
+        reason: 'forbidden-path',
+      },
+    ]);
+  });
+
   test('rejects edits to the migration ledger', () => {
     const result = validateScope(
       [{ path: '.stylex-migrate/ledger.json', status: 'modified' }],

@@ -34,6 +34,9 @@ export type ScopeRules = {
   // Paths an owner has explicitly authorised, exempting them from the
   // configuration-change rule.
   +ownerDecisionPaths?: $ReadOnlyArray<string>,
+  // Exact manifest, lockfile, and build-configuration paths authorized by a
+  // kernel-created bootstrap task. Wildcards are deliberately not supported.
+  +bootstrapPaths?: $ReadOnlyArray<string>,
 };
 
 export type ScopeViolationReason =
@@ -141,6 +144,7 @@ export function validateScope(
     ...(rules.forbiddenPaths ?? []),
   ];
   const ownerDecisionPaths = rules.ownerDecisionPaths ?? [];
+  const bootstrapPaths = new Set(rules.bootstrapPaths ?? []);
 
   const violations: Array<ScopeViolation> = [];
   for (const change of changes) {
@@ -150,7 +154,8 @@ export function validateScope(
       violations.push({ path: filePath, reason: 'ledger-edit' });
       continue;
     }
-    if (matchesAny(forbidden, filePath)) {
+    const bootstrapAuthorized = bootstrapPaths.has(filePath);
+    if (matchesAny(forbidden, filePath) && !bootstrapAuthorized) {
       violations.push({ path: filePath, reason: 'forbidden-path' });
       continue;
     }
@@ -160,7 +165,8 @@ export function validateScope(
     }
     if (
       matchesAny(CONFIG_PATHS, filePath) &&
-      !matchesAny(ownerDecisionPaths, filePath)
+      !matchesAny(ownerDecisionPaths, filePath) &&
+      !bootstrapAuthorized
     ) {
       violations.push({
         path: filePath,

@@ -130,6 +130,68 @@ describe('M7 contextual task capsules', () => {
     ).toThrow('Invalid dynamic-strategy task origin');
   });
 
+  test('binds bootstrap authority to exact task paths', () => {
+    const base = task();
+    const paths = ['package.json', 'pnpm-lock.yaml', 'rspack.config.ts'];
+    const capsule = createContextTaskCapsule({
+      ...base,
+      origin: {
+        kind: 'bootstrap',
+        inspectionId: 'bootstrap-1',
+        packageRoot: '',
+        packageManager: 'pnpm',
+        integration: 'rspack',
+      },
+      cluster: {
+        ...base.cluster,
+        id: 'bootstrap-work-1',
+        changeFiles: paths,
+      },
+      scope: {
+        allowedPaths: paths,
+        protectedPaths: ['.stylex-migrate/**'],
+        allowedDeletions: [],
+        ownerDecisionPaths: [],
+        bootstrapPaths: paths,
+      },
+    });
+
+    expect(capsule.origin).toEqual({
+      kind: 'bootstrap',
+      inspectionId: 'bootstrap-1',
+      packageRoot: '',
+      packageManager: 'pnpm',
+      integration: 'rspack',
+    });
+    expect(capsule.scope.bootstrapPaths).toEqual(paths);
+
+    expect(() =>
+      createContextTaskCapsule({
+        ...base,
+        scope: {
+          ...base.scope,
+          bootstrapPaths: ['package.json'],
+        },
+      }),
+    ).toThrow('Only bootstrap tasks may authorize bootstrap paths');
+    expect(() =>
+      createContextTaskCapsule({
+        ...base,
+        origin: {
+          kind: 'bootstrap',
+          inspectionId: 'bootstrap-1',
+          packageRoot: '',
+          packageManager: 'pnpm',
+          integration: 'rspack',
+        },
+        scope: {
+          ...base.scope,
+          bootstrapPaths: ['**/package.json'],
+        },
+      }),
+    ).toThrow('Bootstrap tasks require exact allowed bootstrap paths');
+  });
+
   test('binds attempt workspaces and prior failures', () => {
     const first = createContextAttemptCapsule({
       task: task(),
