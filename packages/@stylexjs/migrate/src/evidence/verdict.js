@@ -171,6 +171,14 @@ function staticRequirements(
             `${change.path} static comparison used ${comparison.subject.model ?? 'no model'}`,
           );
         }
+        if (
+          comparison.subject.model === 'render-local-css-v1' &&
+          !passing.has('render-local-call-integrity\0stylex-migrate')
+        ) {
+          missing.add(
+            `${change.path} requires render-local-call-integrity from stylex-migrate`,
+          );
+        }
       }
     }
   }

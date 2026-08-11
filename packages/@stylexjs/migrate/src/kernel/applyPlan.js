@@ -90,6 +90,17 @@ const SUPPORTS_NESTING_MECHANICAL_POLICY_ID: string = 'mechanical-static-v5';
 const KEYFRAMES_MECHANICAL_POLICY_ID: string = 'mechanical-static-v6';
 const SHORTHAND_MECHANICAL_POLICY_ID: string = 'mechanical-static-v7';
 const DIRECTIONAL_MECHANICAL_POLICY_ID: string = 'mechanical-static-v8';
+const SUPPORTED_MECHANICAL_POLICY_IDS: $ReadOnlyArray<string> = Object.freeze([
+  LEGACY_MECHANICAL_POLICY_ID,
+  CONDITIONAL_MECHANICAL_POLICY_ID,
+  PSEUDO_ELEMENT_MECHANICAL_POLICY_ID,
+  MEDIA_QUERY_MECHANICAL_POLICY_ID,
+  SUPPORTS_NESTING_MECHANICAL_POLICY_ID,
+  KEYFRAMES_MECHANICAL_POLICY_ID,
+  SHORTHAND_MECHANICAL_POLICY_ID,
+  DIRECTIONAL_MECHANICAL_POLICY_ID,
+  MECHANICAL_POLICY_ID,
+]);
 export const MECHANICAL_COMPARISON_MODEL: string = 'static-css-v3';
 export const MECHANICAL_COMPARISON_MODELS: $ReadOnlyArray<string> =
   Object.freeze([
@@ -270,12 +281,7 @@ function validateEvidenceBundle(
   if (evidence.snapshotId !== expectedSnapshotId) {
     return `evidence for candidate ${candidate.id} belongs to a different snapshot`;
   }
-  if (
-    evidence.policyId !== MECHANICAL_POLICY_ID &&
-    evidence.policyId !== PSEUDO_ELEMENT_MECHANICAL_POLICY_ID &&
-    evidence.policyId !== CONDITIONAL_MECHANICAL_POLICY_ID &&
-    evidence.policyId !== LEGACY_MECHANICAL_POLICY_ID
-  ) {
+  if (!SUPPORTED_MECHANICAL_POLICY_IDS.includes(evidence.policyId)) {
     return `candidate ${candidate.id} uses unsupported evidence policy ${evidence.policyId}`;
   }
   if (evidence.results.length === 0) {

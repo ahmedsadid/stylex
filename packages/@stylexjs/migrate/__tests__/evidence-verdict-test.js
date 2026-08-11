@@ -73,11 +73,13 @@ describe('M5 evidence bundles and policy verdicts', () => {
     classification,
     includeStatic,
     comparisonModel = 'static-css-v3',
+    includeRenderLocalIntegrity = false,
   }: {
     +proposer: Proposer,
     +classification: Classification,
     +includeStatic: boolean,
     +comparisonModel?: string,
+    +includeRenderLocalIntegrity?: boolean,
   }): VerificationCandidate {
     const workspace = createCandidateWorkspace({
       repositoryRoot: repo,
@@ -129,6 +131,18 @@ describe('M5 evidence bundles and policy verdicts', () => {
           }),
         )
       : [];
+    if (includeRenderLocalIntegrity) {
+      staticEvidence.push(
+        makeEvidence({
+          check: 'render-local-call-integrity',
+          provider: 'stylex-migrate',
+          providerVersion: 'fixture-v1',
+          subject,
+          scope: [change.path],
+          result: 'pass',
+        }),
+      );
+    }
     return {
       candidate: result.candidate,
       snapshot: result.snapshot,
@@ -453,6 +467,7 @@ describe('M5 evidence bundles and policy verdicts', () => {
       classification: 'mechanical',
       includeStatic: true,
       comparisonModel: 'render-local-css-v1',
+      includeRenderLocalIntegrity: true,
     });
     const evidence = inputs(candidate);
     const verdict = evaluateRepositoryEvidence({
@@ -464,6 +479,30 @@ describe('M5 evidence bundles and policy verdicts', () => {
     });
     expect(verdict.outcome).toBe('auto-eligible');
     expect(verdict.policyId).toBe('mechanical-repository-v9');
+  });
+
+  test('the repository verdict requires render-local call integrity', () => {
+    const candidate = record({
+      proposer: { kind: 'deterministic', version: 'fixture-v1' },
+      classification: 'mechanical',
+      includeStatic: true,
+      comparisonModel: 'render-local-css-v1',
+    });
+    const evidence = inputs(candidate);
+    const verdict = evaluateRepositoryEvidence({
+      bundle: createRepositoryEvidenceBundle({
+        ...evidence,
+        candidates: [candidate],
+      }),
+      candidates: [candidate],
+    });
+    expect(verdict.outcome).toBe('blocked');
+    expect(verdict.missingRequirements).toContain(
+      'src/A.js requires render-local-call-integrity from stylex-migrate',
+    );
+    expect(verdict.claims.map((claim) => claim.claim)).toEqual([
+      'checks-passed',
+    ]);
   });
 
   test('the repository verdict rejects an unreviewed comparison model', () => {
