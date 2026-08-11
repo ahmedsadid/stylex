@@ -43,6 +43,7 @@ Migration records live under `.stylex-migrate/`. The directory is added to
 ```sh
 stylex-migrate init
 stylex-migrate scan
+stylex-migrate readiness
 stylex-migrate plan
 stylex-migrate mechanical propose <cluster-id>
 stylex-migrate candidate diff <candidate-id>
@@ -69,9 +70,11 @@ stylex-migrate cleanup --confirm   # remove unreferenced local artifacts
 `scan` inventories configured source globs and records parse or resolution
 failures without treating them as absence. `plan` groups sites with overlapping
 change ownership and retains the inputs and facts behind each classification.
-`status` reports counts by classification and state; it does not report a
-conversion percentage. `explain` makes routing and blocking reasons available
-after restarting the process.
+`readiness` reports binding-backed Emotion styled shapes, theme facts, and
+css-prop classifications. Styled definitions in that report are observations,
+not planned or convertible sites. `status` reports counts by classification and
+state; it does not report a conversion percentage. `explain` makes routing and
+blocking reasons available after restarting the process.
 
 Every command also accepts `--json`. Run `init` before the other commands.
 `mechanical propose` accepts only a current planned mechanical cluster and
@@ -166,9 +169,10 @@ warning and cannot earn `runtime-matched`.
 ## Current mechanical boundary
 
 The CLI and development API can propose a conversion for an Emotion `css` prop
-on a host element when the file has an exact Emotion JSX pragma and the style is
-an object literal containing supported camelCase longhands with string or finite
-numeric literal values.
+on a host element when Emotion activation is established by an exact file-local
+pragma or known statically parsed project configuration bound to the candidate
+snapshot. The style must be an object literal containing supported camelCase
+longhands with string or finite numeric literal values.
 
 It admits separate, bounded modifier capabilities:
 

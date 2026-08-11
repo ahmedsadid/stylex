@@ -1,8 +1,8 @@
 ---
 name: stylex-migrate
 description:
-  'Guide agents through vendor-neutral stylex-migrate contextual tasks and
-  approved theme token-map migrations.'
+  'Guide agents through vendor-neutral stylex-migrate repository readiness,
+  mechanical and contextual tasks, and approved theme token-map migrations.'
 ---
 
 # StyleX Migrate
@@ -12,6 +12,11 @@ checks, outcomes, and the two-attempt limit; do not replace those controls with
 prose or agent judgment.
 
 ## Choose the workflow
+
+Run `stylex-migrate readiness` after a scan when selecting representative
+migration work. Treat `emotion-styled-readiness` facts as syntax observations
+only: they do not create a cluster, authorize edits, or claim that a styled
+definition is convertible. Stop if the requested work has no planned cluster.
 
 Use `stylex-migrate explain <cluster-id>` to follow the current plan's route.
 Use the mechanical workflow only for a planned `mechanical` cluster. Use the

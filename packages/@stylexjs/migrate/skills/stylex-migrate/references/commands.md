@@ -6,6 +6,7 @@ Use `--json` when consuming output programmatically.
 ```text
 stylex-migrate init
 stylex-migrate scan
+stylex-migrate readiness
 stylex-migrate plan
 stylex-migrate mechanical propose <cluster-id>
 stylex-migrate candidate diff <candidate-id>
@@ -23,6 +24,11 @@ stylex-migrate review <candidate-or-verdict-id>
 stylex-migrate explain <cluster-or-candidate-id>
 stylex-migrate status
 ```
+
+`readiness` summarizes binding-backed Emotion styled definitions, theme facts,
+and css-prop classifications from the current scan. Styled samples remain
+unplanned observations until the kernel builds a definition/consumer cluster; do
+not convert one merely because it appears in this report.
 
 `mechanical propose` accepts only a current planned mechanical cluster. It runs
 the deterministic conversion and its static comparison checks, then freezes the
