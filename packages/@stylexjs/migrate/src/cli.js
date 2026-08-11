@@ -61,12 +61,14 @@ import {
   persistThemeDecisionDraft,
 } from './theme/decisions';
 import { proposeThemeDecisionCandidate } from './theme/candidate';
+import { openThemeBridgeTask } from './theme/bridgeTask';
 import { resolveThemeDecisionDefinition } from './theme/resolve';
 import { scaffoldThemeDecisionDefinition } from './theme/scaffold';
 import { themeConsumerCandidates } from './theme/candidates';
 import { proposeMechanicalCandidate } from './mechanical/candidate';
 import { proposeStyledCandidate } from './styled/candidate';
 import type { CandidatePatch } from './candidate/patch';
+import { THEME_DECISION_PROTOCOL_VERSION } from './theme/model';
 import type { ThemeDecisionDraft } from './theme/model';
 
 type WriteOutput = (text: string) => mixed;
@@ -97,6 +99,8 @@ Commands:
   theme approve <draft> <reviewer> --human-confirm
                           record a human approval; agents must not run this
   theme propose <draft>   freeze a candidate from the active approved map
+  theme bridge open <draft> <goal>
+                          open a scoped task that locks the generated theme module
   context open <cluster> <goal>
                           open a contextual workspace from a planned cluster
   context open <task>     open the kernel-owned retry for a failed task
@@ -303,6 +307,16 @@ function candidateDecisionStatus(
 ): { +status: string, +reason: string | null } {
   if (candidate.decisionArtifactHashes.length === 0) {
     return { status: 'not-applicable', reason: null };
+  }
+  if (
+    candidate.proposer.protocolVersion !== THEME_DECISION_PROTOCOL_VERSION &&
+    candidate.proposer.version !== 'theme-decision-v1'
+  ) {
+    return {
+      status: 'bound-input',
+      reason:
+        'The contextual candidate binds decision input hashes but does not represent an active human-approved theme map.',
+    };
   }
   try {
     assertActiveThemeCandidateDecisions(project, candidate);
@@ -670,6 +684,41 @@ export function runCli(
               state: 'refused',
               reason: result.reason,
               file: result.file,
+            },
+        json,
+        stdout,
+      );
+      return result.ok ? 0 : 3;
+    }
+    if (
+      args[0] === 'theme' &&
+      args[1] === 'bridge' &&
+      args[2] === 'open' &&
+      args.length === 5
+    ) {
+      const result = openThemeBridgeTask({
+        project: openProject(cwd),
+        draftId: args[3],
+        goal: args[4],
+      });
+      present(
+        result.ok
+          ? {
+              command: 'theme bridge open',
+              state: result.state,
+              taskId: result.task.id,
+              attemptId: result.attempt.id,
+              workspace: result.attempt.workspace.path,
+              origin: result.task.origin,
+              allowedPaths: result.task.scope.allowedPaths,
+              requiredOutputs: result.task.requiredOutputs,
+              warnings: result.task.limitations,
+              next: `Edit only the declared bridge boundaries, then run stylex-migrate context submit ${result.task.id} <agent|human> <name> <version> [skill-version].`,
+            }
+          : {
+              command: 'theme bridge open',
+              state: result.state,
+              reasons: result.reasons,
             },
         json,
         stdout,

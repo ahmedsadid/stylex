@@ -25,6 +25,7 @@ import {
   loadVerificationCandidate,
   saveVerificationCandidate,
 } from '../evidence/candidates';
+import { evidence } from '../evidence/claims';
 import { createVerificationWorkspace } from '../evidence/workspace';
 import { loadCurrentInventory, loadCurrentPlan } from '../planning/reports';
 import { appendStateEvent, replayEvents } from '../state/events';
@@ -36,6 +37,8 @@ import {
   writeArtifact,
   writeRecord,
 } from '../state/project';
+import { inspectThemeBridgeCandidate } from '../theme/bridge';
+import { loadThemeDecisionDraft } from '../theme/decisions';
 import {
   CONTEXT_MAX_ATTEMPTS,
   CONTEXT_PROTOCOL_VERSION,
@@ -53,6 +56,7 @@ import type { IndexEntry } from '../state/events';
 import type { JsonValue } from '../state/json';
 import type { ArtifactReference, ProjectState } from '../state/project';
 import type { RepositoryEvidenceVerdict } from '../evidence/verdict';
+import type { EvidenceResult } from '../kernel/evidence';
 import type {
   ContextAttemptCapsule,
   ContextFailure,
@@ -1079,6 +1083,69 @@ export function submitContextAttempt({
     throw new Error('The task inventory is no longer current');
   }
   const clusterSites = new Set(record.task.cluster.siteIds);
+  const staticEvidence: Array<EvidenceResult> = [];
+  if (record.task.origin.kind === 'theme-bridge') {
+    const origin = record.task.origin;
+    const draft = loadThemeDecisionDraft(project, origin.draftId);
+    if (
+      draft == null ||
+      draft.definitionHash !== origin.definitionHash ||
+      draft.targetModule !== origin.targetModule
+    ) {
+      removeCandidateWorkspace(workspace);
+      return failAttempt({
+        project,
+        task: record.task,
+        attempt,
+        outcome: 'rejected',
+        reasons: [
+          'The theme bridge draft is missing or no longer matches the task.',
+        ],
+        now,
+      });
+    }
+    const bridge = inspectThemeBridgeCandidate({
+      candidate: result.candidate,
+      draft,
+    });
+    if (bridge == null || !bridge.complete) {
+      removeCandidateWorkspace(workspace);
+      return failAttempt({
+        project,
+        task: record.task,
+        attempt,
+        outcome: 'rejected',
+        reasons: [
+          bridge == null
+            ? 'The theme bridge task has no declared bridge scope.'
+            : bridge.missingVariants.length > 0
+              ? `The frozen bridge does not apply every generated variant: ${bridge.missingVariants.join(', ')}.`
+              : 'The frozen bridge boundary could not be inspected completely.',
+        ],
+        now,
+      });
+    }
+    const evidenceChange =
+      result.candidate.changes.find(
+        (change) => change.path === origin.targetModule,
+      ) ?? result.candidate.changes[0];
+    staticEvidence.push(
+      evidence({
+        check: 'theme-bridge-wiring',
+        provider: 'stylex-migrate',
+        subject: {
+          file: evidenceChange.path,
+          sourceHash: record.snapshot.fileHashes[evidenceChange.path] ?? null,
+          targetHash: evidenceChange.contentHash,
+          model: 'theme-bridge-wiring-v1',
+        },
+        scope: record.task.scope.allowedPaths,
+        result: 'pass',
+        detail: `Every generated variant was referenced by stylex.props: ${bridge.appliedVariants.join(', ')}.`,
+        limitations: [bridge.limitation],
+      }),
+    );
+  }
   const siteIdsByFile = Object.fromEntries(
     result.candidate.touchedFiles.map((file) => [
       file,
@@ -1094,7 +1161,7 @@ export function submitContextAttempt({
       snapshot: result.snapshot,
       classification: record.task.cluster.classification,
       siteIdsByFile,
-      staticEvidence: [],
+      staticEvidence,
     },
     { now },
   );

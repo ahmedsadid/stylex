@@ -64,6 +64,8 @@ export const App = () => <main {...stylex.props(darkTheme)}>App</main>;
       }),
     ).toMatchObject({
       status: 'observed',
+      complete: false,
+      missingVariants: ['lightTheme'],
       observations: [
         {
           file: 'src/App.tsx',
@@ -72,6 +74,26 @@ export const App = () => <main {...stylex.props(darkTheme)}>App</main>;
           appliedVariants: ['darkTheme'],
         },
       ],
+    });
+  });
+
+  test('requires every variant and sees conditional StyleX arguments', () => {
+    repo = createTempRepo({
+      'src/App.tsx': `import * as stylex from '@stylexjs/stylex';
+import {darkTheme as dark, lightTheme as light} from './theme/tokens.stylex';
+export const App = ({isDark}) => <main {...stylex.props(isDark ? dark : light)}>App</main>;
+`,
+    });
+    expect(
+      inspectThemeBridge({
+        repositoryRoot: repo,
+        draft: draft('src/App.tsx'),
+      }),
+    ).toMatchObject({
+      status: 'observed',
+      complete: true,
+      appliedVariants: ['darkTheme', 'lightTheme'],
+      missingVariants: [],
     });
   });
 
@@ -89,6 +111,7 @@ export const App = ({children}) => <ThemeProvider theme={darkTheme}>{children}</
       }),
     ).toMatchObject({
       status: 'not-observed',
+      complete: false,
       observations: [
         {
           status: 'not-observed',
@@ -96,6 +119,27 @@ export const App = ({children}) => <ThemeProvider theme={darkTheme}>{children}</
           appliedVariants: [],
         },
       ],
+    });
+  });
+
+  test('does not accept shadowed StyleX or variant imports', () => {
+    repo = createTempRepo({
+      'src/App.tsx': `import * as stylex from '@stylexjs/stylex';
+import {darkTheme, lightTheme} from './theme/tokens.stylex';
+export const App = ({stylex, darkTheme, lightTheme}) =>
+  <main {...stylex.props(darkTheme, lightTheme)}>App</main>;
+`,
+    });
+    expect(
+      inspectThemeBridge({
+        repositoryRoot: repo,
+        draft: draft('src/App.tsx'),
+      }),
+    ).toMatchObject({
+      status: 'not-observed',
+      complete: false,
+      appliedVariants: [],
+      missingVariants: ['darkTheme', 'lightTheme'],
     });
   });
 });

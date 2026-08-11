@@ -155,6 +155,10 @@ export {
 } from './theme/model';
 export { discoverThemeFacts } from './theme/discover';
 export { inspectThemeBridge } from './theme/bridge';
+export {
+  inspectThemeBridgeCandidate,
+  inspectThemeBridgeSources,
+} from './theme/bridge';
 export type {
   ThemeBridgeInspection,
   ThemeBridgeObservation,
@@ -192,6 +196,10 @@ export {
 export type { ThemeDecisionInspection } from './theme/decisions';
 export { proposeThemeDecisionCandidate } from './theme/candidate';
 export type { ThemeCandidateProposalResult } from './theme/candidate';
+export {
+  THEME_BRIDGE_TASK_PROTOCOL_VERSION,
+  openThemeBridgeTask,
+} from './theme/bridgeTask';
 export type {
   ThemeDecisionApproval,
   ThemeBridgeCoverage,
