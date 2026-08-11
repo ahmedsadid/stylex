@@ -598,6 +598,22 @@ export {
   formatCorpusSummary,
 } from './evaluation/corpus';
 export type { CorpusSource, CorpusSummary } from './evaluation/corpus';
+export {
+  comparePilotObservations,
+  createPilotObservation,
+  PILOT_PROTOCOL_VERSION,
+} from './evaluation/pilot';
+export type {
+  Availability,
+  MetricSummary,
+  MutationObservation,
+  NumericObservation,
+  PilotArm,
+  PilotComparison,
+  PilotLane,
+  PilotObservation,
+  PilotOutcome,
+} from './evaluation/pilot';
 
 export {
   discover,
