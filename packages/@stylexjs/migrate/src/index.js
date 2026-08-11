@@ -136,6 +136,24 @@ export { canonicalJson, immutableJson, parseJson } from './state/json';
 export type { JsonValue } from './state/json';
 
 export {
+  RUNTIME_PROTOCOL_VERSION,
+  compareRuntimeReports,
+  normalizeRuntimeCases,
+  normalizeRuntimeReport,
+} from './runtime/model';
+export type {
+  RuntimeCaseComparison,
+  RuntimeCaseDefinition,
+  RuntimeCaseObservation,
+  RuntimeComparison,
+  RuntimeDifference,
+  RuntimeEnvironment,
+  RuntimeObservation,
+  RuntimeObservationReport,
+  RuntimeViewport,
+} from './runtime/model';
+
+export {
   CONTEXT_MAX_ATTEMPTS,
   CONTEXT_PROTOCOL_VERSION,
   createContextAttemptCapsule,
