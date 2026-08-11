@@ -256,8 +256,7 @@ function analyzeThemeTemplate(
       expression.async === true ||
       expression.params?.length !== 1 ||
       expression.params[0]?.type !== 'Identifier' ||
-      (expression.body?.type !== 'MemberExpression' &&
-        expression.body?.type !== 'OptionalMemberExpression')
+      expression.body?.type !== 'MemberExpression'
     ) {
       return {
         supported: false,

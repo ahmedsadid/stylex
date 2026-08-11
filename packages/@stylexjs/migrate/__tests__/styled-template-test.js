@@ -215,6 +215,7 @@ export const App = () => <Card />;
       'color: color-mix(in srgb, red, ${p => p.theme.colors.foreground});',
     ],
     ['computed callback', 'color: ${p => darken(p.theme.colors.foreground)};'],
+    ['optional theme access', 'color: ${p => p.theme?.colors.foreground};'],
     [
       'nested selector',
       '&:hover { color: ${p => p.theme.colors.foreground}; }',
