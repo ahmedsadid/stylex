@@ -276,6 +276,16 @@ export const App = () => <div css={{ color: 'red' }} />;
     expect(converted).not.toContain('margin: 4,');
   });
 
+  test('a direct render-local css call becomes one props call', () => {
+    const converted = convert(`${PRAGMA}import { css } from '@emotion/react';
+export const App = () => <div css={css({ color: 'red' })} />;`);
+    expect(converted).toContain("color: 'red',");
+    expect(converted).toContain('{...stylex.props(styles.div)}');
+    expect(converted).not.toContain("css={css({ color: 'red' })}");
+    // Cleanup is deliberately separate because other css calls may remain.
+    expect(converted).toContain("import { css } from '@emotion/react';");
+  });
+
   test('a file without emotion is left alone', () => {
     const result = convertSource(
       'export const App = () => <div css={{ color: "red" }} />;',

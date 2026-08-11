@@ -54,6 +54,8 @@ export type RefusalReason =
   | 'invalid-box-shorthand'
   | 'mixed-shorthand-modifier'
   | 'unsupported-logical-property'
+  | 'render-local-css-binding-unresolved'
+  | 'render-local-css-call-shape'
   | 'non-finite-number'
   | 'css-with-jsx-spread';
 
@@ -65,6 +67,7 @@ export type EmotionSite = {
   +objectStart: number,
   +objectEnd: number,
   +elementName: string,
+  +form: 'object-literal' | 'render-local-css-call',
   +style: StyleObject,
 };
 
@@ -174,6 +177,63 @@ function elementNameOf(opening: $FlowFixMe): string | null {
     return name.name;
   }
   return null;
+}
+
+function patternNames(pattern: $FlowFixMe): $ReadOnlyArray<string> {
+  if (pattern == null) return [];
+  if (pattern.type === 'Identifier') return [String(pattern.name)];
+  if (pattern.type === 'RestElement') return patternNames(pattern.argument);
+  if (pattern.type === 'AssignmentPattern') return patternNames(pattern.left);
+  if (pattern.type === 'ObjectPattern' || pattern.type === 'ArrayPattern') {
+    return (pattern.properties ?? pattern.elements ?? []).flatMap((item) =>
+      item?.type === 'ObjectProperty'
+        ? patternNames(item.value)
+        : patternNames(item),
+    );
+  }
+  return [];
+}
+
+/** Named Emotion css imports that are not shadowed anywhere in the file. */
+function renderLocalCssBindings(ast: $FlowFixMe): $ReadOnlySet<string> {
+  const imported = new Set<string>();
+  for (const statement of ast.program?.body ?? []) {
+    if (
+      statement.type !== 'ImportDeclaration' ||
+      statement.importKind === 'type' ||
+      statement.source?.value !== '@emotion/react'
+    ) {
+      continue;
+    }
+    for (const specifier of statement.specifiers ?? []) {
+      if (
+        specifier.type === 'ImportSpecifier' &&
+        (specifier.imported?.name === 'css' ||
+          specifier.imported?.value === 'css')
+      ) {
+        imported.add(String(specifier.local?.name));
+      }
+    }
+  }
+  if (imported.size === 0) return imported;
+  const shadowed = new Set<string>();
+  walk(ast, (node) => {
+    let names: $ReadOnlyArray<string> = [];
+    if (node.type === 'VariableDeclarator') names = patternNames(node.id);
+    else if (
+      node.type === 'FunctionDeclaration' ||
+      node.type === 'FunctionExpression' ||
+      node.type === 'ArrowFunctionExpression' ||
+      node.type === 'ObjectMethod' ||
+      node.type === 'ClassMethod'
+    ) {
+      names = (node.params ?? []).flatMap(patternNames);
+    } else if (node.type === 'CatchClause') names = patternNames(node.param);
+    for (const name of names) {
+      if (imported.has(name)) shadowed.add(name);
+    }
+  });
+  return new Set([...imported].filter((name) => !shadowed.has(name)));
 }
 
 /**
@@ -677,6 +737,7 @@ function readDeclarations(
 function discoverActive(ast: $FlowFixMe): DiscoveryResult {
   const sites: Array<EmotionSite> = [];
   const refusals: Array<EmotionRefusal> = [];
+  const cssBindings = renderLocalCssBindings(ast);
 
   walk(ast, (node) => {
     if (node.type !== 'JSXOpeningElement') {
@@ -759,7 +820,8 @@ function discoverActive(ast: $FlowFixMe): DiscoveryResult {
       container == null ||
       container.type !== 'JSXExpressionContainer' ||
       container.expression == null ||
-      container.expression.type !== 'ObjectExpression'
+      (container.expression.type !== 'ObjectExpression' &&
+        container.expression.type !== 'CallExpression')
     ) {
       refusals.push({
         start: attribute.start,
@@ -770,7 +832,40 @@ function discoverActive(ast: $FlowFixMe): DiscoveryResult {
       return;
     }
 
-    const read = readDeclarations(container.expression);
+    let objectExpression = container.expression;
+    let form: 'object-literal' | 'render-local-css-call' = 'object-literal';
+    if (container.expression.type === 'CallExpression') {
+      const call = container.expression;
+      if (
+        call.callee?.type !== 'Identifier' ||
+        !cssBindings.has(String(call.callee.name))
+      ) {
+        refusals.push({
+          start: attribute.start,
+          end: attribute.end,
+          elementName,
+          reason: 'render-local-css-binding-unresolved',
+        });
+        return;
+      }
+      if (
+        call.optional === true ||
+        (call.arguments ?? []).length !== 1 ||
+        call.arguments[0]?.type !== 'ObjectExpression'
+      ) {
+        refusals.push({
+          start: attribute.start,
+          end: attribute.end,
+          elementName,
+          reason: 'render-local-css-call-shape',
+        });
+        return;
+      }
+      objectExpression = call.arguments[0];
+      form = 'render-local-css-call';
+    }
+
+    const read = readDeclarations(objectExpression);
     if (!read.ok) {
       refusals.push({
         start: attribute.start,
@@ -784,9 +879,10 @@ function discoverActive(ast: $FlowFixMe): DiscoveryResult {
     sites.push({
       start: attribute.start,
       end: attribute.end,
-      objectStart: container.expression.start,
-      objectEnd: container.expression.end,
+      objectStart: objectExpression.start,
+      objectEnd: objectExpression.end,
       elementName: rawName,
+      form,
       style: read.style,
     });
   });

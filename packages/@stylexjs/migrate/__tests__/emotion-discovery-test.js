@@ -263,6 +263,42 @@ describe('emotion discovery', () => {
     ]);
   });
 
+  test('reads a direct render-local css call from its named Emotion import', () => {
+    const result =
+      read(`${PRAGMA}import { css as emotionCss } from '@emotion/react';
+const App = () => <div css={emotionCss({ color: 'red', opacity: 0.5 })} />;`);
+    expect(result.refusals).toEqual([]);
+    expect(result.sites[0]).toMatchObject({
+      form: 'render-local-css-call',
+      style: {
+        declarations: [
+          { property: 'color', value: 'red' },
+          { property: 'opacity', value: 0.5 },
+        ],
+      },
+    });
+  });
+
+  test('refuses a css import shadowed anywhere in the file', () => {
+    const result = read(`${PRAGMA}import { css } from '@emotion/react';
+const App = (css) => <div css={css({ color: 'red' })} />;`);
+    expect(result.sites).toEqual([]);
+    expect(result.refusals.map((item) => item.reason)).toEqual([
+      'render-local-css-binding-unresolved',
+    ]);
+  });
+
+  test('refuses calls with an unknown binding or more than one argument', () => {
+    for (const source of [
+      `${PRAGMA}const App = () => <div css={css({ color: 'red' })} />;`,
+      `${PRAGMA}import { css } from '@emotion/react'; const App = () => <div css={css({ color: 'red' }, extra)} />;`,
+    ]) {
+      const result = read(source);
+      expect(result.sites).toEqual([]);
+      expect(result.refusals).toHaveLength(1);
+    }
+  });
+
   test('refuses an effectful value hidden by a later pseudo-element block', () => {
     const result = read(`${PRAGMA}const App = () => (
   <div css={{ '::after': { color: sideEffect() }, '::after': { opacity: 1 } }} />
