@@ -140,6 +140,11 @@ It admits separate, bounded modifier capabilities:
   vertical-rl, and vertical-lr modes using StyleX's observed compiler
   priorities. This intentionally refuses StyleX lowerings such as block-start to
   top or inline-size to width when they differ in vertical writing modes.
+- A direct render-local `css({...})` call through an unshadowed named
+  `@emotion/react` import under model `render-local-css-v1`. The call must have
+  one closed flat literal argument and its result must be consumed immediately
+  by one host-element `css` prop. Candidate eligibility requires separate
+  call-integrity evidence in addition to static CSS comparison.
 
 These are not general selector claims. A disagreement in any admitted state or
 target is a refusal. In particular, reversing two otherwise identical hover and

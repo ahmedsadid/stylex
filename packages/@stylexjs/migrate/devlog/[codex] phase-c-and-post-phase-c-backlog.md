@@ -34,13 +34,12 @@ manifest, policy version, end-to-end candidate test, and exit review.
 - [x] Logical margin/padding inline/block edges and inline/block sizes under a
       six-state direction/writing-mode referee. Unsafe StyleX physical lowering
       is refused rather than treated as equivalent.
+- [x] Direct render-local `css({...})` calls through an unshadowed named Emotion
+      import, with one closed flat literal argument, non-escaping result, and
+      evidence-bound call-integrity safeguards.
 
 ## Required before Phase C closes
 
-- [ ] Render-local `css()` calls.
-  - Prove evaluation count, timing, purity requirements, and binding identity
-    are unchanged.
-  - Keep module-level/shared bindings outside the mechanical lane.
 - [ ] Corpus closeout.
   - Run the correctness-gated capabilities over representative repositories.
   - Report coverage and refusal reasons without presenting a conversion
