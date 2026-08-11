@@ -149,22 +149,28 @@ describe('M8 runtime command provider', () => {
     },
   );
 
-  test('fails a seeded runtime difference', async () => {
-    fs.writeFileSync(
-      path.join(candidate, 'report.json'),
-      JSON.stringify(report('rgb(0, 0, 255)')),
-    );
-    const execution = await runRuntimeCommandProvider(provider(), {
-      workspaceRoot: candidate,
-      baselineWorkspaceRoot: baseline,
-      subject: SUBJECT,
-    });
-    expect(execution.evidence).toMatchObject({
-      result: 'fail',
-      detail: 'runtime comparison was different',
-      runtime: { comparison: { result: 'different' } },
-    });
-  });
+  test.each(['playwright', 'storybook', 'component-test', 'custom'])(
+    'fails a seeded difference in the %s scope',
+    async (runtimeInterface) => {
+      fs.writeFileSync(
+        path.join(candidate, 'report.json'),
+        JSON.stringify(report('rgb(0, 0, 255)')),
+      );
+      const execution = await runRuntimeCommandProvider(
+        provider(runtimeInterface as $FlowFixMe),
+        {
+          workspaceRoot: candidate,
+          baselineWorkspaceRoot: baseline,
+          subject: SUBJECT,
+        },
+      );
+      expect(execution.evidence).toMatchObject({
+        result: 'fail',
+        detail: 'runtime comparison was different',
+        runtime: { comparison: { result: 'different' } },
+      });
+    },
+  );
 
   test('does not pass partial rendering or a missing baseline', async () => {
     const partial = report();
