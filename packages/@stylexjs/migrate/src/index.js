@@ -229,6 +229,12 @@ export {
   validateDynamicStrategyAgainstCurrentProject,
 } from './dynamic/decisions';
 export type { DynamicStrategyInspection } from './dynamic/decisions';
+export {
+  DYNAMIC_STRATEGY_WIRING_LIMITATION,
+  DYNAMIC_STRATEGY_WIRING_MODEL,
+  inspectDynamicStrategyCandidate,
+} from './dynamic/guard';
+export type { DynamicStrategyGuardResult } from './dynamic/guard';
 export { runRuntimeCommandProvider } from './runtime/provider';
 export { aggregateRuntimeCoverage } from './runtime/coverage';
 export type {

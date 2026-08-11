@@ -16,6 +16,7 @@ import {
   removeCandidateWorkspace,
 } from '../candidate/workspace';
 import {
+  bindSnapshotDecisionArtifacts,
   createSnapshot,
   detectStaleFiles,
   snapshotHash,
@@ -44,6 +45,7 @@ import {
   currentDynamicStrategy,
   loadDynamicStrategyDraft,
 } from '../dynamic/decisions';
+import { inspectDynamicStrategyCandidate } from '../dynamic/guard';
 import { createFact } from '../inventory/model';
 import {
   CONTEXT_MAX_ATTEMPTS,
@@ -684,6 +686,12 @@ export function openContextTask({
       }),
     ];
   }
+  const taskSnapshot =
+    dynamicStrategy == null
+      ? snapshot
+      : bindSnapshotDecisionArtifacts(snapshot, [
+          dynamicStrategy.definitionHash,
+        ]);
   const allowed = [...cluster.changeFiles].sort();
   const protectedPaths = [
     '.stylex-migrate/**',
@@ -704,13 +712,13 @@ export function openContextTask({
     planId: plan.id,
     cluster,
     repositoryRoot: project.repositoryRoot,
-    commit: snapshot.gitCommit,
-    snapshotHash: snapshotHash(snapshot),
+    commit: taskSnapshot.gitCommit,
+    snapshotHash: snapshotHash(taskSnapshot),
     configHash,
-    declaredInputs: Object.keys(snapshot.fileHashes).map((file) => ({
+    declaredInputs: Object.keys(taskSnapshot.fileHashes).map((file) => ({
       path: file,
-      contentHash: snapshot.fileHashes[file],
-      mode: snapshot.fileModes[file],
+      contentHash: taskSnapshot.fileHashes[file],
+      mode: taskSnapshot.fileModes[file],
     })),
     facts,
     scope: {
@@ -761,7 +769,7 @@ export function openContextTask({
   return openContextTaskFromSpec({
     project,
     task,
-    snapshot,
+    snapshot: taskSnapshot,
     workspaceRoot,
     now,
   });
@@ -1196,6 +1204,25 @@ export function submitContextAttempt({
         now,
       });
     }
+    const guard = inspectDynamicStrategyCandidate({
+      candidate: result.candidate,
+      inventory,
+      strategy,
+      sourceHashes: record.snapshot.fileHashes,
+      scope: record.task.scope.allowedPaths,
+    });
+    if (!guard.complete) {
+      removeCandidateWorkspace(workspace);
+      return failAttempt({
+        project,
+        task: record.task,
+        attempt,
+        outcome: 'rejected',
+        reasons: guard.violations,
+        now,
+      });
+    }
+    staticEvidence.push(...guard.evidence);
   }
   if (record.task.origin.kind === 'theme-bridge') {
     const origin = record.task.origin;
