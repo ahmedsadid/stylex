@@ -60,6 +60,7 @@ import {
   persistThemeDecisionDraft,
 } from './theme/decisions';
 import { proposeThemeDecisionCandidate } from './theme/candidate';
+import { proposeMechanicalCandidate } from './mechanical/candidate';
 import type { CandidatePatch } from './candidate/patch';
 
 type WriteOutput = (text: string) => mixed;
@@ -76,6 +77,10 @@ Commands:
   init                    initialize local project state
   scan                    inventory configured source files
   plan                    form migration clusters from the latest inventory
+  mechanical propose <cluster>
+                          freeze a checked candidate from a mechanical cluster
+  candidate diff <candidate>
+                          print the exact frozen patch without applying it
   theme draft <json-file> <author>
                           validate and persist a theme token-map draft
   theme inspect <draft>   show approval and active/superseded state
@@ -112,6 +117,28 @@ function present(value: JsonValue, json: boolean, stdout: WriteOutput): void {
     stdout(`${JSON.stringify(safe)}\n`);
   } else {
     stdout(`${JSON.stringify(safe, null, 2)}\n`);
+  }
+}
+
+function presentCandidateDiff(
+  candidate: CandidatePatch,
+  json: boolean,
+  stdout: WriteOutput,
+): void {
+  // This command is an explicit source export. Redacting it would change the
+  // candidate bytes and make the output unsuitable for review or application.
+  if (json) {
+    stdout(
+      `${JSON.stringify({
+        command: 'candidate diff',
+        candidateId: candidate.id,
+        patchHash: candidate.patchHash,
+        files: candidate.touchedFiles,
+        patchText: candidate.patchText,
+      })}\n`,
+    );
+  } else {
+    stdout(candidate.patchText);
   }
 }
 
@@ -412,6 +439,55 @@ export function runCli(
         json,
         stdout,
       );
+      return 0;
+    }
+    if (
+      args[0] === 'mechanical' &&
+      args[1] === 'propose' &&
+      args.length === 3
+    ) {
+      const result = proposeMechanicalCandidate({
+        project: openProject(cwd),
+        clusterId: args[2],
+      });
+      present(
+        result.ok
+          ? {
+              command: 'mechanical propose',
+              state: 'frozen',
+              candidateId: result.record.candidate.id,
+              clusterId: result.clusterId,
+              changedFiles: result.record.candidate.touchedFiles,
+              models: result.models,
+              limitations: result.limitations,
+              next:
+                `Inspect with stylex-migrate candidate diff ${result.record.candidate.id}, ` +
+                `then run stylex-migrate verify ${result.record.candidate.id}.`,
+            }
+          : {
+              command: 'mechanical propose',
+              state: 'refused',
+              reason: result.reason,
+              file: result.file,
+              evidence: result.evidence,
+            },
+        json,
+        stdout,
+      );
+      return result.ok ? 0 : 3;
+    }
+    if (args[0] === 'candidate' && args[1] === 'diff' && args.length === 3) {
+      const record = loadVerificationCandidate(openProject(cwd), args[2]);
+      if (record == null) {
+        const message = `No persisted candidate found for ${args[2]}`;
+        if (json) {
+          present({ error: message, id: args[2] }, true, stdout);
+        } else {
+          stderr(`${message}\n`);
+        }
+        return 2;
+      }
+      presentCandidateDiff(record.candidate, json, stdout);
       return 0;
     }
     if (args[0] === 'theme' && args[1] === 'draft' && args.length === 4) {
