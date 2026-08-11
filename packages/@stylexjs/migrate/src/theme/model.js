@@ -221,6 +221,25 @@ function normalizeDefinition(value: mixed): ThemeTokenMapDefinition {
       'Theme source paths and target names must be collision-free',
     );
   }
+  const sourceFiles = canonicalFiles(
+    definition.sourceFiles,
+    'theme source files',
+  );
+  const consumerFiles = canonicalFiles(
+    definition.consumerFiles,
+    'theme consumer files',
+  );
+  if (sourceFiles.length === 0 || consumerFiles.length === 0) {
+    throw new Error('Theme decisions require source and consumer files');
+  }
+  if (
+    sourceFiles.includes(targetModule) ||
+    consumerFiles.includes(targetModule)
+  ) {
+    throw new Error(
+      'Theme target module must be distinct from source and consumer files',
+    );
+  }
   return immutableJson({
     protocolVersion: THEME_DECISION_PROTOCOL_VERSION,
     inventoryId: definition.inventoryId,
@@ -229,11 +248,8 @@ function normalizeDefinition(value: mixed): ThemeTokenMapDefinition {
     defaultVariant: definition.defaultVariant,
     variants: variants.sort((a, b) => a.name.localeCompare(b.name)),
     tokens: tokens.sort((a, b) => a.sourcePath.localeCompare(b.sourcePath)),
-    sourceFiles: canonicalFiles(definition.sourceFiles, 'theme source files'),
-    consumerFiles: canonicalFiles(
-      definition.consumerFiles,
-      'theme consumer files',
-    ),
+    sourceFiles,
+    consumerFiles,
   }) as $FlowFixMe;
 }
 

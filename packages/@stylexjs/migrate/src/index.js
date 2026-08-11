@@ -154,6 +154,9 @@ export {
   validateThemeDecisionDraft,
 } from './theme/model';
 export { discoverThemeFacts } from './theme/discover';
+export { emitThemeModule } from './theme/emit';
+export { proposeApprovedThemeFiles } from './theme/rewrite';
+export type { ThemeProposal, ThemeProposalOutcome } from './theme/rewrite';
 export type {
   ThemeDecisionApproval,
   ThemeDecisionDraft,

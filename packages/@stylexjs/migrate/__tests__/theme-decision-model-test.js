@@ -102,6 +102,13 @@ describe('M9 theme token-map decisions', () => {
       'a noncanonical target',
       (input: $FlowFixMe) => (input.targetModule = '../tokens.stylex.ts'),
     ],
+    [
+      'a target and consumer collision',
+      (input: $FlowFixMe) => {
+        input.targetModule = 'src/components/Card.stylex.ts';
+        input.consumerFiles = ['src/components/Card.stylex.ts'];
+      },
+    ],
   ])('refuses %s', (_label, mutate) => {
     const input = definition();
     mutate(input);
