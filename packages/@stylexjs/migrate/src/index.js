@@ -144,6 +144,23 @@ export {
   normalizeRuntimeCases,
   normalizeRuntimeReport,
 } from './runtime/model';
+
+export {
+  THEME_DECISION_PROTOCOL_VERSION,
+  approveThemeDecision,
+  createThemeDecisionDraft,
+  relativeThemeModuleSpecifier,
+  validateThemeDecisionApproval,
+  validateThemeDecisionDraft,
+} from './theme/model';
+export type {
+  ThemeDecisionApproval,
+  ThemeDecisionDraft,
+  ThemeTokenMapDefinition,
+  ThemeTokenMapping,
+  ThemeValue,
+  ThemeVariantDefinition,
+} from './theme/model';
 export { runRuntimeCommandProvider } from './runtime/provider';
 export { aggregateRuntimeCoverage } from './runtime/coverage';
 export type {
