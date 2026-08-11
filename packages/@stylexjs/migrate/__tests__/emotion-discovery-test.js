@@ -96,6 +96,24 @@ describe('emotion discovery', () => {
     );
   });
 
+  test('omits static Emotion label metadata from CSS declarations', () => {
+    const result = read(`${PRAGMA}export const App = () => (
+  <input css={{ label: 'requiredInput', opacity: 0 }} />
+);`);
+    expect(result.refusals).toEqual([]);
+    expect(result.sites[0].style.declarations).toEqual([
+      { property: 'opacity', value: 0 },
+    ]);
+  });
+
+  test('does not erase a dynamic Emotion label expression', () => {
+    const result = read(`${PRAGMA}export const App = () => (
+  <input css={{ label: getLabel(), opacity: 0 }} />
+);`);
+    expect(result.sites).toEqual([]);
+    expect(reasons(result)).toEqual(['non-literal-value']);
+  });
+
   test('reads several sites in source order', () => {
     const result = read(`${PRAGMA}export const App = () => (
   <div css={{ color: 'red' }}>

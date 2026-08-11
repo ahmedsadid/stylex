@@ -397,6 +397,19 @@ function readLiteralDeclarations(
       return { ok: false, reason: 'computed-style-key' };
     }
     const value = property.value;
+    // Emotion treats a string-valued `label` as class-name metadata rather
+    // than a CSS declaration. StyleX has no corresponding style property, so
+    // carrying it into `stylex.create` produces invalid output. Conversion
+    // already changes the generated class name; omitting inert label metadata
+    // preserves the CSS that this lane verifies. Do not erase a dynamic label:
+    // evaluating it could have observable JavaScript behavior.
+    if (
+      name === 'label' &&
+      value.type === 'StringLiteral' &&
+      typeof value.value === 'string'
+    ) {
+      continue;
+    }
     if (
       (value.type === 'StringLiteral' && typeof value.value === 'string') ||
       (value.type === 'NumericLiteral' && typeof value.value === 'number')

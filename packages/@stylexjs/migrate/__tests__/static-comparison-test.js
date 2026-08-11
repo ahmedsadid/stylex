@@ -98,6 +98,25 @@ describe('the comparison model', () => {
     }
   });
 
+  test('proposes real-world css props with Emotion label metadata', () => {
+    const result = proposeStaticConversion({
+      source: file(`{
+        label: 'requiredInput',
+        opacity: 0,
+        pointerEvents: 'none',
+        position: 'absolute',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        width: '100%',
+      }`),
+      filename: FILENAME,
+    });
+    if (result.status !== 'proposed') throw new Error(result.reason);
+    expect(result.code).not.toContain("label: 'requiredInput'");
+    expect(result.evidence.every((item) => item.result === 'pass')).toBe(true);
+  });
+
   test('canonicalises only differences that carry no meaning', () => {
     expect(canonicalValue('  red  ')).toBe('red');
     expect(canonicalValue('rgb(1, 2, 3)')).toBe('rgb(1,2,3)');

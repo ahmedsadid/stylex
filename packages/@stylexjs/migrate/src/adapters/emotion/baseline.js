@@ -317,7 +317,14 @@ export function emotionBaseline(objectSource: string): BaselineResult {
         reason: `could not read the CSS Emotion produced: ${parsed.reason}`,
       };
     }
-    return { ok: true, css, declarations: parsed.declarations };
+    // `serializeStyles` retains Emotion's `label` metadata in its intermediate
+    // string so it can contribute to the generated class name. Emotion's cache
+    // removes that pseudo-declaration before CSS reaches the browser. Compare
+    // rendered declarations, not the serializer's class-name bookkeeping.
+    const declarations = parsed.declarations.filter(
+      (declaration) => declaration.property !== 'label',
+    );
+    return { ok: true, css, declarations };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     return {
