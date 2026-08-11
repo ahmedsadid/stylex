@@ -90,6 +90,18 @@ export function factory(styled) {
       propDependent: 1,
       withOptions: 1,
       withShouldForwardProp: 1,
+      usageGraphs: 3,
+      firstSliceEligible: 0,
+      directJsxConsumers: 0,
+      withEscapes: 0,
+      blockedReasons: {
+        'exported-definition': 3,
+        'no-direct-jsx-consumers': 3,
+        'non-intrinsic-target': 1,
+        'open-or-unsupported-style-form': 2,
+        'runtime-style-input': 1,
+        'styled-options': 1,
+      },
     });
     expect(summary.theme).toMatchObject({
       definitions: 1,

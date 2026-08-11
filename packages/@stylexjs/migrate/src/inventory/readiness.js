@@ -25,6 +25,11 @@ export type ReadinessSummary = {
     +propDependent: number,
     +withOptions: number,
     +withShouldForwardProp: number,
+    +usageGraphs: number,
+    +firstSliceEligible: number,
+    +directJsxConsumers: number,
+    +withEscapes: number,
+    +blockedReasons: { +[string]: number },
   },
   +theme: {
     +definitions: number,
@@ -76,6 +81,11 @@ export function inventoryReadiness(
   let propDependent = 0;
   let withOptions = 0;
   let withShouldForwardProp = 0;
+  let usageGraphs = 0;
+  let firstSliceEligible = 0;
+  let directJsxConsumers = 0;
+  let withEscapes = 0;
+  const blockedReasons = {};
   let themeDefinitions = 0;
   let providers = 0;
   let reads = 0;
@@ -91,6 +101,17 @@ export function inventoryReadiness(
     } else if (fact.kind === 'theme-read') {
       reads++;
       themeFiles.add(file);
+    }
+    if (fact.kind === 'emotion-styled-usage') {
+      const usage: $FlowFixMe = fact.value;
+      usageGraphs++;
+      directJsxConsumers += (usage.consumers ?? []).length;
+      if (usage.firstSliceEligible === true) firstSliceEligible++;
+      if ((usage.escapes ?? []).length > 0) withEscapes++;
+      for (const reason of usage.blockedReasons ?? []) {
+        bump(blockedReasons, String(reason));
+      }
+      continue;
     }
     if (fact.kind !== 'emotion-styled-readiness') continue;
     const value: $FlowFixMe = fact.value;
@@ -151,6 +172,10 @@ export function inventoryReadiness(
       left.file.localeCompare(right.file) ||
       left.name.localeCompare(right.name),
   );
+  const sortedBlockedReasons: { [string]: number } = {};
+  for (const reason of Object.keys(blockedReasons).sort()) {
+    sortedBlockedReasons[reason] = blockedReasons[reason];
+  }
 
   return Object.freeze({
     styled: Object.freeze({
@@ -176,6 +201,11 @@ export function inventoryReadiness(
       propDependent,
       withOptions,
       withShouldForwardProp,
+      usageGraphs,
+      firstSliceEligible,
+      directJsxConsumers,
+      withEscapes,
+      blockedReasons: Object.freeze(sortedBlockedReasons),
     }),
     theme: Object.freeze({
       definitions: themeDefinitions,
@@ -193,7 +223,7 @@ export function inventoryReadiness(
     limitations: Object.freeze([
       'styled counts are binding-backed syntax observations, not convertible sites or semantic claims',
       'styled definitions with any shadowing of the imported binding are omitted conservatively',
-      'consumer graphs, component selectors, inherited contracts, refs, polymorphism, static properties, and runtime behavior are not resolved yet',
+      'usage graphs cover same-file bindings only; cross-file consumers, inherited contracts, and runtime behavior are not resolved',
       'theme-dependent and prop-dependent counts are conservative callback syntax signals',
       'counts are absolute observations, not a coverage or safety claim',
     ]),
