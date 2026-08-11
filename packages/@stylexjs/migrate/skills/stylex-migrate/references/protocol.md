@@ -45,8 +45,10 @@ moves the task to `awaiting-verification`. Verification can produce:
 - `blocked` after the second failed attempt;
 - `abandoned` when the user stops an open attempt.
 
-These are task states, not semantic-equivalence claims. M7 does not emit a
-`runtime-matched` claim.
+These are task states, not semantic-equivalence claims. A verdict emits
+`runtime-matched` only when every case declared by the configured runtime
+providers matched between the retained baseline and candidate worktrees. Its
+scope is limited to those cases, states, sites, viewports, and environments.
 
 ## Scope and safety
 

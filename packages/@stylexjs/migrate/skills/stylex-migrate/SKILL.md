@@ -1,9 +1,7 @@
 ---
 name: stylex-migrate
 description:
-  Execute a StyleX migration through a stylex-migrate contextual task capsule.
-  Use when asked to inspect, implement, submit, retry, or diagnose a contextual
-  Emotion-to-StyleX candidate produced by the stylex-migrate CLI.
+  'Guide agents through a vendor-neutral stylex-migrate contextual task.'
 ---
 
 # StyleX Migrate
@@ -30,17 +28,21 @@ prose or agent judgment.
      themes, identifiers, functions, and runtime-dependent values.
    - Read [component-contracts.md](references/component-contracts.md) for custom
      components, class names, props, refs, and public API behavior.
+   - Read [runtime-evidence.md](references/runtime-evidence.md) when runtime
+     providers are configured or the conversion depends on rendered state.
 6. Keep the patch inside `task.scope.allowedPaths`. Protected paths and
    undeclared deletions are hard failures even if the change seems necessary.
 7. Submit through `stylex-migrate context submit`; do not hand-build or edit a
    candidate record.
 8. Run `stylex-migrate verify <candidate-id>`, then inspect the task again.
-   - `eligible-for-review`: report the exact checks and limitations; do not call
-     the result equivalent or runtime-matched.
+   - `eligible-for-review`: report the exact claims, scopes, checks, runtime
+     cases, and limitations. Say `runtime-matched` only when the verdict
+     contains that claim, and name its cases and recorded environment.
    - `needs-replan`: open the kernel-authorized retry with
      `stylex-migrate context open <task-id>` and address the recorded failure.
    - `needs-owner-decision`: stop and report the decision or evidence required.
    - `blocked`: stop. Do not create another attempt outside the protocol.
 
-Do not apply, commit, or claim runtime equivalence. The tool converts and tests;
+Do not apply, commit, or claim runtime equivalence. A `runtime-matched` claim is
+sampled evidence for named cases, not equivalence. The tool converts and tests;
 source-tree application and commits remain the developer's responsibility.

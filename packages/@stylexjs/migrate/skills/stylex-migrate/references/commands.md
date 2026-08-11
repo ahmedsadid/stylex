@@ -24,8 +24,9 @@ content-addressed candidate, removes the external worktree, and returns the
 candidate ID. The name and versions describe the proposer; they grant no
 authority.
 
-`verify` executes configured repository evidence providers in an isolated
-candidate worktree. Exit code 0 means eligible under the reported policy, 3
-means blocked by missing requirements, and 4 means rejected by failed evidence.
-Always read the JSON verdict and limitations rather than relying only on the
-exit code.
+`verify` executes configured repository checks in an isolated candidate
+worktree. Runtime providers additionally execute the same argv against a
+retained baseline worktree at the candidate's base commit. Exit code 0 means
+eligible under the reported policy, 3 means blocked by missing requirements, and
+4 means rejected by failed evidence. Always read the JSON claims, runtime
+coverage, warnings, and limitations rather than relying only on the exit code.

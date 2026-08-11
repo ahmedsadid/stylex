@@ -34,7 +34,8 @@ constant.
 
 ## Evidence boundary
 
-Repository tests can establish only the checks they run. Until M8 runtime
-providers exercise named theme states and interactions, report the explicit
-runtime limitation. Never call a theme conversion runtime-matched merely because
-typecheck, lint, build, or snapshots passed.
+Repository tests establish only the checks they run. A configured runtime
+provider may compare named theme states, interactions, and viewports against the
+retained baseline. Report `runtime-matched` only when the verdict contains that
+claim, and name its case scope. Typecheck, lint, build, snapshots, an
+unavailable browser, or partial case coverage never earn the claim.

@@ -17,15 +17,19 @@ describe('M7 vendor-neutral skill package', () => {
     const manifest: $FlowFixMe = require('../package.json');
     expect(manifest.files).toContain('skills');
     const skill = fs.readFileSync(path.join(SKILL_ROOT, 'SKILL.md'), 'utf8');
-    expect(skill).toMatch(/^---\nname: stylex-migrate\ndescription: .+\n---\n/);
+    expect(skill).toMatch(
+      /^---\nname: stylex-migrate\ndescription:(?: .+\n|\n(?: {2}.+\n)+)---\n/,
+    );
     expect(skill).toContain('stylex-migrate context inspect');
     expect(skill).toContain('Do not apply, commit');
+    expect(skill).toContain('runtime-matched');
     for (const reference of [
       'protocol.md',
       'commands.md',
       'emotion-css-prop.md',
       'themes-and-runtime-values.md',
       'component-contracts.md',
+      'runtime-evidence.md',
     ]) {
       expect(
         fs.statSync(path.join(SKILL_ROOT, 'references', reference)).isFile(),

@@ -14,8 +14,8 @@ Not a codemod. A deterministic control plane that:
 - mechanically converts only what an independent comparison can confirm,
 - escalates the rest to an agent working in an **isolated candidate workspace**,
 - collects evidence from your repository's own checks, and
-- writes to your source tree only after a human-visible verdict — and only
-  content that is byte-for-byte what was verified.
+- freezes the exact candidate bytes and evidence for developer review. The tool
+  does not commit or apply the candidate to the source checkout.
 
 ## The claims vocabulary
 
@@ -32,6 +32,7 @@ _safe_, _verified_, and _equivalent_ are never used unqualified.
 | `blocked`            | The system lacks information, support, or evidence that policy requires                |
 
 A check that could not run reports `unavailable`. That never counts as a pass.
+`runtime-matched` is sampled evidence, not a claim of runtime equivalence.
 
 ## Inventory and local project state
 
@@ -102,6 +103,51 @@ and site coverage, and persists an evidence-bound verdict. It returns exit code
 3 for blocked evidence and 4 for a rejected result. A passing repository test
 cannot replace the required static comparison for a mechanical candidate.
 
+### Optional runtime evidence
+
+A runtime provider is a repository-owned argv command. The tool runs it with the
+same allowlisted environment in two detached worktrees: the candidate's exact
+base commit and the frozen candidate. The command prints a
+`stylex-migrate-runtime-v1` JSON report containing observations for every
+declared case.
+
+```json
+{
+  "id": "component-runtime",
+  "kind": "runtime-command",
+  "check": "runtime-render",
+  "checkVersion": "component-cases-v1",
+  "subject": "candidate",
+  "cost": "expensive",
+  "runtimeInterface": "playwright",
+  "argv": ["yarn", "test:stylex-runtime-report"],
+  "versionArgv": ["yarn", "playwright", "--version"],
+  "cwd": ".",
+  "allowedEnv": ["PATH", "CI"],
+  "fileGlobs": ["src/**/*.{js,jsx,ts,tsx}"],
+  "limitations": ["covers declared component cases only"],
+  "timeoutMs": 120000,
+  "cases": [
+    {
+      "id": "card-dark-hover",
+      "changePaths": ["src/Card.jsx"],
+      "siteIds": ["site-card"],
+      "theme": "dark",
+      "interaction": "hover",
+      "viewport": { "width": 1280, "height": 720, "deviceScaleFactor": 1 }
+    }
+  ]
+}
+```
+
+`runtimeInterface` may be `playwright`, `storybook`, `component-test`, or
+`custom`; all implement the same report protocol and are invoked lazily, so the
+package entry point imports none of those optional tools. Exact matches may earn
+`runtime-matched` for the recorded cases. A difference rejects. Missing,
+partial, or environment-incomparable output never passes. When runtime evidence
+is unavailable, contextual review remains permissive but displays a prominent
+warning and cannot earn `runtime-matched`.
+
 ## Current mechanical boundary
 
 The development API can propose a conversion for an Emotion `css` prop on a host
@@ -166,9 +212,9 @@ mechanical boundary. The comparison is local and static: it does not establish
 whole-page browser behavior, repository build success, or runtime equivalence.
 
 The candidate persistence API is available for deterministic integrations. The
-end-user contextual candidate creation protocol and agent skill arrive in a
-later milestone; this early-development package does not yet present `verify` as
-a complete standalone migration workflow.
+contextual task protocol and bundled vendor-neutral agent skill operate through
+the same frozen candidate and evidence boundary. They do not apply or commit the
+result; source-tree integration remains the developer's responsibility.
 
 ## Development
 
