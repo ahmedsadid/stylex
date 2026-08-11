@@ -11,6 +11,8 @@ stylex-migrate plan
 stylex-migrate mechanical propose <cluster-id>
 stylex-migrate styled propose <cluster-id>
 stylex-migrate candidate diff <candidate-id>
+stylex-migrate dynamic strategy draft <json-file> <agent|human> <author>
+stylex-migrate dynamic strategy inspect <draft-id>
 stylex-migrate context open <cluster-id> "<goal>"
 stylex-migrate context open <task-id>
 stylex-migrate context inspect <task-id>
@@ -54,6 +56,14 @@ built-in StyleX and static CSS checks. The candidate remains
 repeatable-contextual: repository checks are mandatory, and missing runtime
 evidence remains a prominent limitation.
 
+`dynamic strategy draft` validates exact coverage of every observed prop path in
+one current planned `styled-dynamic-intrinsic` cluster and activates the
+content-addressed draft. A newer draft for that cluster supersedes the old one.
+The command records migration intent and evidence requirements; it is neither
+human approval nor behavioral evidence. `dynamic strategy inspect` reports the
+exact entries and whether the draft remains active. Put its temporary JSON input
+outside the source checkout.
+
 The first `context open` creates a task from the current plan. The second form
 opens attempt two only when the kernel recorded `needs-replan`. It cannot reopen
 an owner decision, blocked task, abandoned task, or exhausted task.
@@ -61,7 +71,9 @@ an owner decision, blocked task, abandoned task, or exhausted task.
 `context submit` freezes the worktree diff, validates its actual paths, stores a
 content-addressed candidate, removes the external worktree, and returns the
 candidate ID. The name and versions describe the proposer; they grant no
-authority.
+authority. Dynamic tasks additionally require their bound strategy to remain
+active and run a frozen-byte wiring guard before candidate persistence. That
+guard does not replace repository or runtime evidence.
 
 `theme bridge open` creates a contextual task directly from an exact current
 theme draft before approval. It permits changes only to the draft's boundary

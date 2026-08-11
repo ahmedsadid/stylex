@@ -31,6 +31,7 @@ describe('M7 vendor-neutral skill package', () => {
     expect(skill).toContain('task.requiredOutputs');
     expect(skill).toContain('emotion-styled-dynamic-value');
     expect(skill).toContain('styled-dynamic-intrinsic');
+    expect(skill).toContain('dynamic strategy draft');
     const dynamicReference = fs.readFileSync(
       path.join(SKILL_ROOT, 'references', 'themes-and-runtime-values.md'),
       'utf8',
@@ -39,6 +40,14 @@ describe('M7 vendor-neutral skill package', () => {
     expect(dynamicReference).toContain('CSS custom-property');
     expect(dynamicReference).toContain('Retain Emotion');
     expect(dynamicReference).toContain('Preserve styling-prop filtering');
+    expect(dynamicReference).toContain('stylex-migrate-dynamic-strategy-v1');
+    expect(dynamicReference).toContain('dynamic-strategy-wiring-v1');
+    const commands = fs.readFileSync(
+      path.join(SKILL_ROOT, 'references', 'commands.md'),
+      'utf8',
+    );
+    expect(commands).toContain('dynamic strategy draft');
+    expect(commands).toContain('behavioral evidence');
     for (const reference of [
       'protocol.md',
       'commands.md',

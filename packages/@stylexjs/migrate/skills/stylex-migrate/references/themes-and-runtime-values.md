@@ -93,6 +93,41 @@ fact is a syntax observation: `propPaths`, conditional counts, calls,
 assignments, computed accesses, and merge flags do not establish types, purity,
 domains, or runtime behavior.
 
+Before `context open`, write a temporary strategy definition outside the source
+checkout and persist it with:
+
+```text
+stylex-migrate dynamic strategy draft <json-file> <agent|human> <author>
+stylex-migrate dynamic strategy inspect <draft-id>
+```
+
+The definition must cover every and only the observed prop paths in the current
+cluster:
+
+```json
+{
+  "protocolVersion": "stylex-migrate-dynamic-strategy-v1",
+  "inventoryId": "<current-inventory-id>",
+  "clusterId": "<planned-cluster-id>",
+  "entries": [
+    {
+      "definitionFactId": "<emotion-styled-readiness-fact-id>",
+      "propPath": "active",
+      "strategy": "stylex-variants",
+      "rationale": "The repository contract establishes a boolean domain.",
+      "evidenceRequirements": ["Exercise active=false and active=true."]
+    }
+  ]
+}
+```
+
+Allowed strategies are `stylex-variants`, `css-variable`, `inline-style`,
+`upstream-computation`, `api-refactor`, and `retain-emotion`. Retention applies
+to an entire definition: do not mix `retain-emotion` with conversion strategies
+across prop paths of the same definition. An all-retained cluster does not open
+a conversion task. A strategy authored by a human has no extra authority; this
+protocol is not an approval boundary.
+
 Before choosing a strategy, resolve or explicitly retain as unknown:
 
 1. The value domain, including nullish and fallback behavior.
@@ -124,6 +159,17 @@ DOM even when the visual result looks correct. Preserve element type, DOM shape,
 refs, attributes, class/style order, and falsy/null behavior. Moving a function
 call from render time to module initialization is a behavior change even if its
 current result looks constant.
+
+Submission checks the exact frozen candidate under `dynamic-strategy-wiring-v1`.
+It rejects a remaining converted Emotion binding or old JSX consumer, missing
+`stylex.props` wiring, lost explicit `className` or `style` merge surfaces,
+newly forwarded styling props or unknown intrinsic spreads, changed retained
+definitions, and narrow variant/custom-property strategies applied to callbacks
+with opaque operations. These checks are deliberately syntactic and count-based.
+They do not establish value domains, expression equivalence, evaluation
+semantics, CSS serialization, cascade, or rendered behavior. Satisfy the
+strategy's evidence requirements through repository-owned checks and named
+runtime cases.
 
 At handoff, name the chosen strategy per prop path, every fact used, every
 remaining unknown, the checks/cases that exercised each branch, and any retained

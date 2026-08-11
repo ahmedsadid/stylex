@@ -48,6 +48,8 @@ stylex-migrate plan
 stylex-migrate mechanical propose <cluster-id>
 stylex-migrate styled propose <cluster-id>
 stylex-migrate candidate diff <candidate-id>
+stylex-migrate dynamic strategy draft <json-file> <agent|human> <author>
+stylex-migrate dynamic strategy inspect <draft-id>
 stylex-migrate context open <cluster-id> "<goal>"
 stylex-migrate context inspect <task-id>
 stylex-migrate context submit <task-id> <agent|human> <name> <version> [skill-version]
@@ -91,10 +93,18 @@ scan records `emotion-styled-dynamic-value` syntax facts, including observed
 prop paths, finite literal conditionals, risky operations, consumer merge
 surfaces, and explicit unknowns. A local non-exported definition with a closed
 same-file consumer graph may become a planned `styled-dynamic-intrinsic` site.
-That site must use `context open`; it is never accepted by `styled propose` and
-has no deterministic semantic claim. Mixed theme/prop callbacks, exports,
-component targets, options, escapes, spreads, and polymorphic or Emotion `css`
-consumers remain outside this first dynamic lane.
+Before `context open`, that site requires an active content-addressed dynamic
+strategy covering every observed definition/prop path. The selected strategy and
+its evidence requirements are bound to the task snapshot and candidate. A
+strategy is migration input, not human approval or semantic evidence. Frozen
+submission rejects incomplete boundary replacement, missing StyleX props wiring,
+lost explicit class/style merge surfaces, obvious styling-prop leaks, and naive
+strategies applied to opaque callback operations under the bounded
+`dynamic-strategy-wiring-v1` syntax model. Repository and runtime checks still
+own behavioral evidence. The site is never accepted by `styled propose` and has
+no deterministic semantic claim. Mixed theme/prop callbacks, exports, component
+targets, options, escapes, spreads, and polymorphic or Emotion `css` consumers
+remain outside this first dynamic lane.
 
 Every command also accepts `--json`. Run `init` before the other commands.
 `mechanical propose` accepts only a current planned mechanical cluster and

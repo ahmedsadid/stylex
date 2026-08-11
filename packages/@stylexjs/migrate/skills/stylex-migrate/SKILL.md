@@ -36,8 +36,10 @@ rewrite.
 intrinsic styled definition with prop-dependent callbacks and a closed same-file
 consumer graph. Read its `emotion-styled-dynamic-value` fact before editing. The
 fact records syntax, prop paths, finite literal branches, operation risks, and
-existing merge surfaces; its `unknowns` remain unknown. Open the planned
-`styled-dynamic-intrinsic` cluster with `context open`. Never pass it to
+existing merge surfaces; its `unknowns` remain unknown. Before opening the
+planned `styled-dynamic-intrinsic` cluster, persist and inspect an exact
+strategy for every observed definition/prop path with `dynamic strategy draft`
+and `dynamic strategy inspect`. Then use `context open`. Never pass it to
 `styled propose`.
 
 Use `stylex-migrate explain <cluster-id>` to follow the current plan's route.
@@ -111,6 +113,13 @@ different lane.
      `stylex-migrate context open <task-id>` and address the recorded failure.
    - `needs-owner-decision`: stop and report the decision or evidence required.
    - `blocked`: stop. Do not create another attempt outside the protocol.
+
+For a `styled-dynamic-intrinsic` cluster, first follow the dynamic strategy
+workflow in
+[themes-and-runtime-values.md](references/themes-and-runtime-values.md).
+Submission runs a frozen-byte wiring guard before repository verification. A
+guard pass is a syntax claim only; it does not resolve the dynamic fact's
+unknowns or earn `runtime-matched`.
 
 ## Run a theme decision
 
