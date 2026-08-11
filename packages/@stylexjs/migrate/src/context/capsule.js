@@ -25,6 +25,12 @@ export type ContextTaskOrigin =
       +draftId: string,
       +definitionHash: string,
       +targetModule: string,
+    }
+  | {
+      +kind: 'dynamic-strategy',
+      +strategyId: string,
+      +definitionHash: string,
+      +clusterId: string,
     };
 
 export type ContextRequiredOutput = {
@@ -166,6 +172,16 @@ function normalizeOrigin(
       throw new Error('Context plan-cluster origin must name its work cluster');
     }
     return Object.freeze({ kind: origin.kind, clusterId: origin.clusterId });
+  }
+  if (origin.kind === 'dynamic-strategy') {
+    if (
+      origin.strategyId === '' ||
+      origin.definitionHash === '' ||
+      origin.clusterId !== cluster.id
+    ) {
+      throw new Error('Invalid dynamic-strategy task origin');
+    }
+    return Object.freeze({ ...origin });
   }
   if (
     origin.kind !== 'theme-bridge' ||

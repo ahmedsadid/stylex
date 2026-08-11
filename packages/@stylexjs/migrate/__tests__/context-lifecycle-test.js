@@ -16,6 +16,7 @@ import {
   inspectContextTask,
   openContextRetry,
   openContextTask,
+  persistDynamicStrategyDraft,
   saveInventory,
   savePlan,
   scanRepository,
@@ -353,6 +354,44 @@ export function Meter({active, width}: {active: boolean; width: number}) {
       }
       saveInventory(dynamicProject, inventory);
       savePlan(dynamicProject, dynamicPlan);
+      expect(
+        openContextTask({
+          project: dynamicProject,
+          clusterId: dynamicCluster.id,
+          goal: 'Do not guess a dynamic strategy.',
+          workspaceRoot: dynamicWorkspaceRoot,
+        }),
+      ).toMatchObject({
+        ok: false,
+        state: 'blocked',
+        reasons: [expect.stringContaining('dynamic strategy draft')],
+      });
+      const dynamicFact = inventory.facts.find(
+        (fact) => fact.kind === 'emotion-styled-dynamic-value',
+      );
+      if (dynamicFact == null) throw new Error('Missing dynamic value fact');
+      const dynamic: $FlowFixMe = dynamicFact.value;
+      const propPaths = [
+        ...new Set(dynamic.callbacks.flatMap((callback) => callback.propPaths)),
+      ];
+      const strategy = persistDynamicStrategyDraft({
+        project: dynamicProject,
+        definition: {
+          protocolVersion: 'stylex-migrate-dynamic-strategy-v1',
+          inventoryId: inventory.id,
+          clusterId: dynamicCluster.id,
+          entries: propPaths.map((propPath) => ({
+            definitionFactId: dynamic.definitionFactId,
+            propPath,
+            strategy:
+              propPath === 'active' ? 'stylex-variants' : 'css-variable',
+            rationale: `Fixture strategy for ${propPath}.`,
+            evidenceRequirements: [`Runtime case for ${propPath}.`],
+          })),
+        },
+        authorKind: 'agent',
+        authoredBy: 'fixture-agent',
+      });
       const opened = openContextTask({
         project: dynamicProject,
         clusterId: dynamicCluster.id,
@@ -360,6 +399,15 @@ export function Meter({active, width}: {active: boolean; width: number}) {
         workspaceRoot: dynamicWorkspaceRoot,
       });
       if (!opened.ok) throw new Error(opened.reasons.join('\n'));
+      expect(opened.task.origin).toEqual({
+        kind: 'dynamic-strategy',
+        strategyId: strategy.id,
+        definitionHash: strategy.definitionHash,
+        clusterId: dynamicCluster.id,
+      });
+      expect(opened.task.decisionArtifactHashes).toEqual([
+        strategy.definitionHash,
+      ]);
       expect(opened.task.scope.allowedPaths).toEqual(['src/Meter.tsx']);
       expect(opened.task.facts).toEqual(
         expect.arrayContaining([
@@ -370,6 +418,11 @@ export function Meter({active, width}: {active: boolean; width: number}) {
               model: 'emotion-styled-dynamic-value-v1',
               name: 'MeterRoot',
             }),
+          }),
+          expect.objectContaining({
+            kind: 'dynamic-strategy-decision',
+            status: 'known',
+            value: expect.objectContaining({ id: strategy.id }),
           }),
         ]),
       );

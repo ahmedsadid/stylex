@@ -40,6 +40,12 @@ import {
 import { inspectThemeBridgeCandidate } from '../theme/bridge';
 import { loadThemeDecisionDraft } from '../theme/decisions';
 import {
+  assertCurrentDynamicStrategy,
+  currentDynamicStrategy,
+  loadDynamicStrategyDraft,
+} from '../dynamic/decisions';
+import { createFact } from '../inventory/model';
+import {
   CONTEXT_MAX_ATTEMPTS,
   CONTEXT_PROTOCOL_VERSION,
   createContextAttemptCapsule,
@@ -623,7 +629,7 @@ export function openContextTask({
       taskFactIds.add(fact.id);
     }
   }
-  const facts = [...taskFactIds].map((id) => {
+  let facts = [...taskFactIds].map((id) => {
     const fact = factsById.get(id);
     if (fact == null) {
       throw new Error(`Cluster ${cluster.id} refers to missing fact ${id}`);
@@ -634,6 +640,50 @@ export function openContextTask({
   const dynamicStyledTask = cluster.siteIds.some(
     (id) => siteById.get(id)?.kind === 'styled-dynamic-intrinsic',
   );
+  const dynamicStrategy = dynamicStyledTask
+    ? currentDynamicStrategy(project, cluster.id)
+    : null;
+  if (dynamicStyledTask && dynamicStrategy == null) {
+    return {
+      ok: false,
+      state: 'blocked',
+      reasons: Object.freeze([
+        `Cluster ${cluster.id} requires an active dynamic strategy; run stylex-migrate dynamic strategy draft first.`,
+      ]),
+    };
+  }
+  if (dynamicStrategy != null) {
+    assertCurrentDynamicStrategy(project, dynamicStrategy);
+    if (
+      dynamicStrategy.entries.every(
+        (entry) => entry.strategy === 'retain-emotion',
+      )
+    ) {
+      return {
+        ok: false,
+        state: 'blocked',
+        reasons: Object.freeze([
+          `Dynamic strategy ${dynamicStrategy.id} retains Emotion for the entire cluster; no conversion task is required.`,
+        ]),
+      };
+    }
+    facts = [
+      ...facts,
+      createFact({
+        kind: 'dynamic-strategy-decision',
+        status: 'known',
+        value: dynamicStrategy as $FlowFixMe,
+        provenance: [
+          {
+            kind: 'config',
+            file: null,
+            detail: `content-addressed dynamic strategy ${dynamicStrategy.id}`,
+          },
+        ],
+        inputFiles: [],
+      }),
+    ];
+  }
   const allowed = [...cluster.changeFiles].sort();
   const protectedPaths = [
     '.stylex-migrate/**',
@@ -641,6 +691,15 @@ export function openContextTask({
   ];
   const task = createContextTaskCapsule({
     goal,
+    origin:
+      dynamicStrategy == null
+        ? undefined
+        : {
+            kind: 'dynamic-strategy',
+            strategyId: dynamicStrategy.id,
+            definitionHash: dynamicStrategy.definitionHash,
+            clusterId: dynamicStrategy.clusterId,
+          },
     inventoryId: inventory.id,
     planId: plan.id,
     cluster,
@@ -667,6 +726,8 @@ export function openContextTask({
       subject: provider.subject,
       limitations: provider.limitations,
     })),
+    decisionArtifactHashes:
+      dynamicStrategy == null ? [] : [dynamicStrategy.definitionHash],
     limitations: [
       'M7 does not compare runtime rendering or interaction behavior.',
       ...(dynamicStyledTask
@@ -1102,6 +1163,40 @@ export function submitContextAttempt({
   }
   const clusterSites = new Set(record.task.cluster.siteIds);
   const staticEvidence: Array<EvidenceResult> = [];
+  if (record.task.origin.kind === 'dynamic-strategy') {
+    const origin = record.task.origin;
+    const strategy = loadDynamicStrategyDraft(project, origin.strategyId);
+    if (
+      strategy == null ||
+      strategy.definitionHash !== origin.definitionHash ||
+      strategy.clusterId !== origin.clusterId
+    ) {
+      removeCandidateWorkspace(workspace);
+      return failAttempt({
+        project,
+        task: record.task,
+        attempt,
+        outcome: 'rejected',
+        reasons: [
+          'The dynamic strategy is missing or no longer matches the task.',
+        ],
+        now,
+      });
+    }
+    try {
+      assertCurrentDynamicStrategy(project, strategy);
+    } catch (error) {
+      removeCandidateWorkspace(workspace);
+      return failAttempt({
+        project,
+        task: record.task,
+        attempt,
+        outcome: 'rejected',
+        reasons: [error instanceof Error ? error.message : String(error)],
+        now,
+      });
+    }
+  }
   if (record.task.origin.kind === 'theme-bridge') {
     const origin = record.task.origin;
     const draft = loadThemeDecisionDraft(project, origin.draftId);

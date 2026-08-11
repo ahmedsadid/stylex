@@ -98,6 +98,38 @@ describe('M7 contextual task capsules', () => {
     );
   });
 
+  test('binds dynamic strategies to the exact plan cluster', () => {
+    const base = task();
+    const capsule = createContextTaskCapsule({
+      ...base,
+      origin: {
+        kind: 'dynamic-strategy',
+        strategyId: 'dynamic-strategy-1',
+        definitionHash: '7'.repeat(64),
+        clusterId: base.cluster.id,
+      },
+      decisionArtifactHashes: ['7'.repeat(64)],
+    });
+    expect(capsule.origin).toEqual({
+      kind: 'dynamic-strategy',
+      strategyId: 'dynamic-strategy-1',
+      definitionHash: '7'.repeat(64),
+      clusterId: 'cluster-1',
+    });
+    expect(capsule.decisionArtifactHashes).toEqual(['7'.repeat(64)]);
+    expect(() =>
+      createContextTaskCapsule({
+        ...base,
+        origin: {
+          kind: 'dynamic-strategy',
+          strategyId: 'dynamic-strategy-1',
+          definitionHash: '7'.repeat(64),
+          clusterId: 'another-cluster',
+        },
+      }),
+    ).toThrow('Invalid dynamic-strategy task origin');
+  });
+
   test('binds attempt workspaces and prior failures', () => {
     const first = createContextAttemptCapsule({
       task: task(),
