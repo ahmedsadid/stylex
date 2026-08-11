@@ -7,6 +7,8 @@
  * @flow strict
  */
 
+import fs from 'fs';
+import path from 'path';
 import { changedPaths, createCandidatePatch } from '../candidate/patch';
 import { validateScope } from '../candidate/scope';
 import {
@@ -18,7 +20,7 @@ import {
   detectStaleFiles,
   snapshotHash,
 } from '../kernel/snapshot';
-import { hashString } from '../kernel/hash';
+import { hashBytes, hashString } from '../kernel/hash';
 import {
   loadVerificationCandidate,
   saveVerificationCandidate,
@@ -27,7 +29,13 @@ import { createVerificationWorkspace } from '../evidence/workspace';
 import { loadCurrentInventory, loadCurrentPlan } from '../planning/reports';
 import { appendStateEvent, replayEvents } from '../state/events';
 import { canonicalJson } from '../state/json';
-import { readConfig, readRecord, writeRecord } from '../state/project';
+import {
+  readArtifact,
+  readConfig,
+  readRecord,
+  writeArtifact,
+  writeRecord,
+} from '../state/project';
 import {
   CONTEXT_MAX_ATTEMPTS,
   CONTEXT_PROTOCOL_VERSION,
@@ -43,11 +51,12 @@ import type { WorkspaceSnapshot } from '../kernel/snapshot';
 import type { Cluster, Inventory } from '../inventory/model';
 import type { IndexEntry } from '../state/events';
 import type { JsonValue } from '../state/json';
-import type { ProjectState } from '../state/project';
+import type { ArtifactReference, ProjectState } from '../state/project';
 import type { RepositoryEvidenceVerdict } from '../evidence/verdict';
 import type {
   ContextAttemptCapsule,
   ContextFailure,
+  ContextRequiredOutput,
   ContextTaskCapsule,
 } from './capsule';
 
@@ -113,6 +122,15 @@ export type ContextVerificationUpdate = {
 type TaskRecord = {
   +task: ContextTaskCapsule,
   +snapshot: WorkspaceSnapshot,
+  +requiredOutputArtifacts: $ReadOnlyArray<{
+    +path: string,
+    +artifact: ArtifactReference,
+  }>,
+};
+
+export type ContextRequiredOutputContent = {
+  +path: string,
+  +contents: Buffer,
 };
 
 function isMissing(error: mixed): boolean {
@@ -149,13 +167,37 @@ function saveTaskRecord(
   project: ProjectState,
   task: ContextTaskCapsule,
   snapshot: WorkspaceSnapshot,
+  requiredOutputContents: $ReadOnlyArray<ContextRequiredOutputContent>,
   now?: () => string,
 ): void {
+  const byPath = new Map(
+    requiredOutputContents.map((output) => [output.path, output.contents]),
+  );
+  const requiredOutputArtifacts = task.requiredOutputs.map((output) => {
+    const contents = byPath.get(output.path);
+    if (contents == null || hashBytes(contents) !== output.targetHash) {
+      throw new Error(
+        `Required output ${output.path} does not match its task hash`,
+      );
+    }
+    return Object.freeze({
+      path: output.path,
+      artifact: writeArtifact(project, contents),
+    });
+  });
+  if (byPath.size !== requiredOutputArtifacts.length) {
+    throw new Error('Context task received undeclared required output bytes');
+  }
   writeImmutable(
     project,
     'tasks',
     task.id,
-    { kind: 'context-task', task, snapshot } as $FlowFixMe,
+    {
+      kind: 'context-task',
+      task,
+      snapshot,
+      requiredOutputArtifacts,
+    } as $FlowFixMe,
     now,
   );
 }
@@ -169,16 +211,19 @@ function loadTaskRecord(project: ProjectState, taskId: string): TaskRecord {
     +kind: string,
     +task: mixed,
     +snapshot: mixed,
+    +requiredOutputArtifacts: mixed,
   } = value as any;
   if (
     payload.kind !== 'context-task' ||
     payload.snapshot == null ||
-    typeof payload.snapshot !== 'object'
+    typeof payload.snapshot !== 'object' ||
+    !Array.isArray(payload.requiredOutputArtifacts)
   ) {
     throw new Error(`Invalid contextual task record ${taskId}`);
   }
   const task = validateContextTaskCapsule(payload.task);
   const snapshot: WorkspaceSnapshot = payload.snapshot as any;
+  const requiredOutputArtifacts: $FlowFixMe = payload.requiredOutputArtifacts;
   if (
     task.id !== taskId ||
     snapshot.repositoryRoot !== project.repositoryRoot ||
@@ -189,7 +234,143 @@ function loadTaskRecord(project: ProjectState, taskId: string): TaskRecord {
   ) {
     throw new Error(`Contextual task ${taskId} does not match its snapshot`);
   }
-  return Object.freeze({ task, snapshot });
+  if (
+    requiredOutputArtifacts.length !== task.requiredOutputs.length ||
+    requiredOutputArtifacts.some((entry, index) => {
+      const required = task.requiredOutputs[index];
+      return (
+        entry == null ||
+        typeof entry !== 'object' ||
+        entry.path !== required.path ||
+        entry.artifact == null ||
+        typeof entry.artifact.hash !== 'string' ||
+        entry.artifact.hash !== required.targetHash ||
+        !Number.isInteger(entry.artifact.size)
+      );
+    })
+  ) {
+    throw new Error(`Contextual task ${taskId} has invalid required outputs`);
+  }
+  return Object.freeze({ task, snapshot, requiredOutputArtifacts });
+}
+
+function requiredOutputDestination(root: string, file: string): string {
+  if (
+    file === '' ||
+    file.includes('\0') ||
+    file.includes('\\') ||
+    path.isAbsolute(file) ||
+    file.split('/').some((segment) => segment === '' || segment === '..')
+  ) {
+    throw new Error(`Unsafe contextual required output path: ${file}`);
+  }
+  const destination = path.join(root, file);
+  const relative = path.relative(root, destination);
+  if (relative.startsWith('..') || path.isAbsolute(relative)) {
+    throw new Error(`Unsafe contextual required output path: ${file}`);
+  }
+  let current = root;
+  for (const segment of path.dirname(file).split('/')) {
+    if (segment === '.') continue;
+    current = path.join(current, segment);
+    try {
+      const stats = fs.lstatSync(current);
+      if (!stats.isDirectory() || stats.isSymbolicLink()) {
+        throw new Error(`Unsafe contextual required output parent: ${file}`);
+      }
+    } catch (error) {
+      if (
+        error != null &&
+        typeof error === 'object' &&
+        'code' in error &&
+        error.code === 'ENOENT'
+      ) {
+        fs.mkdirSync(current);
+        continue;
+      }
+      throw error;
+    }
+  }
+  try {
+    if (fs.lstatSync(destination).isSymbolicLink()) {
+      throw new Error(`Contextual required output is a symlink: ${file}`);
+    }
+  } catch (error) {
+    if (
+      error == null ||
+      typeof error !== 'object' ||
+      !('code' in error) ||
+      error.code !== 'ENOENT'
+    ) {
+      throw error;
+    }
+  }
+  return destination;
+}
+
+function writeRequiredOutputs(
+  workspaceRoot: string,
+  required: $ReadOnlyArray<ContextRequiredOutput>,
+  contents: $ReadOnlyArray<ContextRequiredOutputContent>,
+): void {
+  const byPath = new Map(contents.map((item) => [item.path, item.contents]));
+  if (byPath.size !== required.length) {
+    throw new Error('Context task required output bytes are incomplete');
+  }
+  for (const output of required) {
+    const bytes = byPath.get(output.path);
+    if (bytes == null || hashBytes(bytes) !== output.targetHash) {
+      throw new Error(
+        `Required output ${output.path} does not match its task hash`,
+      );
+    }
+    fs.writeFileSync(
+      requiredOutputDestination(workspaceRoot, output.path),
+      bytes,
+    );
+  }
+}
+
+export function assertContextRequiredOutputs(
+  workspaceRoot: string,
+  required: $ReadOnlyArray<ContextRequiredOutput>,
+): void {
+  for (const output of required) {
+    const destination = requiredOutputDestination(workspaceRoot, output.path);
+    let bytes;
+    try {
+      const stats = fs.lstatSync(destination);
+      if (!stats.isFile() || stats.isSymbolicLink()) {
+        throw new Error('not a regular file');
+      }
+      bytes = fs.readFileSync(destination);
+    } catch (error) {
+      throw new Error(
+        `Required output ${output.path} is missing or unreadable: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
+    if (hashBytes(bytes) !== output.targetHash) {
+      throw new Error(
+        `Required output ${output.path} was modified after the kernel generated it`,
+      );
+    }
+  }
+}
+
+function loadRequiredOutputContents(
+  project: ProjectState,
+  record: TaskRecord,
+): $ReadOnlyArray<ContextRequiredOutputContent> {
+  return Object.freeze(
+    record.requiredOutputArtifacts.map((entry) =>
+      Object.freeze({
+        path: entry.path,
+        contents: readArtifact(project, entry.artifact.hash),
+      }),
+    ),
+  );
 }
 
 function saveAttempt(
@@ -320,6 +501,57 @@ function persistOpenAttempt({
   return Object.freeze({ ok: true, state: 'open', task, attempt });
 }
 
+export function openContextTaskFromSpec({
+  project,
+  task,
+  snapshot,
+  requiredOutputContents = [],
+  workspaceRoot,
+  now = () => new Date().toISOString(),
+}: {
+  +project: ProjectState,
+  +task: ContextTaskCapsule,
+  +snapshot: WorkspaceSnapshot,
+  +requiredOutputContents?: $ReadOnlyArray<ContextRequiredOutputContent>,
+  +workspaceRoot?: string,
+  +now?: () => string,
+}): ContextOpenResult {
+  if (taskIndex(project, task.id) != null) {
+    return {
+      ok: false,
+      state: 'blocked',
+      reasons: Object.freeze([
+        `Contextual task ${task.id} already exists; inspect its current state.`,
+      ]),
+    };
+  }
+  const workspace = createCandidateWorkspace({
+    repositoryRoot: project.repositoryRoot,
+    allowedPaths: task.scope.allowedPaths,
+    baseCommit: snapshot.gitCommit,
+    requireClean: false,
+    rootDir: workspaceRoot,
+  });
+  try {
+    writeRequiredOutputs(
+      workspace.path,
+      task.requiredOutputs,
+      requiredOutputContents,
+    );
+    saveTaskRecord(project, task, snapshot, requiredOutputContents, now);
+    const attempt = createContextAttemptCapsule({
+      task,
+      attemptNumber: 1,
+      workspacePath: workspace.path,
+      now,
+    });
+    return persistOpenAttempt({ project, task, attempt, now });
+  } catch (error) {
+    removeCandidateWorkspace(workspace);
+    throw error;
+  }
+}
+
 export function openContextTask({
   project,
   clusterId,
@@ -443,35 +675,13 @@ export function openContextTask({
     ],
     now,
   });
-  if (taskIndex(project, task.id) != null) {
-    return {
-      ok: false,
-      state: 'blocked',
-      reasons: Object.freeze([
-        `Contextual task ${task.id} already exists; inspect its current state.`,
-      ]),
-    };
-  }
-  const workspace = createCandidateWorkspace({
-    repositoryRoot: project.repositoryRoot,
-    allowedPaths: task.scope.allowedPaths,
-    baseCommit: snapshot.gitCommit,
-    requireClean: false,
-    rootDir: workspaceRoot,
+  return openContextTaskFromSpec({
+    project,
+    task,
+    snapshot,
+    workspaceRoot,
+    now,
   });
-  try {
-    saveTaskRecord(project, task, snapshot, now);
-    const attempt = createContextAttemptCapsule({
-      task,
-      attemptNumber: 1,
-      workspacePath: workspace.path,
-      now,
-    });
-    return persistOpenAttempt({ project, task, attempt, now });
-  } catch (error) {
-    removeCandidateWorkspace(workspace);
-    throw error;
-  }
 }
 
 function failureFrom(value: mixed): ContextFailure {
@@ -568,6 +778,12 @@ export function openContextRetry({
     });
   }
   try {
+    const requiredOutputContents = loadRequiredOutputContents(project, record);
+    writeRequiredOutputs(
+      workspace.path,
+      record.task.requiredOutputs,
+      requiredOutputContents,
+    );
     const attempt = createContextAttemptCapsule({
       task: record.task,
       attemptNumber: firstAttempt.attemptNumber + 1,
@@ -795,6 +1011,19 @@ export function submitContextAttempt({
   }
   const attempt = loadAttempt(project, currentAttemptId(entry));
   const workspace = workspaceForAttempt(record.task, attempt.workspace.path);
+  try {
+    assertContextRequiredOutputs(workspace.path, record.task.requiredOutputs);
+  } catch (error) {
+    removeCandidateWorkspace(workspace);
+    return failAttempt({
+      project,
+      task: record.task,
+      attempt,
+      outcome: 'rejected',
+      reasons: [error instanceof Error ? error.message : String(error)],
+      now,
+    });
+  }
   const proposer: Proposer = {
     kind: proposerKind,
     version: proposerVersion,

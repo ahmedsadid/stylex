@@ -144,6 +144,16 @@ function sortedStrings(values: $ReadOnlyArray<string>): $ReadOnlyArray<string> {
   return Object.freeze([...new Set(values)].sort());
 }
 
+function safeRelativePath(value: string): boolean {
+  return (
+    value !== '' &&
+    !value.includes('\0') &&
+    !value.includes('\\') &&
+    !value.startsWith('/') &&
+    !value.split('/').some((segment) => segment === '' || segment === '..')
+  );
+}
+
 function normalizeOrigin(
   origin: ContextTaskOrigin | void,
   cluster: Cluster,
@@ -176,6 +186,7 @@ function normalizeRequiredOutputs(
   const normalized = outputs.map((output) => {
     if (
       output.path === '' ||
+      !safeRelativePath(output.path) ||
       output.targetHash === '' ||
       output.role !== 'generated-theme-module' ||
       output.mutable !== false ||
