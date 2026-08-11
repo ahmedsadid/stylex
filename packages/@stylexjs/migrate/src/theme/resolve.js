@@ -720,6 +720,7 @@ export function resolveThemeDecisionDefinition({
     inputFiles: new Set(),
     active: new Set(),
   };
+  const variantSources = new Map<string, string>();
   const tokens = definition.tokens.map((tokenInput) => {
     const token: $FlowFixMe = tokenInput;
     if (!object(token) || typeof token.sourcePath !== 'string') {
@@ -737,7 +738,11 @@ export function resolveThemeDecisionDefinition({
       }
       const matches = [];
       const failures = [];
-      for (const file of definition.sourceFiles) {
+      const candidateFiles =
+        typeof variant.sourceFile === 'string'
+          ? [variant.sourceFile]
+          : definition.sourceFiles;
+      for (const file of candidateFiles) {
         const result = resolveExport(
           context,
           file,
@@ -762,6 +767,13 @@ export function resolveThemeDecisionDefinition({
         );
       }
       const resolved = matches[0].value;
+      const priorSource = variantSources.get(variant.name);
+      if (priorSource != null && priorSource !== matches[0].file) {
+        throw new Error(
+          `Theme variant ${variant.name} resolves from inconsistent source modules`,
+        );
+      }
+      variantSources.set(variant.name, matches[0].file);
       const supplied = token.values?.[variant.name];
       if (
         supplied != null &&
@@ -777,6 +789,10 @@ export function resolveThemeDecisionDefinition({
   });
   return {
     ...definition,
+    variants: definition.variants.map((variant) => ({
+      ...variant,
+      sourceFile: String(variantSources.get(variant.name)),
+    })),
     tokens,
     sourceFiles: [...context.inputFiles].sort(),
   };

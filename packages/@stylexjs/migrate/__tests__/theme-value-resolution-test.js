@@ -151,32 +151,37 @@ export const spreadTheme = {colors: {foreground: '#111'}, ...dynamic};
 
   test('hydrates a decision map and pins every transitive source module', () => {
     repo = createTempRepo({
-      'src/tokens.ts': 'export const palette = {light: \'#111\', dark: \'#eee\'};\n',
+      'src/tokens.ts': `export const palette = {light: '#111', dark: '#eee'};
+export const darkTheme = {colors: {foreground: '#collision'}};
+`,
       'src/theme.ts': `import {palette} from './tokens';
 export const lightTheme = {colors: {foreground: palette.light}};
 export const darkTheme = {colors: {foreground: palette.dark}};
 `,
     });
-    expect(
-      resolveThemeDecisionDefinition({
-        repositoryRoot: repo,
-        definition: {
-          variants: [
-            { name: 'light', exportName: 'lightTheme' },
-            { name: 'dark', exportName: 'darkTheme' },
-          ],
-          tokens: [
-            {
-              sourcePath: 'colors.foreground',
-              targetName: 'foreground',
-              existingCssVariable: null,
-            },
-          ],
-          sourceFiles: ['src/theme.ts'],
-        },
-      }),
-    ).toMatchObject({
+    const hydrated: $FlowFixMe = resolveThemeDecisionDefinition({
+      repositoryRoot: repo,
+      definition: {
+        variants: [
+          { name: 'light', exportName: 'lightTheme' },
+          { name: 'dark', exportName: 'darkTheme' },
+        ],
+        tokens: [
+          {
+            sourcePath: 'colors.foreground',
+            targetName: 'foreground',
+            existingCssVariable: null,
+          },
+        ],
+        sourceFiles: ['src/theme.ts'],
+      },
+    });
+    expect(hydrated).toMatchObject({
       sourceFiles: ['src/theme.ts', 'src/tokens.ts'],
+      variants: [
+        { name: 'light', sourceFile: 'src/theme.ts' },
+        { name: 'dark', sourceFile: 'src/theme.ts' },
+      ],
       tokens: [
         {
           sourcePath: 'colors.foreground',
@@ -184,11 +189,17 @@ export const darkTheme = {colors: {foreground: palette.dark}};
         },
       ],
     });
+    expect(
+      resolveThemeDecisionDefinition({
+        repositoryRoot: repo,
+        definition: hydrated,
+      }),
+    ).toEqual(hydrated);
   });
 
   test('refuses a supplied value that differs from source', () => {
     repo = createTempRepo({
-      'src/theme.ts': 'export const lightTheme = {color: \'#111\'};\n',
+      'src/theme.ts': "export const lightTheme = {color: '#111'};\n",
     });
     expect(() =>
       resolveThemeDecisionDefinition({

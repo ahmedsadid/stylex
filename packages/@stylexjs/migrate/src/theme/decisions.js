@@ -120,6 +120,8 @@ export function validateThemeDecisionAgainstInventory(
     definition: draft,
   });
   if (
+    (draft.variants.some((variant) => variant.sourceFile != null) &&
+      canonicalJson(resolved.variants) !== canonicalJson(draft.variants)) ||
     canonicalJson(resolved.tokens) !== canonicalJson(draft.tokens) ||
     canonicalJson(resolved.sourceFiles) !== canonicalJson(draft.sourceFiles)
   ) {

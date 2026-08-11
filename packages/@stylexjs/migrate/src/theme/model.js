@@ -19,6 +19,7 @@ export type ThemeValue = string | number;
 export type ThemeVariantDefinition = {
   +name: string,
   +exportName: string,
+  +sourceFile: string | null,
 };
 
 export type ThemeTokenMapping = {
@@ -196,6 +197,10 @@ function normalizeDefinition(value: mixed): ThemeTokenMapDefinition {
     return Object.freeze({
       name: variant.name,
       exportName: variant.exportName,
+      sourceFile:
+        variant.sourceFile == null
+          ? null
+          : canonicalFile(variant.sourceFile, 'theme variant source file'),
     });
   });
   if (
@@ -269,6 +274,14 @@ function normalizeDefinition(value: mixed): ThemeTokenMapDefinition {
   );
   if (sourceFiles.length === 0 || consumerFiles.length === 0) {
     throw new Error('Theme decisions require source and consumer files');
+  }
+  if (
+    variants.some(
+      (variant) =>
+        variant.sourceFile != null && !sourceFiles.includes(variant.sourceFile),
+    )
+  ) {
+    throw new Error('Theme variant source files must be declared source files');
   }
   if (
     sourceFiles.includes(targetModule) ||
