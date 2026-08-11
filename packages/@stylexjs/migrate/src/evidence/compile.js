@@ -39,7 +39,11 @@ export type CompiledStyleXRule = {
   +priority: number,
 };
 
-export function compileStyleX(source: string, filename: string): CompileResult {
+export function compileStyleX(
+  source: string,
+  filename: string,
+  options?: { +moduleResolutionRoot?: string },
+): CompileResult {
   let output;
   try {
     output = transformSync(source, {
@@ -49,7 +53,23 @@ export function compileStyleX(source: string, filename: string): CompileResult {
       browserslistConfigFile: false,
       cloneInputAst: false,
       parserOpts: { plugins: [...pluginsForFilename(filename)] },
-      plugins: [[stylexBabelPlugin, { dev: false, runtimeInjection: false }]],
+      plugins: [
+        [
+          stylexBabelPlugin,
+          {
+            dev: false,
+            runtimeInjection: false,
+            ...(options?.moduleResolutionRoot == null
+              ? {}
+              : {
+                  unstable_moduleResolution: {
+                    type: 'commonJS',
+                    rootDir: options.moduleResolutionRoot,
+                  },
+                }),
+          },
+        ],
+      ],
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);

@@ -153,6 +153,7 @@ export const Card = () => <CardRoot data-card="true" />;
 
     const original = readFile(repo, 'src/Card.tsx');
     const proposed = syncCli(repo, ['theme', 'propose', draftId]);
+    if (proposed.code !== 0) throw new Error(JSON.stringify(proposed.json));
     expect(proposed).toMatchObject({
       code: 0,
       json: {

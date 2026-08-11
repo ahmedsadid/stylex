@@ -13,6 +13,7 @@ import {
   createThemeDecisionDraft,
   parseSource,
   proposeApprovedThemeFiles,
+  lintStyleX,
 } from '../src/index';
 
 function approved(consumerFiles: $ReadOnlyArray<string>) {
@@ -150,6 +151,7 @@ export const Card = () => <CardRoot id="card"><span>Card</span></CardRoot>;
       expect.objectContaining({ kind: 'theme-styled' }),
     ]);
     expect(parseSource(output, 'src/components/Card.tsx').ok).toBe(true);
+    expect(lintStyleX(output, 'src/components/Card.tsx').ok).toBe(true);
   });
 
   test('refuses an unmapped styled token without partial output', () => {

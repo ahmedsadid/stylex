@@ -114,8 +114,8 @@ export const Card = () => <div css={(theme) => ({color: theme.colors.foreground}
       draftId: draft.id,
       workspaceRoot,
     });
-    expect(result.ok).toBe(true);
     if (!result.ok) throw new Error(result.reason);
+    expect(result.ok).toBe(true);
     expect(result.record.candidate.decisionArtifactHashes).toEqual([
       approval.artifactHash,
     ]);
@@ -161,8 +161,8 @@ export const App = () => <ThemeProvider theme={darkTheme}><main>App</main></Them
       draftId: draft.id,
       workspaceRoot,
     });
-    expect(result.ok).toBe(true);
     if (!result.ok) throw new Error(result.reason);
+    expect(result.ok).toBe(true);
     const output = candidateSource(result, 'src/Provider.tsx');
     expect(output).not.toContain('ThemeProvider');
     expect(output).toContain('stylex.props(darkTheme)');
@@ -189,8 +189,8 @@ export const Card = () => <CardRoot data-card="true" />;
       draftId: draft.id,
       workspaceRoot,
     });
-    expect(result.ok).toBe(true);
     if (!result.ok) throw new Error(result.reason);
+    expect(result.ok).toBe(true);
     const output = candidateSource(result, 'src/Card.tsx');
     expect(output).not.toContain("from '@emotion/styled'");
     expect(output).toContain('color: themeVars.foreground');
@@ -200,6 +200,20 @@ export const Card = () => <CardRoot data-card="true" />;
       approval.artifactHash,
     ]);
     expect(result.record.classification).toBe('repeatable-contextual');
+    expect(result.record.staticEvidence).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          check: 'stylex-plugin-transform',
+          result: 'pass',
+        }),
+        expect.objectContaining({ check: 'stylex-lint', result: 'pass' }),
+      ]),
+    );
+    expect(
+      result.record.staticEvidence.some(
+        (item) => item.check === 'static-css-comparison',
+      ),
+    ).toBe(false);
     expect(readFile(repo, 'src/Card.tsx')).toBe(styled);
   });
 
@@ -217,8 +231,8 @@ export const Card = () => <div css={(theme) => ({color: theme.colors.foreground}
       draftId: draft.id,
       workspaceRoot,
     });
-    expect(result.ok).toBe(true);
     if (!result.ok) throw new Error(result.reason);
+    expect(result.ok).toBe(true);
     const revised = persistThemeDecisionDraft({
       project,
       definition: definition(inventory.id, 'src/Card.tsx', 'textColor'),

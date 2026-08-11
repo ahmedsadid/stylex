@@ -15,6 +15,9 @@ import {
   removeCandidateWorkspace,
 } from '../candidate/workspace';
 import { saveVerificationCandidate } from '../evidence/candidates';
+import { evidence } from '../evidence/claims';
+import { compileStyleX } from '../evidence/compile';
+import { describeLintMessages, lintStyleX } from '../evidence/lint';
 import { hashString } from '../kernel/hash';
 import { createSnapshot, detectStaleFiles } from '../kernel/snapshot';
 import { loadCurrentInventory } from '../planning/reports';
@@ -29,6 +32,7 @@ import {
 import { THEME_DECISION_PROTOCOL_VERSION } from './model';
 import { proposeApprovedThemeFiles } from './rewrite';
 import type { VerificationCandidate } from '../evidence/candidates';
+import type { EvidenceResult } from '../kernel/evidence';
 import type { ProjectState } from '../state/project';
 
 export type ThemeCandidateProposalResult =
@@ -154,6 +158,60 @@ export function proposeThemeDecisionCandidate({
         hashString(proposal.files[file]),
       ]),
     );
+    const staticEvidence: Array<EvidenceResult> = [];
+    for (const file of proposal.changedFiles) {
+      const targetHash = expectedContent[file];
+      const subject = {
+        file,
+        sourceHash: snapshot.fileHashes[file] ?? null,
+        targetHash,
+        model: 'approved-theme-map-v1',
+      };
+      const compiled = compileStyleX(
+        proposal.files[file],
+        path.join(workspace.path, file),
+        { moduleResolutionRoot: workspace.path },
+      );
+      staticEvidence.push(
+        evidence({
+          check: 'stylex-plugin-transform',
+          provider: '@stylexjs/babel-plugin',
+          subject,
+          scope: [file],
+          result: compiled.ok ? 'pass' : 'fail',
+          ...(compiled.ok ? {} : { detail: compiled.reason }),
+          limitations: [
+            'the StyleX babel plugin was run without the repository compiler configuration',
+          ],
+        }),
+      );
+      if (!compiled.ok) {
+        return { ok: false, reason: compiled.reason, file };
+      }
+      const linted = lintStyleX(proposal.files[file], file);
+      staticEvidence.push(
+        evidence({
+          check: 'stylex-lint',
+          provider: '@stylexjs/eslint-plugin',
+          subject,
+          scope: [file],
+          result: linted.ok ? 'pass' : 'fail',
+          ...(linted.ok
+            ? {}
+            : { detail: describeLintMessages(linted.messages) }),
+          limitations: [
+            'only @stylexjs rules were run; the repository lint setup was not',
+          ],
+        }),
+      );
+      if (!linted.ok) {
+        return {
+          ok: false,
+          reason: `StyleX lint rejected the theme output: ${describeLintMessages(linted.messages)}`,
+          file,
+        };
+      }
+    }
     const built = createCandidatePatch({
       workspace,
       snapshot,
@@ -196,7 +254,7 @@ export function proposeThemeDecisionCandidate({
       snapshot: built.snapshot,
       classification: 'repeatable-contextual',
       siteIdsByFile: Object.freeze(siteIdsByFile),
-      staticEvidence: Object.freeze([]),
+      staticEvidence: Object.freeze(staticEvidence),
     });
     assertActiveThemeCandidateDecisions(project, record.candidate);
     saveVerificationCandidate(project, record, { now });
