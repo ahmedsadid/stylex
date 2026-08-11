@@ -70,6 +70,8 @@ describe('M3 project-local storage', () => {
       'approvals',
       'decisions',
       'applications',
+      'tasks',
+      'attempts',
       'indexes',
       'artifacts',
       'reports',

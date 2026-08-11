@@ -57,7 +57,11 @@ function copyDirectory(source: string, destination: string): void {
 
 function migrationBackup(stateRoot: string, now: string): string {
   const safeTime = now.replace(/[^0-9A-Za-z.-]/g, '-');
-  const destination = path.join(stateRoot, 'backups', `pre-v1-${safeTime}`);
+  const destination = path.join(
+    stateRoot,
+    'backups',
+    `pre-v${STATE_SCHEMA_VERSION}-${safeTime}`,
+  );
   copyDirectory(stateRoot, destination);
   return destination;
 }
@@ -83,7 +87,7 @@ export function migrateProject({
       backupPath: null,
     });
   }
-  if (fromVersion !== 0) {
+  if (fromVersion !== 0 && fromVersion !== 1) {
     throw new Error(`No migration exists from state schema ${fromVersion}`);
   }
   if (dryRun) {
@@ -177,6 +181,8 @@ function referencedArtifacts(project: ProjectState): Set<string> {
     'approvals',
     'decisions',
     'applications',
+    'tasks',
+    'attempts',
     'events',
     'reports',
   ]) {

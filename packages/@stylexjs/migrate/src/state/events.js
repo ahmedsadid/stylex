@@ -26,7 +26,9 @@ export type EntityKind =
   | 'cluster'
   | 'decision'
   | 'verdict'
-  | 'application';
+  | 'application'
+  | 'task'
+  | 'attempt';
 
 export type StateEvent = {
   +schemaVersion: number,
@@ -56,6 +58,8 @@ export type StateIndexes = {
   +decisions: { +[string]: IndexEntry },
   +verdicts: { +[string]: IndexEntry },
   +applications: { +[string]: IndexEntry },
+  +tasks: { +[string]: IndexEntry },
+  +attempts: { +[string]: IndexEntry },
 };
 
 type MutableIndex = { [string]: IndexEntry };
@@ -66,6 +70,8 @@ type MutableStateIndexes = {
   decisions: MutableIndex,
   verdicts: MutableIndex,
   applications: MutableIndex,
+  tasks: MutableIndex,
+  attempts: MutableIndex,
 };
 
 export type ReplayResult = {
@@ -81,6 +87,8 @@ const INDEX_FOR_KIND: { +[EntityKind]: $Keys<StateIndexes> } = {
   decision: 'decisions',
   verdict: 'verdicts',
   application: 'applications',
+  task: 'tasks',
+  attempt: 'attempts',
 };
 const ENTITY_KINDS: $ReadOnlySet<string> = new Set(Object.keys(INDEX_FOR_KIND));
 
@@ -92,6 +100,8 @@ function emptyIndexes(): MutableStateIndexes {
     decisions: {},
     verdicts: {},
     applications: {},
+    tasks: {},
+    attempts: {},
   };
 }
 
@@ -112,6 +122,10 @@ function indexFor(
       return indexes.verdicts;
     case 'application':
       return indexes.applications;
+    case 'task':
+      return indexes.tasks;
+    case 'attempt':
+      return indexes.attempts;
     default:
       throw new Error(`Unknown state entity kind: ${String(kind)}`);
   }

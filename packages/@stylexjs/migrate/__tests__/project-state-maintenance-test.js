@@ -41,31 +41,37 @@ describe('M3 project-state maintenance', () => {
     const project = initializeProject({ repositoryRoot: repo });
     const schemaFile = path.join(project.stateRoot, 'schema.json');
     writeJsonAtomic(schemaFile, {
-      schemaVersion: 0,
+      schemaVersion: 1,
       createdAt: '2026-08-01T00:00:00.000Z',
     });
 
     const dryRun = migrateProject({ repositoryRoot: repo, dryRun: true });
     expect(dryRun).toMatchObject({
-      fromVersion: 0,
-      toVersion: 1,
+      fromVersion: 1,
+      toVersion: 2,
       dryRun: true,
       changed: true,
       backupPath: null,
     });
-    expect(json(schemaFile).schemaVersion).toBe(0);
+    expect(json(schemaFile).schemaVersion).toBe(1);
 
     const migrated = migrateProject({
       repositoryRoot: repo,
       now: () => '2026-08-10T01:02:03.000Z',
     });
     expect(migrated.backupPath).not.toBeNull();
-    expect(json(schemaFile).schemaVersion).toBe(1);
+    expect(json(schemaFile).schemaVersion).toBe(2);
     if (migrated.backupPath != null) {
       expect(
         json(path.join(migrated.backupPath, 'schema.json')).schemaVersion,
-      ).toBe(0);
+      ).toBe(1);
     }
+    expect(
+      fs.statSync(path.join(project.stateRoot, 'tasks')).isDirectory(),
+    ).toBe(true);
+    expect(
+      fs.statSync(path.join(project.stateRoot, 'attempts')).isDirectory(),
+    ).toBe(true);
   });
 
   test('cleanup is a dry-run by default and preserves referenced artifacts', () => {

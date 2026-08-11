@@ -27,7 +27,7 @@ import {
 import type { EvidenceConfig } from '../evidence/config';
 
 export const STATE_DIRECTORY: string = '.stylex-migrate';
-export const STATE_SCHEMA_VERSION: number = 1;
+export const STATE_SCHEMA_VERSION: number = 2;
 
 export const RECORD_COLLECTIONS: $ReadOnlyArray<string> = Object.freeze([
   'candidates',
@@ -36,6 +36,8 @@ export const RECORD_COLLECTIONS: $ReadOnlyArray<string> = Object.freeze([
   'approvals',
   'decisions',
   'applications',
+  'tasks',
+  'attempts',
   'indexes',
   'reports',
 ]);

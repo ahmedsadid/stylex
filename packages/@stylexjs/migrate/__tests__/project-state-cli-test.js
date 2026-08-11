@@ -31,7 +31,7 @@ describe('M3 stylex-migrate lifecycle CLI', () => {
     expect(runCli(['init', '--json'], { cwd: repo, writeStdout })).toBe(0);
     expect(JSON.parse(stdout)).toMatchObject({
       command: 'init',
-      schemaVersion: 1,
+      schemaVersion: 2,
     });
 
     stdout = '';
@@ -46,6 +46,8 @@ describe('M3 stylex-migrate lifecycle CLI', () => {
         decisions: 0,
         files: 0,
         verdicts: 0,
+        tasks: 0,
+        attempts: 0,
       },
     });
   });

@@ -10,6 +10,7 @@
 import fs from 'fs';
 import path from 'path';
 import {
+  STATE_SCHEMA_VERSION,
   canonicalJson,
   hashString,
   initializeProject,
@@ -96,7 +97,7 @@ describe('M5 repository evidence configuration', () => {
     document.config = legacy;
     document.contentHash = hashString(
       canonicalJson({
-        schemaVersion: 1,
+        schemaVersion: STATE_SCHEMA_VERSION,
         kind: 'config',
         config: legacy,
       }),
