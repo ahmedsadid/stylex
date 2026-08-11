@@ -134,6 +134,13 @@ function templateTextByStart(ast: $FlowFixMe): Map<number, string | null> {
   return result;
 }
 
+export function readClosedStyledTemplate(
+  ast: $FlowFixMe,
+  start: number,
+): string | null {
+  return templateTextByStart(ast).get(start) ?? null;
+}
+
 /** Parse only usage-closed intrinsic templates; this fact still edits nothing. */
 export function discoverStyledTemplateFacts({
   ast,

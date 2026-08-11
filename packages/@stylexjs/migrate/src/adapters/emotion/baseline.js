@@ -334,6 +334,36 @@ export function emotionBaseline(objectSource: string): BaselineResult {
   }
 }
 
+/**
+ * Observe Emotion's intermediate CSS for a closed styled template.
+ *
+ * The synthetic TemplateStringsArray has one cooked/raw segment and therefore
+ * cannot execute an interpolation. This is the same closed boundary enforced
+ * by the styled template grammar fact.
+ */
+export function emotionStyledTemplateBaseline(css: string): BaselineResult {
+  try {
+    const strings: $FlowFixMe = [css];
+    strings.raw = [css];
+    const serialized = serializeStyles([strings]);
+    const output = String(serialized.styles);
+    const parsed = parseDeclarations(output);
+    if (!parsed.ok) {
+      return {
+        ok: false,
+        reason: `could not read the CSS Emotion produced: ${parsed.reason}`,
+      };
+    }
+    return { ok: true, css: output, declarations: parsed.declarations };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return {
+      ok: false,
+      reason: `Emotion could not serialize the styled template: ${message}`,
+    };
+  }
+}
+
 export function emotionConditionalBaseline(
   objectSource: string,
 ): CascadeObservation {

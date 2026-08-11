@@ -113,11 +113,17 @@ function bindingIdentifiers(node: $FlowFixMe): $ReadOnlyArray<$FlowFixMe> {
   return [];
 }
 
-function isTopLevelDefinition(
+type TopLevelDefinition = {
+  +span: { +start: number, +end: number },
+  +kind: string,
+  +standalone: boolean,
+};
+
+function topLevelDefinition(
   ast: $FlowFixMe,
   name: string,
   initStart: number,
-): boolean {
+): TopLevelDefinition | null {
   for (const statement of ast.program?.body ?? []) {
     const declaration =
       statement.type === 'ExportNamedDeclaration'
@@ -130,11 +136,15 @@ function isTopLevelDefinition(
         item.id.name === name &&
         item.init?.start === initStart
       ) {
-        return true;
+        return Object.freeze({
+          span: Object.freeze({ start: statement.start, end: statement.end }),
+          kind: String(declaration.kind),
+          standalone: declaration.declarations.length === 1,
+        });
       }
     }
   }
-  return false;
+  return null;
 }
 
 function directJsxConsumer(
@@ -242,13 +252,20 @@ function escapeKind(path: Path): string {
 
 function blockedReasons(
   definition: $FlowFixMe,
-  topLevel: boolean,
+  topLevel: TopLevelDefinition | null,
   shadowed: boolean,
   consumers: $ReadOnlyArray<$FlowFixMe>,
   escapes: $ReadOnlyArray<$FlowFixMe>,
 ): $ReadOnlyArray<string> {
   const reasons = [];
-  if (!topLevel) reasons.push('definition-not-top-level');
+  if (!/^[A-Z]/.test(String(definition.name))) {
+    reasons.push('non-component-jsx-binding');
+  }
+  if (topLevel == null) reasons.push('definition-not-top-level');
+  else {
+    if (topLevel.kind !== 'const') reasons.push('definition-not-const');
+    if (!topLevel.standalone) reasons.push('multi-declarator-definition');
+  }
   if (definition.exported === true) reasons.push('exported-definition');
   if (definition.targetKind !== 'intrinsic') {
     reasons.push('non-intrinsic-target');
@@ -376,7 +393,7 @@ export function discoverStyledUsageFacts({
             ]),
           ).values(),
         ];
-        const topLevel = isTopLevelDefinition(
+        const topLevel = topLevelDefinition(
           ast,
           name,
           Number(definition.span?.start),
@@ -398,7 +415,10 @@ export function discoverStyledUsageFacts({
             targetKind: definition.targetKind,
             targetName: definition.targetName,
             definitionSpan: definition.span,
-            topLevel,
+            topLevel: topLevel != null,
+            declarationSpan: topLevel?.span ?? null,
+            declarationKind: topLevel?.kind ?? null,
+            standaloneDeclaration: topLevel?.standalone ?? false,
             shadowed,
             consumers,
             escapes: uniqueEscapes,

@@ -153,4 +153,21 @@ export const App = () => <><ComponentTarget /><Theme /></>;
       'no-direct-jsx-consumers',
     );
   });
+
+  test('requires a standalone top-level const declaration', () => {
+    repo = createTempRepo({
+      'src/declarations.tsx': `import styled from '@emotion/styled';
+let Mutable = styled.div\`color: red;\`;
+const Multiple = styled.div\`color: red;\`, other = 1;
+export const App = () => <><Mutable /><Multiple /></>;
+`,
+    });
+    const facts = usageByName(scanRepository({ repositoryRoot: repo }));
+    expect(factNamed(facts, 'Mutable').value.blockedReasons).toContain(
+      'definition-not-const',
+    );
+    expect(factNamed(facts, 'Multiple').value.blockedReasons).toContain(
+      'multi-declarator-definition',
+    );
+  });
 });

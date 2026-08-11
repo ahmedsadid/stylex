@@ -273,6 +273,7 @@ export { discoverStyledUsageFacts } from './adapters/emotion/styledUsage';
 export {
   analyzeClosedStyledTemplate,
   discoverStyledTemplateFacts,
+  readClosedStyledTemplate,
   STYLED_TEMPLATE_GRAMMAR_MODEL,
 } from './adapters/emotion/styledTemplate';
 export { analyzeProjectActivation } from './inventory/activation';
@@ -601,6 +602,13 @@ export {
   verifyConversion,
 } from './proposers/emotionStatic';
 export type { Proposal, ProposedEntry } from './proposers/emotionStatic';
+export {
+  convertClosedStyledDefinition,
+  proposeClosedStyledConversion,
+  STYLED_COMPARISON_MODEL,
+  verifyStyledConversion,
+} from './proposers/emotionStyled';
+export type { StyledProposal } from './proposers/emotionStyled';
 export {
   evaluateCorpusSources,
   formatCorpusSummary,
