@@ -172,8 +172,10 @@ export const App = () => <ThemeProvider theme={darkTheme}><main>App</main></Them
 
   test('pins a styled theme slice to the approved map and exact site', () => {
     const styled = `import styled from '@emotion/styled';
+import {ThemeProvider} from '@emotion/react';
+import {darkTheme} from './theme/themes';
 const CardRoot = styled.div\`color: \${p => p.theme.colors.foreground};\`;
-export const Card = () => <CardRoot data-card="true" />;
+export const Card = () => <ThemeProvider theme={darkTheme}><CardRoot data-card="true" /></ThemeProvider>;
 `;
     const { project, inventory, draft, approval } = prepare(
       { 'src/Card.tsx': styled },
@@ -195,7 +197,10 @@ export const Card = () => <CardRoot data-card="true" />;
     expect(output).not.toContain("from '@emotion/styled'");
     expect(output).toContain('color: themeVars.foreground');
     expect(output).toContain('<div {...stylex.props(styles.cardRoot)}');
-    expect(result.record.siteIdsByFile['src/Card.tsx']).toEqual([site?.id]);
+    expect(result.record.siteIdsByFile['src/Card.tsx']).toEqual(
+      expect.arrayContaining([site?.id]),
+    );
+    expect(result.record.siteIdsByFile['src/Card.tsx']).toHaveLength(2);
     expect(result.record.candidate.decisionArtifactHashes).toEqual([
       approval.artifactHash,
     ]);

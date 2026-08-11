@@ -97,6 +97,8 @@ type ProviderEdit = {
   +sourceImport: $FlowFixMe | null,
   +sourceSpecifier: $FlowFixMe | null,
   +sourceLocal: string | null,
+  +subtreeStart: number,
+  +subtreeEnd: number,
 };
 
 const PROPERTY = /^[A-Za-z][A-Za-z0-9]*$/;
@@ -478,8 +480,15 @@ function declaredVariantBinding(
   );
 }
 
-function staticHostSubtree(node: $FlowFixMe): boolean {
-  if (node?.type !== 'JSXElement' || !host(elementName(node.openingElement))) {
+function staticHostSubtree(
+  node: $FlowFixMe,
+  styledNames: $ReadOnlySet<string>,
+): boolean {
+  const name = elementName(node?.openingElement);
+  if (
+    node?.type !== 'JSXElement' ||
+    (!host(name) && (name == null || !styledNames.has(name)))
+  ) {
     return false;
   }
   return (node.children ?? []).every((child) => {
@@ -490,7 +499,7 @@ function staticHostSubtree(node: $FlowFixMe): boolean {
     ) {
       return true;
     }
-    return child.type === 'JSXElement' && staticHostSubtree(child);
+    return child.type === 'JSXElement' && staticHostSubtree(child, styledNames);
   });
 }
 
@@ -498,6 +507,7 @@ function providerEdits(
   ast: $FlowFixMe,
   file: string,
   draft: ThemeDecisionDraft,
+  styledNames: $ReadOnlySet<string>,
 ): { +edits: $ReadOnlyArray<ProviderEdit>, +problem: string | null } {
   const imports = emotionProviderImports(ast);
   const localImports = importedLocals(ast);
@@ -539,8 +549,9 @@ function providerEdits(
     if (
       variantExport == null ||
       child?.type !== 'JSXElement' ||
-      !host(childName) ||
-      !staticHostSubtree(child) ||
+      (!host(childName) &&
+        (childName == null || !styledNames.has(childName))) ||
+      !staticHostSubtree(child, styledNames) ||
       !declaredVariantBinding(file, selectedBinding, draft) ||
       child.openingElement.attributes?.some(
         (attribute) =>
@@ -573,6 +584,8 @@ function providerEdits(
         sourceImport: selectedImport?.statement ?? null,
         sourceSpecifier: selectedImport?.specifier ?? null,
         sourceLocal: selectedImport == null ? null : selectedName,
+        subtreeStart: node.start,
+        subtreeEnd: node.end,
       }),
     );
   });
@@ -647,11 +660,34 @@ function rewriteConsumer(
   const usedReads = new Set<string>();
   const style = styleSites(ast, draft, reads, usedReads);
   const styled = styledThemeSites(ast, file, draft, themeFacts, usedReads);
-  const providers = providerEdits(ast, file, draft);
+  const providers = providerEdits(
+    ast,
+    file,
+    draft,
+    new Set(styled.sites.map((site) => site.componentName)),
+  );
   if (style.problem != null) return { ok: false, reason: style.problem };
   if (styled.problem != null) return { ok: false, reason: styled.problem };
   if (providers.problem != null)
     return { ok: false, reason: providers.problem };
+  if (
+    styled.sites.some((site) =>
+      site.consumers.some(
+        (consumer) =>
+          !providers.edits.some(
+            (provider) =>
+              provider.subtreeStart < consumer.span.start &&
+              consumer.span.end < provider.subtreeEnd,
+          ),
+      ),
+    )
+  ) {
+    return {
+      ok: false,
+      reason:
+        'styled theme consumer is outside a converted declared-variant ThemeProvider subtree',
+    };
+  }
   const unhandled = [...reads.keys()].filter((key) => !usedReads.has(key));
   if (unhandled.length > 0) {
     return {

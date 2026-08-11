@@ -76,8 +76,10 @@ describe('M9 theme CLI', () => {
 export const darkTheme = {colors: {foreground: '#eee'}};
 `,
       'src/Card.tsx': `import styled from '@emotion/styled';
+import {ThemeProvider} from '@emotion/react';
+import {darkTheme} from './theme/themes';
 const CardRoot = styled.div\`color: \${p => p.theme.colors.foreground};\`;
-export const Card = () => <CardRoot data-card="true" />;
+export const Card = () => <ThemeProvider theme={darkTheme}><CardRoot data-card="true" /></ThemeProvider>;
 `,
     });
     inputRoot = createTempDir('stylex-migrate-theme-input-');
@@ -175,6 +177,7 @@ export const Card = () => <CardRoot data-card="true" />;
     expect(diff.json.patchText).toContain('stylex.create');
     expect(diff.json.patchText).toContain('themeVars.foreground');
     expect(diff.json.patchText).toContain('stylex.props(styles.cardRoot)');
+    expect(diff.json.patchText).toContain('stylex.props(darkTheme)');
     expect(diff.json.patchText).not.toContain('+const CardRoot = styled.div');
 
     writeConfig(openProject(repo), {

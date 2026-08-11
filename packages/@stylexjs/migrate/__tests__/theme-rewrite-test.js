@@ -123,11 +123,17 @@ export const Account = () => (
     const result = proposeApprovedThemeFiles({
       files: {
         'src/components/Card.tsx': `import styled from '@emotion/styled';
+import {ThemeProvider} from '@emotion/react';
+import {darkTheme} from '../theme/themes';
 const CardRoot = styled.article\`
   color: \${p => p.theme.colors.foreground};
   padding-top: 4px;
 \`;
-export const Card = () => <CardRoot id="card"><span>Card</span></CardRoot>;
+export const Card = () => (
+  <ThemeProvider theme={darkTheme}>
+    <CardRoot id="card"><span>Card</span></CardRoot>
+  </ThemeProvider>
+);
 `,
         'src/theme/tokens.stylex.ts': null,
       },
@@ -138,18 +144,23 @@ export const Card = () => <CardRoot id="card"><span>Card</span></CardRoot>;
     const output = result.files['src/components/Card.tsx'];
     expect(output).not.toContain("from '@emotion/styled'");
     expect(output).not.toContain('CardRoot');
-    expect(output).toContain(
-      "import { themeVars } from '../theme/tokens.stylex';",
-    );
+    expect(output).toContain("from '../theme/tokens.stylex';");
+    expect(output).toContain('themeVars');
+    expect(output).toContain('darkTheme');
     expect(output).toContain('color: themeVars.foreground');
     expect(output).toContain("paddingTop: '4px'");
     expect(output).toContain(
-      '<article {...stylex.props(styles.cardRoot)} id="card">',
+      '<article {...stylex.props(styles.cardRoot)} {...stylex.props(darkTheme)} id="card">',
     );
+    expect(output).toContain('{...stylex.props(darkTheme)}');
+    expect(output).not.toContain('ThemeProvider');
     expect(output).toContain('</article>');
-    expect(result.siteSpansByFile['src/components/Card.tsx']).toEqual([
-      expect.objectContaining({ kind: 'theme-styled' }),
-    ]);
+    expect(result.siteSpansByFile['src/components/Card.tsx']).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ kind: 'theme-provider' }),
+        expect.objectContaining({ kind: 'theme-styled' }),
+      ]),
+    );
     expect(parseSource(output, 'src/components/Card.tsx').ok).toBe(true);
     expect(lintStyleX(output, 'src/components/Card.tsx').ok).toBe(true);
   });
@@ -159,8 +170,10 @@ export const Card = () => <CardRoot id="card"><span>Card</span></CardRoot>;
     const result = proposeApprovedThemeFiles({
       files: {
         'src/components/Card.tsx': `import styled from '@emotion/styled';
+import {ThemeProvider} from '@emotion/react';
+import {darkTheme} from '../theme/themes';
 const CardRoot = styled.div\`color: \${p => p.theme.colors.missing};\`;
-export const Card = () => <CardRoot />;
+export const Card = () => <ThemeProvider theme={darkTheme}><CardRoot /></ThemeProvider>;
 `,
         'src/theme/tokens.stylex.ts': null,
       },
@@ -180,9 +193,11 @@ export const Card = () => <CardRoot />;
     const result = proposeApprovedThemeFiles({
       files: {
         'src/components/Card.tsx': `import styled from '@emotion/styled';
+import {ThemeProvider} from '@emotion/react';
+import {darkTheme} from '../theme/themes';
 const A = styled.div\`color: \${p => p.theme.colors.foreground};\`;
 const B = styled.span\`color: \${p => p.theme.colors.foreground};\`;
-export const Card = () => <A><B /></A>;
+export const Card = () => <ThemeProvider theme={darkTheme}><A><B /></A></ThemeProvider>;
 `,
         'src/theme/tokens.stylex.ts': null,
       },
@@ -192,6 +207,26 @@ export const Card = () => <A><B /></A>;
       status: 'refused',
       file: 'src/components/Card.tsx',
       reason: 'theme consumer has more than one eligible styled definition',
+    });
+  });
+
+  test('refuses a styled theme consumer without converted provider scope', () => {
+    const decision = approved(['src/components/Card.tsx']);
+    const result = proposeApprovedThemeFiles({
+      files: {
+        'src/components/Card.tsx': `import styled from '@emotion/styled';
+const CardRoot = styled.div\`color: \${p => p.theme.colors.foreground};\`;
+export const Card = () => <CardRoot />;
+`,
+        'src/theme/tokens.stylex.ts': null,
+      },
+      ...decision,
+    });
+    expect(result).toMatchObject({
+      status: 'refused',
+      file: 'src/components/Card.tsx',
+      reason:
+        'styled theme consumer is outside a converted declared-variant ThemeProvider subtree',
     });
   });
 
