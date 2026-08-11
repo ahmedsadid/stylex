@@ -88,6 +88,23 @@ function bundleIdentity(bundle: {
   return shortHash(hashString(canonicalJson(bundle as $FlowFixMe)));
 }
 
+function legacyBundleIdentity(bundle: {
+  +subject: RepositoryEvidenceSubject,
+  +candidateIds: $ReadOnlyArray<string>,
+  +scheduleId: string,
+  +providerConfig: EvidenceConfig,
+  +providerConfigHash: string,
+  +repositoryEntries: $ReadOnlyArray<BundleRepositoryEntry>,
+  +staticEntries: $ReadOnlyArray<BundleStaticEntry>,
+  +coverage: CoverageSummary,
+  +runtimeCoverage: RuntimeCoverageSummary,
+  +skippedProviderIds: $ReadOnlyArray<string>,
+  +limitations: $ReadOnlyArray<string>,
+}): string {
+  const { runtimeCoverage: _runtimeCoverage, ...legacy } = bundle;
+  return shortHash(hashString(canonicalJson(legacy as $FlowFixMe)));
+}
+
 function limitationsFor(
   candidates: $ReadOnlyArray<VerificationCandidate>,
   schedule: EvidenceScheduleResult,
@@ -197,7 +214,8 @@ export function validateRepositoryEvidenceBundle(
       canonicalJson(bundle.coverage as $FlowFixMe) ||
     canonicalJson(runtimeCoverage as $FlowFixMe) !==
       canonicalJson(bundle.runtimeCoverage as $FlowFixMe) ||
-    bundleIdentity(stable) !== bundle.id
+    (bundleIdentity(stable) !== bundle.id &&
+      legacyBundleIdentity(stable) !== bundle.id)
   ) {
     throw new Error(`Integrity check failed for evidence bundle ${bundle.id}`);
   }
@@ -398,7 +416,6 @@ function parseBundle(
     !Array.isArray(bundle.repositoryEntries) ||
     !Array.isArray(bundle.staticEntries) ||
     !object(bundle.coverage) ||
-    !object(bundle.runtimeCoverage) ||
     !Array.isArray(bundle.skippedProviderIds) ||
     !Array.isArray(bundle.limitations) ||
     typeof bundle.createdAt !== 'string'
@@ -406,6 +423,14 @@ function parseBundle(
     throw new Error(`Invalid repository evidence bundle ${expectedId}`);
   }
   const providerConfig = normalizeEvidenceConfig(bundle.providerConfig);
+  const hasRuntimeCoverage = object(bundle.runtimeCoverage);
+  const runtimeCoverage = hasRuntimeCoverage
+    ? bundle.runtimeCoverage
+    : aggregateRuntimeCoverage({
+        subject: bundle.subject,
+        providers: providerConfig.providers,
+        entries: bundle.repositoryEntries,
+      });
   const parsed: RepositoryEvidenceBundle = Object.freeze({
     id: bundle.id,
     subject: bundle.subject,
@@ -416,12 +441,12 @@ function parseBundle(
     repositoryEntries: Object.freeze([...bundle.repositoryEntries]),
     staticEntries: Object.freeze([...bundle.staticEntries]),
     coverage: bundle.coverage,
-    runtimeCoverage: bundle.runtimeCoverage,
+    runtimeCoverage,
     skippedProviderIds: Object.freeze([...bundle.skippedProviderIds]),
     limitations: Object.freeze([...bundle.limitations]),
     createdAt: bundle.createdAt,
   });
-  const id = bundleIdentity({
+  const stable = {
     subject: parsed.subject,
     candidateIds: parsed.candidateIds,
     scheduleId: parsed.scheduleId,
@@ -433,7 +458,10 @@ function parseBundle(
     runtimeCoverage: parsed.runtimeCoverage,
     skippedProviderIds: parsed.skippedProviderIds,
     limitations: parsed.limitations,
-  });
+  };
+  const id = hasRuntimeCoverage
+    ? bundleIdentity(stable)
+    : legacyBundleIdentity(stable);
   if (parsed.id !== expectedId || id !== expectedId) {
     throw new Error(`Integrity check failed for evidence bundle ${expectedId}`);
   }

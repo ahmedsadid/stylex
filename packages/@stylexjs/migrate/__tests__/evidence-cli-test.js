@@ -241,6 +241,8 @@ describe('M5 verify and review CLI', () => {
       command: 'verify',
       subject: { kind: 'candidate', candidateId },
       coverage: { status: 'covered' },
+      runtimeCoverage: { status: 'not-configured' },
+      warnings: [expect.stringContaining('Runtime behavior was not matched')],
       verdict: {
         outcome: 'auto-eligible',
         claims: expect.arrayContaining([
@@ -257,9 +259,11 @@ describe('M5 verify and review CLI', () => {
     expect(review.code).toBe(0);
     expect(review.json).toMatchObject({
       command: 'review',
+      warnings: [expect.stringContaining('Runtime behavior was not matched')],
       verdict: { outcome: 'auto-eligible' },
       evidence: {
         coverage: { status: 'covered' },
+        runtimeCoverage: { status: 'not-configured' },
         repositoryChecks: [
           expect.objectContaining({
             provider: 'repo-typecheck',

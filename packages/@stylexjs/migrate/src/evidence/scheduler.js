@@ -243,7 +243,11 @@ export function createEvidenceSchedule({
     concurrency: config.concurrency,
     items,
     ignoredProviderIds,
-    estimatedCommandRuns: items.length,
+    estimatedCommandRuns: selected.reduce(
+      (total, provider) =>
+        total + (provider.kind === 'runtime-command' ? 2 : 1),
+      0,
+    ),
     estimatedDurationMs: estimatedWallTime(items, config.concurrency),
   };
   return Object.freeze({

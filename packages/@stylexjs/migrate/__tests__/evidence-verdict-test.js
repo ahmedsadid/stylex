@@ -29,7 +29,9 @@ import {
   repositoryEvidenceIdentity,
   saveRepositoryEvidenceBundle,
   saveRepositoryEvidenceVerdict,
+  shortHash,
   writeArtifact,
+  writeRecord,
 } from '../src/index';
 import type {
   CandidateWorkspace,
@@ -449,6 +451,40 @@ describe('M5 evidence bundles and policy verdicts', () => {
     expect(loadRepositoryEvidenceVerdict(project, verdict.id)).toEqual(verdict);
   });
 
+  test('loads pre-M8 evidence bundles without changing their identity', () => {
+    const candidate = record({
+      proposer: { kind: 'deterministic', version: 'fixture-v1' },
+      classification: 'mechanical',
+      includeStatic: true,
+    });
+    const bundle = createRepositoryEvidenceBundle({
+      ...inputs(candidate),
+      candidates: [candidate],
+    });
+    const {
+      id: _id,
+      createdAt,
+      runtimeCoverage: _runtimeCoverage,
+      ...legacyStable
+    } = bundle;
+    const legacyId = shortHash(
+      hashString(canonicalJson(legacyStable as $FlowFixMe)),
+    );
+    writeRecord(project, 'evidence', `bundle-${legacyId}`, {
+      kind: 'repository-evidence-bundle',
+      id: legacyId,
+      ...legacyStable,
+      createdAt,
+    } as $FlowFixMe);
+    expect(loadRepositoryEvidenceBundle(project, legacyId)).toMatchObject({
+      id: legacyId,
+      runtimeCoverage: {
+        status: 'not-configured',
+        entries: [],
+      },
+    });
+  });
+
   test('repository success cannot replace missing mechanical static coverage', () => {
     const candidate = record({
       proposer: { kind: 'deterministic', version: 'fixture-v1' },
@@ -713,6 +749,7 @@ describe('M5 evidence bundles and policy verdicts', () => {
       includeStatic: false,
     });
     const evidence = runtimeInputs(candidate, 'pass');
+    expect(evidence.schedule.schedule.estimatedCommandRuns).toBe(3);
     const bundle = createRepositoryEvidenceBundle({
       ...evidence,
       candidates: [candidate],

@@ -515,6 +515,7 @@ export function runCli(
         {
           command: 'review',
           id: args[1],
+          warnings: result.warnings,
           verdict: result.verdict,
           evidence: result.evidence,
           candidates: result.candidates,
