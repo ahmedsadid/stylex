@@ -71,6 +71,7 @@ import { RENDER_LOCAL_CSS_MODEL } from '../referee/renderLocal';
 import type { EvidenceResult } from '../evidence/claims';
 import type { EmotionRefusal } from '../adapters/emotion/discover';
 import type { ConvertedOutcome } from '../adapters/emotion/convert';
+import type { Fact } from '../inventory/model';
 
 /**
  * The mechanical proposer, with its checks in the path.
@@ -949,4 +950,70 @@ export function proposeStaticConversion({
   }
 
   return verifyConversion({ source, filename, converted });
+}
+
+/**
+ * Internal repository-aware entry point.
+ *
+ * The public proposer above remains source-only: callers cannot turn Emotion
+ * semantics on with a boolean. The mechanical lifecycle may use this path only
+ * with the known, content-addressed activation fact from the current inventory;
+ * its input files are then part of the candidate snapshot and stale check.
+ */
+export function proposeStaticConversionWithProjectActivation({
+  source,
+  filename,
+  activationFact,
+}: {
+  +source: string,
+  +filename: string,
+  +activationFact: Fact,
+}): Proposal {
+  const value: $FlowFixMe = activationFact.value;
+  if (
+    activationFact.kind !== 'emotion-jsx-activation' ||
+    activationFact.status !== 'known' ||
+    value?.source !== 'project-config' ||
+    typeof value?.config !== 'string' ||
+    !activationFact.inputFiles.includes(filename) ||
+    !activationFact.inputFiles.includes(value.config)
+  ) {
+    return {
+      status: 'refused',
+      reason:
+        'repository-aware conversion requires a known project-config Emotion activation fact for this file',
+      evidence: Object.freeze([]),
+    };
+  }
+  const converted = convertSource(source, filename, {
+    knownEmotionActivation: true,
+  });
+  if (converted.status === 'unchanged') {
+    return converted;
+  }
+  if (converted.status === 'refused') {
+    return { status: 'refused', reason: converted.reason, evidence: [] };
+  }
+  const proposal = verifyConversion({ source, filename, converted });
+  if (proposal.status === 'unchanged') {
+    return proposal;
+  }
+  const sourceHash = hashString(source);
+  const targetHash = hashString(converted.code);
+  const activation = evidence({
+    check: 'emotion-jsx-activation',
+    provider: 'stylex-migrate',
+    subject: { file: filename, sourceHash, targetHash },
+    scope: [filename, value.config],
+    result: proposal.status === 'proposed' ? 'pass' : 'not-applicable',
+    detail: `known inventory fact ${activationFact.id} from ${value.config}`,
+    limitations: [
+      'activation was established by statically parsed project configuration bound to the candidate snapshot',
+      'dynamic JavaScript configuration is not executed by the inventory',
+    ],
+  });
+  return Object.freeze({
+    ...proposal,
+    evidence: Object.freeze([activation, ...proposal.evidence]),
+  });
 }

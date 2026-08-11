@@ -135,4 +135,73 @@ export const Button = () => <button css={{ color: 'red' }} />;
       }),
     ).toThrow('Mechanical candidate inputs differ from HEAD: src/Button.jsx');
   });
+
+  test('uses a known project activation fact and binds its config input', () => {
+    const source = `export const Button = () => <button css={{ color: 'red' }} />;
+`;
+    repo = createTempRepo({
+      'src/Button.jsx': source,
+      'tsconfig.json': JSON.stringify({
+        compilerOptions: { jsxImportSource: '@emotion/react' },
+      }),
+    });
+    workspaceRoot = createTempDir('stylex-migrate-mechanical-ws-');
+    const project = initializeProject({ repositoryRoot: repo });
+    const inventory = scanRepository({ repositoryRoot: repo });
+    saveInventory(project, inventory);
+    const plan = createPlan({ inventory });
+    savePlan(project, plan);
+    const cluster = plan.clusters[0];
+    expect(cluster.classification).toBe('mechanical');
+
+    const result = proposeMechanicalCandidate({
+      project,
+      clusterId: cluster.id,
+      workspaceRoot,
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.reason);
+    expect(result.record.snapshot.fileHashes['tsconfig.json']).toEqual(
+      expect.any(String),
+    );
+    expect(result.record.staticEvidence).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          check: 'emotion-jsx-activation',
+          result: 'pass',
+          scope: ['src/Button.jsx', 'tsconfig.json'],
+        }),
+      ]),
+    );
+    expect(result.record.candidate.patchText).toContain('stylex.create');
+    expect(readFile(repo, 'src/Button.jsx')).toBe(source);
+  });
+
+  test('makes a project activation configuration edit stale', () => {
+    repo = createTempRepo({
+      'src/Button.jsx':
+        "export const Button = () => <button css={{ color: 'red' }} />;\n",
+      'tsconfig.json': JSON.stringify({
+        compilerOptions: { jsxImportSource: '@emotion/react' },
+      }),
+    });
+    workspaceRoot = createTempDir('stylex-migrate-mechanical-ws-');
+    const project = initializeProject({ repositoryRoot: repo });
+    const inventory = scanRepository({ repositoryRoot: repo });
+    saveInventory(project, inventory);
+    const plan = createPlan({ inventory });
+    savePlan(project, plan);
+    writeFiles(repo, {
+      'tsconfig.json': JSON.stringify({ compilerOptions: {} }),
+    });
+
+    expect(() =>
+      proposeMechanicalCandidate({
+        project,
+        clusterId: plan.clusters[0].id,
+        workspaceRoot,
+      }),
+    ).toThrow('Mechanical candidate inputs differ from HEAD: tsconfig.json');
+  });
 });

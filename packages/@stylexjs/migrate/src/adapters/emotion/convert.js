@@ -21,7 +21,7 @@ import {
   emitPropsSpread,
 } from '../../static/emit';
 import { applyEditsWithPlacements } from '../../static/rewrite';
-import { discover } from './discover';
+import { discover, discoverSyntax } from './discover';
 import type { Edit } from '../../static/rewrite';
 import type { EmotionRefusal, EmotionSite } from './discover';
 import type { StyleObject } from '../../static/ir';
@@ -84,13 +84,17 @@ function registryOffsetFor(ast: $FlowFixMe, siteStart: number): number | null {
 export function convertSource(
   source: string,
   filename: string,
+  options?: { +knownEmotionActivation?: boolean },
 ): ConversionOutcome {
   const parsed = parseSource(source, filename);
   if (!parsed.ok) {
     return { status: 'refused', reason: parsed.reason };
   }
   const ast = parsed.ast;
-  const discovered = discover(ast);
+  const discovered =
+    options?.knownEmotionActivation === true
+      ? discoverSyntax(ast)
+      : discover(ast);
 
   if (!discovered.usesEmotion) {
     return {

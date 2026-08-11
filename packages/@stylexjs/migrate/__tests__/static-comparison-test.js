@@ -21,8 +21,10 @@ import {
 } from '../src/adapters/emotion/baseline';
 import {
   proposeStaticConversion,
+  proposeStaticConversionWithProjectActivation,
   verifyConversion,
 } from '../src/proposers/emotionStatic';
+import { createFact } from '../src/inventory/model';
 import { convertSource } from '../src/adapters/emotion/convert';
 import {
   MEDIA_QUERY_REFEREE_MODEL,
@@ -43,6 +45,38 @@ function file(styleObject: string): string {
 }
 
 describe('the comparison model', () => {
+  test('keeps project activation on the inventory-bound internal path', () => {
+    const source = "export const App = () => <div css={{ color: 'red' }} />;\n";
+    expect(
+      proposeStaticConversion({ source, filename: FILENAME }),
+    ).toMatchObject({ status: 'unchanged', reason: 'not-emotion' });
+    const activationFact = createFact({
+      kind: 'emotion-jsx-activation',
+      status: 'known',
+      value: { source: 'project-config', config: 'tsconfig.json' },
+      provenance: [
+        {
+          kind: 'config',
+          file: 'tsconfig.json',
+          detail: 'project configuration selects the Emotion JSX runtime',
+        },
+      ],
+      inputFiles: [FILENAME, 'tsconfig.json'],
+    });
+    const result = proposeStaticConversionWithProjectActivation({
+      source,
+      filename: FILENAME,
+      activationFact,
+    });
+    expect(result.status).toBe('proposed');
+    if (result.status !== 'proposed') throw new Error(result.reason);
+    expect(result.evidence[0]).toMatchObject({
+      check: 'emotion-jsx-activation',
+      result: 'pass',
+      scope: [FILENAME, 'tsconfig.json'],
+    });
+  });
+
   test('the proposal uses StyleX property order before running lint', () => {
     const result = proposeStaticConversion({
       source: file(`{

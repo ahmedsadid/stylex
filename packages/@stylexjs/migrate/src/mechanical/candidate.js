@@ -18,13 +18,17 @@ import { saveVerificationCandidate } from '../evidence/candidates';
 import { hashString } from '../kernel/hash';
 import { createSnapshot, detectStaleFiles } from '../kernel/snapshot';
 import { loadCurrentInventory, loadCurrentPlan } from '../planning/reports';
-import { proposeStaticConversion } from '../proposers/emotionStatic';
+import {
+  proposeStaticConversion,
+  proposeStaticConversionWithProjectActivation,
+} from '../proposers/emotionStatic';
 import { appendStateEvent } from '../state/events';
 import { canonicalJson } from '../state/json';
 import { readConfig } from '../state/project';
 import type { VerificationCandidate } from '../evidence/candidates';
 import type { EvidenceResult } from '../kernel/evidence';
 import type { ProjectState } from '../state/project';
+import type { Fact, Inventory } from '../inventory/model';
 
 export type MechanicalCandidateProposalResult =
   | {
@@ -57,6 +61,27 @@ function readText(root: string, file: string): string {
 
 function writeText(root: string, file: string, source: string): void {
   fs.writeFileSync(path.join(root, file), source, 'utf8');
+}
+
+function projectActivationFactForFile(
+  inventory: Inventory,
+  factIds: $ReadOnlyArray<string>,
+  file: string,
+): Fact | null {
+  const matches = inventory.facts.filter((fact) => {
+    const value: $FlowFixMe = fact.value;
+    return (
+      factIds.includes(fact.id) &&
+      fact.kind === 'emotion-jsx-activation' &&
+      fact.status === 'known' &&
+      value?.source === 'project-config' &&
+      fact.inputFiles.includes(file)
+    );
+  });
+  if (matches.length > 1) {
+    throw new Error(`Multiple project activation facts apply to ${file}`);
+  }
+  return matches[0] ?? null;
 }
 
 export function proposeMechanicalCandidate({
@@ -137,7 +162,19 @@ export function proposeMechanicalCandidate({
 
     for (const file of cluster.changeFiles) {
       const source = readText(workspace.path, file);
-      const proposal = proposeStaticConversion({ source, filename: file });
+      const activationFact = projectActivationFactForFile(
+        inventory,
+        cluster.factIds,
+        file,
+      );
+      const proposal =
+        activationFact == null
+          ? proposeStaticConversion({ source, filename: file })
+          : proposeStaticConversionWithProjectActivation({
+              source,
+              filename: file,
+              activationFact,
+            });
       if (proposal.status !== 'proposed') {
         return {
           ok: false,
