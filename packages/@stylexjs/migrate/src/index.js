@@ -145,6 +145,13 @@ export {
   normalizeRuntimeReport,
 } from './runtime/model';
 export { runRuntimeCommandProvider } from './runtime/provider';
+export { aggregateRuntimeCoverage } from './runtime/coverage';
+export type {
+  RuntimeCaseCoverageEntry,
+  RuntimeCaseCoverageStatus,
+  RuntimeCoverageStatus,
+  RuntimeCoverageSummary,
+} from './runtime/coverage';
 export type {
   RuntimeCaseComparison,
   RuntimeCaseDefinition,

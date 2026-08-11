@@ -11,6 +11,7 @@ import {
   createCandidateEvidenceSubject,
   createCandidatePatch,
   createCandidateWorkspace,
+  createEvidenceSchedule,
   createRepositoryEvidenceBundle,
   createSnapshot,
   canonicalJson,
@@ -22,6 +23,8 @@ import {
   loadRepositoryEvidenceBundle,
   loadRepositoryEvidenceVerdict,
   makeEvidence,
+  RUNTIME_PROTOCOL_VERSION,
+  compareRuntimeReports,
   removeCandidateWorkspace,
   repositoryEvidenceIdentity,
   saveRepositoryEvidenceBundle,
@@ -266,6 +269,145 @@ describe('M5 evidence bundles and policy verdicts', () => {
     };
   }
 
+  function runtimeInputs(
+    candidate: VerificationCandidate,
+    outcome: 'pass' | 'unavailable' | 'fail',
+  ): {
+    +subject: RepositoryEvidenceSubject,
+    +schedule: EvidenceScheduleResult,
+    +config: EvidenceConfig,
+  } {
+    const base = inputs(candidate);
+    const runtimeProvider = {
+      id: 'repo-runtime',
+      kind: 'runtime-command' as 'runtime-command',
+      check: 'runtime-render' as 'runtime-render',
+      checkVersion: 'runtime-selection-v1',
+      subject: 'candidate' as 'candidate',
+      cost: 'expensive' as 'expensive',
+      runtimeInterface: 'playwright' as 'playwright',
+      argv: ['runtime-fixture'],
+      versionArgv: ['runtime-fixture', '--version'],
+      cwd: '.',
+      allowedEnv: ['PATH'],
+      fileGlobs: ['src/**'],
+      limitations: [
+        'Runtime comparison covers only the recorded cases, states, viewports, and environment.',
+      ],
+      timeoutMs: 1000,
+      cases: [
+        {
+          id: 'a-default',
+          changePaths: ['src/A.js'],
+          siteIds: ['site-a'],
+          theme: 'default',
+          interaction: 'initial',
+          viewport: { width: 800, height: 600, deviceScaleFactor: 1 },
+        },
+      ],
+    };
+    const config: EvidenceConfig = {
+      ...base.config,
+      providers: [...base.config.providers, runtimeProvider],
+    };
+    const report = (value: string) => ({
+      protocolVersion: RUNTIME_PROTOCOL_VERSION,
+      environment: {
+        renderer: 'playwright',
+        rendererVersion: '1.56.1',
+        browser: 'chromium',
+        browserVersion: '140',
+        platform: 'test',
+      },
+      cases: [
+        {
+          id: 'a-default',
+          observation: {
+            computedStyles: { target: { color: value } },
+            dom: { target: { tagName: 'DIV' } },
+            attributes: { target: {} },
+            refs: { target: { attached: true } },
+            interactions: { initial: { complete: true } },
+          },
+        },
+      ],
+    });
+    const comparison = compareRuntimeReports({
+      cases: runtimeProvider.cases,
+      baseline: report('red'),
+      candidate: report(outcome === 'fail' ? 'blue' : 'red'),
+    });
+    const output = Buffer.from(`runtime check ${outcome}`);
+    const command = {
+      argv: ['runtime-fixture'],
+      versionArgv: ['runtime-fixture', '--version'],
+      cwd: '.',
+      allowedEnvKeys: ['PATH'],
+      environmentFingerprint: 'environment',
+      exitCode: outcome === 'unavailable' ? null : 0,
+    };
+    const provisional: RepositoryEvidenceResult = {
+      id: '',
+      check: 'runtime-render',
+      checkVersion: 'runtime-selection-v1',
+      provider: 'repo-runtime',
+      providerVersion: outcome === 'unavailable' ? 'unavailable' : 'tool-v1',
+      subject: base.subject,
+      result: outcome,
+      command,
+      platform: { platform: 'test', architecture: 'x64', node: 'v1' },
+      startedAt: '2026-08-10T00:00:00.000Z',
+      durationMs: 10,
+      outputHash: hashBytes(output),
+      outputSize: output.length,
+      outputPreview: output.toString('utf8'),
+      limitations: runtimeProvider.limitations,
+      ...(outcome === 'unavailable'
+        ? { detail: 'browser was unavailable' }
+        : {
+            runtime: {
+              runtimeInterface: 'playwright',
+              baselineCommand: command,
+              candidateCommand: command,
+              comparison,
+            },
+          }),
+    };
+    const evidence = {
+      ...provisional,
+      id: repositoryEvidenceIdentity(provisional),
+    };
+    const outputArtifact = writeArtifact(project, output);
+    const schedule = createEvidenceSchedule({
+      project,
+      subject: base.subject,
+      config,
+    });
+    return {
+      subject: base.subject,
+      config,
+      schedule: {
+        schedule,
+        entries: [
+          ...base.schedule.entries,
+          {
+            providerId: 'repo-runtime',
+            cost: 'expensive',
+            cacheHit: false,
+            estimatedDurationMs:
+              schedule.items.find((item) => item.providerId === 'repo-runtime')
+                ?.estimatedDurationMs ?? 300000,
+            elapsedMs: 10,
+            evidence,
+            outputArtifact,
+          },
+        ],
+        skippedProviderIds: [],
+        actualDurationMs: 20,
+      },
+    };
+  }
+
   test('complete static and repository evidence is auto-eligible only for deterministic work', () => {
     const candidate = record({
       proposer: { kind: 'deterministic', version: 'fixture-v1' },
@@ -344,7 +486,7 @@ describe('M5 evidence bundles and policy verdicts', () => {
       candidates: [candidate],
     });
     expect(verdict.outcome).toBe('auto-eligible');
-    expect(verdict.policyId).toBe('mechanical-repository-v9');
+    expect(verdict.policyId).toBe('mechanical-repository-v10');
   });
 
   test('the repository verdict accepts the pseudo-element referee model', () => {
@@ -363,7 +505,7 @@ describe('M5 evidence bundles and policy verdicts', () => {
       candidates: [candidate],
     });
     expect(verdict.outcome).toBe('auto-eligible');
-    expect(verdict.policyId).toBe('mechanical-repository-v9');
+    expect(verdict.policyId).toBe('mechanical-repository-v10');
   });
 
   test('the repository verdict accepts the media-query referee model', () => {
@@ -382,7 +524,7 @@ describe('M5 evidence bundles and policy verdicts', () => {
       candidates: [candidate],
     });
     expect(verdict.outcome).toBe('auto-eligible');
-    expect(verdict.policyId).toBe('mechanical-repository-v9');
+    expect(verdict.policyId).toBe('mechanical-repository-v10');
   });
 
   test('the repository verdict accepts the supports nesting referee model', () => {
@@ -401,7 +543,7 @@ describe('M5 evidence bundles and policy verdicts', () => {
       candidates: [candidate],
     });
     expect(verdict.outcome).toBe('auto-eligible');
-    expect(verdict.policyId).toBe('mechanical-repository-v9');
+    expect(verdict.policyId).toBe('mechanical-repository-v10');
   });
 
   test('the repository verdict accepts the keyframes referee model', () => {
@@ -420,7 +562,7 @@ describe('M5 evidence bundles and policy verdicts', () => {
       candidates: [candidate],
     });
     expect(verdict.outcome).toBe('auto-eligible');
-    expect(verdict.policyId).toBe('mechanical-repository-v9');
+    expect(verdict.policyId).toBe('mechanical-repository-v10');
   });
 
   test('the repository verdict accepts the box shorthand referee model', () => {
@@ -439,7 +581,7 @@ describe('M5 evidence bundles and policy verdicts', () => {
       candidates: [candidate],
     });
     expect(verdict.outcome).toBe('auto-eligible');
-    expect(verdict.policyId).toBe('mechanical-repository-v9');
+    expect(verdict.policyId).toBe('mechanical-repository-v10');
   });
 
   test('the repository verdict accepts the directional referee model', () => {
@@ -458,7 +600,7 @@ describe('M5 evidence bundles and policy verdicts', () => {
       candidates: [candidate],
     });
     expect(verdict.outcome).toBe('auto-eligible');
-    expect(verdict.policyId).toBe('mechanical-repository-v9');
+    expect(verdict.policyId).toBe('mechanical-repository-v10');
   });
 
   test('the repository verdict accepts the render-local css model', () => {
@@ -478,7 +620,7 @@ describe('M5 evidence bundles and policy verdicts', () => {
       candidates: [candidate],
     });
     expect(verdict.outcome).toBe('auto-eligible');
-    expect(verdict.policyId).toBe('mechanical-repository-v9');
+    expect(verdict.policyId).toBe('mechanical-repository-v10');
   });
 
   test('the repository verdict requires render-local call integrity', () => {
@@ -560,7 +702,82 @@ describe('M5 evidence bundles and policy verdicts', () => {
     });
     expect(review.outcome).toBe('eligible-for-review');
     expect(review.limitations.join('\n')).toContain(
-      'Runtime behavior was not compared',
+      'WARNING: Runtime behavior was not matched',
+    );
+  });
+
+  test('matched runtime cases earn a sampled claim with per-site coverage', () => {
+    const candidate = record({
+      proposer: { kind: 'agent', version: 'fixture-v1' },
+      classification: 'repeatable-contextual',
+      includeStatic: false,
+    });
+    const evidence = runtimeInputs(candidate, 'pass');
+    const bundle = createRepositoryEvidenceBundle({
+      ...evidence,
+      candidates: [candidate],
+    });
+    const verdict = evaluateRepositoryEvidence({
+      bundle,
+      candidates: [candidate],
+    });
+    expect(bundle.runtimeCoverage).toMatchObject({
+      status: 'matched',
+      coveredPaths: ['src/A.js'],
+      coveredSiteIds: ['site-a'],
+      uncoveredPaths: [],
+      uncoveredSiteIds: [],
+      entries: [
+        {
+          providerId: 'repo-runtime',
+          caseId: 'a-default',
+          theme: 'default',
+          interaction: 'initial',
+          status: 'matched',
+        },
+      ],
+    });
+    expect(verdict.outcome).toBe('eligible-for-review');
+    expect(verdict.claims.map((claim) => claim.claim).sort()).toEqual([
+      'checks-passed',
+      'runtime-matched',
+    ]);
+    expect(verdict.limitations.join('\n')).not.toContain('WARNING:');
+  });
+
+  test('runtime mismatch rejects, while runtime unavailability warns permissively', () => {
+    const candidate = record({
+      proposer: { kind: 'agent', version: 'fixture-v1' },
+      classification: 'repeatable-contextual',
+      includeStatic: false,
+    });
+    const differentEvidence = runtimeInputs(candidate, 'fail');
+    const different = evaluateRepositoryEvidence({
+      bundle: createRepositoryEvidenceBundle({
+        ...differentEvidence,
+        candidates: [candidate],
+      }),
+      candidates: [candidate],
+    });
+    expect(different.outcome).toBe('rejected');
+    expect(different.missingRequirements).toContain(
+      'repo-runtime failed runtime-render',
+    );
+
+    const unavailableEvidence = runtimeInputs(candidate, 'unavailable');
+    const unavailable = evaluateRepositoryEvidence({
+      bundle: createRepositoryEvidenceBundle({
+        ...unavailableEvidence,
+        candidates: [candidate],
+      }),
+      candidates: [candidate],
+    });
+    expect(unavailable.outcome).toBe('eligible-for-review');
+    expect(unavailable.claims.map((claim) => claim.claim)).toEqual([
+      'checks-passed',
+    ]);
+    expect(unavailable.limitations.join('\n')).toContain(
+      'WARNING: Runtime behavior was not matched',
     );
   });
 

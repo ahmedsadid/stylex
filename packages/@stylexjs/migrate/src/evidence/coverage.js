@@ -68,7 +68,9 @@ export function aggregateRepositoryCoverage({
   const coverage = subject.changes.map((change) => {
     const applicable = providers.filter(
       (provider) =>
-        provider.subject === subject.kind && relevant(provider, change.path),
+        provider.kind === 'command' &&
+        provider.subject === subject.kind &&
+        relevant(provider, change.path),
     );
     const observed = applicable
       .map((provider) => ({

@@ -14,6 +14,7 @@ import { validateCandidatePatch } from '../candidate/patch';
 import { repositoryEvidenceIdentity } from './command';
 import { normalizeEvidenceConfig } from './config';
 import { aggregateRepositoryCoverage } from './coverage';
+import { aggregateRuntimeCoverage } from '../runtime/coverage';
 import { evidenceScheduleIdentity } from './scheduler';
 import {
   createApplyPlanEvidenceSubject,
@@ -23,6 +24,7 @@ import {
 import type { EvidenceResult } from '../kernel/evidence';
 import type { EvidenceConfig } from './config';
 import type { CoverageSummary } from './coverage';
+import type { RuntimeCoverageSummary } from '../runtime/coverage';
 import type { RepositoryEvidenceResult } from './command';
 import type { RepositoryEvidenceSubject } from './subject';
 import type { EvidenceScheduleResult } from './scheduler';
@@ -51,6 +53,7 @@ export type RepositoryEvidenceBundle = {
   +repositoryEntries: $ReadOnlyArray<BundleRepositoryEntry>,
   +staticEntries: $ReadOnlyArray<BundleStaticEntry>,
   +coverage: CoverageSummary,
+  +runtimeCoverage: RuntimeCoverageSummary,
   +skippedProviderIds: $ReadOnlyArray<string>,
   +limitations: $ReadOnlyArray<string>,
   +createdAt: string,
@@ -78,6 +81,7 @@ function bundleIdentity(bundle: {
   +repositoryEntries: $ReadOnlyArray<BundleRepositoryEntry>,
   +staticEntries: $ReadOnlyArray<BundleStaticEntry>,
   +coverage: CoverageSummary,
+  +runtimeCoverage: RuntimeCoverageSummary,
   +skippedProviderIds: $ReadOnlyArray<string>,
   +limitations: $ReadOnlyArray<string>,
 }): string {
@@ -159,6 +163,11 @@ export function validateRepositoryEvidenceBundle(
     providers: bundle.providerConfig.providers,
     entries: bundle.repositoryEntries,
   });
+  const runtimeCoverage = aggregateRuntimeCoverage({
+    subject: bundle.subject,
+    providers: bundle.providerConfig.providers,
+    entries: bundle.repositoryEntries,
+  });
   const stable = {
     subject: bundle.subject,
     candidateIds: bundle.candidateIds,
@@ -168,6 +177,7 @@ export function validateRepositoryEvidenceBundle(
     repositoryEntries: bundle.repositoryEntries,
     staticEntries: bundle.staticEntries,
     coverage: bundle.coverage,
+    runtimeCoverage: bundle.runtimeCoverage,
     skippedProviderIds: bundle.skippedProviderIds,
     limitations: bundle.limitations,
   };
@@ -185,6 +195,8 @@ export function validateRepositoryEvidenceBundle(
     staticIds.some((id, index) => id !== candidateIds[index]) ||
     canonicalJson(coverage as $FlowFixMe) !==
       canonicalJson(bundle.coverage as $FlowFixMe) ||
+    canonicalJson(runtimeCoverage as $FlowFixMe) !==
+      canonicalJson(bundle.runtimeCoverage as $FlowFixMe) ||
     bundleIdentity(stable) !== bundle.id
   ) {
     throw new Error(`Integrity check failed for evidence bundle ${bundle.id}`);
@@ -333,6 +345,11 @@ export function createRepositoryEvidenceBundle({
       }),
     ),
   );
+  const runtimeCoverage = aggregateRuntimeCoverage({
+    subject,
+    providers: providerConfig.providers,
+    entries: repositoryEntries,
+  });
   const staticEntries = Object.freeze(
     candidates
       .map((record) =>
@@ -353,6 +370,7 @@ export function createRepositoryEvidenceBundle({
     repositoryEntries,
     staticEntries,
     coverage,
+    runtimeCoverage,
     skippedProviderIds: schedule.skippedProviderIds,
     limitations,
   };
@@ -380,6 +398,7 @@ function parseBundle(
     !Array.isArray(bundle.repositoryEntries) ||
     !Array.isArray(bundle.staticEntries) ||
     !object(bundle.coverage) ||
+    !object(bundle.runtimeCoverage) ||
     !Array.isArray(bundle.skippedProviderIds) ||
     !Array.isArray(bundle.limitations) ||
     typeof bundle.createdAt !== 'string'
@@ -397,6 +416,7 @@ function parseBundle(
     repositoryEntries: Object.freeze([...bundle.repositoryEntries]),
     staticEntries: Object.freeze([...bundle.staticEntries]),
     coverage: bundle.coverage,
+    runtimeCoverage: bundle.runtimeCoverage,
     skippedProviderIds: Object.freeze([...bundle.skippedProviderIds]),
     limitations: Object.freeze([...bundle.limitations]),
     createdAt: bundle.createdAt,
@@ -410,6 +430,7 @@ function parseBundle(
     repositoryEntries: parsed.repositoryEntries,
     staticEntries: parsed.staticEntries,
     coverage: parsed.coverage,
+    runtimeCoverage: parsed.runtimeCoverage,
     skippedProviderIds: parsed.skippedProviderIds,
     limitations: parsed.limitations,
   });

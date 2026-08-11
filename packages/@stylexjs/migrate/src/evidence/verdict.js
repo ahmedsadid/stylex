@@ -254,8 +254,8 @@ export function evaluateRepositoryEvidence({
   const classification = strongest(candidates);
   const policyId =
     classification === 'mechanical'
-      ? 'mechanical-repository-v9'
-      : 'contextual-repository-v1';
+      ? 'mechanical-repository-v10'
+      : 'contextual-repository-v2';
   const failures = new Set<string>();
   const missing = new Set<string>();
   const limitations = new Set<string>(bundle.limitations);
@@ -263,24 +263,39 @@ export function evaluateRepositoryEvidence({
   const repositoryResults = bundle.repositoryEntries.map(
     (entry) => entry.evidence,
   );
+  const providerKinds = new Map(
+    bundle.providerConfig.providers.map((provider) => [
+      provider.id,
+      provider.kind,
+    ]),
+  );
+  const commandResults = repositoryResults.filter(
+    (result) => providerKinds.get(result.provider) === 'command',
+  );
   for (const result of repositoryResults) {
     if (result.result === 'fail') {
       failures.add(`${result.provider} failed ${result.check}`);
-    } else if (result.result === 'unavailable') {
+    } else if (
+      result.result === 'unavailable' &&
+      providerKinds.get(result.provider) === 'command'
+    ) {
       missing.add(`${result.provider} was unavailable for ${result.check}`);
-    } else if (result.result !== 'pass') {
+    } else if (
+      result.result !== 'pass' &&
+      providerKinds.get(result.provider) === 'command'
+    ) {
       missing.add(`${result.provider} did not run ${result.check}`);
     }
   }
   if (bundle.coverage.status !== 'covered') {
     missing.add('repository check coverage is incomplete');
   }
-  if (repositoryResults.length === 0) {
+  if (commandResults.length === 0) {
     missing.add('no repository checks were configured for this subject');
   }
   if (
-    repositoryResults.length > 0 &&
-    repositoryResults.every((result) => result.result === 'pass') &&
+    commandResults.length > 0 &&
+    commandResults.every((result) => result.result === 'pass') &&
     bundle.coverage.status === 'covered'
   ) {
     claims.push(
@@ -292,6 +307,45 @@ export function evaluateRepositoryEvidence({
         detail:
           'all configured repository checks applicable to these paths passed',
       }),
+    );
+  }
+
+  if (bundle.runtimeCoverage.status === 'matched') {
+    const caseDescriptions = bundle.runtimeCoverage.entries.map(
+      (entry) =>
+        `${entry.providerId}/${entry.caseId} ` +
+        `theme=${entry.theme} interaction=${entry.interaction} ` +
+        `viewport=${entry.viewport.width}x${entry.viewport.height}@${entry.viewport.deviceScaleFactor}`,
+    );
+    const environments = bundle.runtimeCoverage.environments.map(
+      ({ providerId, environment }) =>
+        `${providerId}=${environment.renderer}@${environment.rendererVersion} ` +
+        `${environment.browser}@${environment.browserVersion} ${environment.platform}`,
+    );
+    claims.push(
+      Object.freeze({
+        claim: 'runtime-matched',
+        scope: bundle.runtimeCoverage.coveredPaths,
+        detail:
+          `recorded runtime cases matched: ${caseDescriptions.join('; ')}; ` +
+          `environments: ${environments.join('; ')}`,
+      }),
+    );
+    if (
+      bundle.runtimeCoverage.uncoveredPaths.length > 0 ||
+      bundle.runtimeCoverage.uncoveredSiteIds.length > 0
+    ) {
+      limitations.add(
+        'Runtime evidence did not cover every changed path/site: ' +
+          [
+            ...bundle.runtimeCoverage.uncoveredPaths,
+            ...bundle.runtimeCoverage.uncoveredSiteIds,
+          ].join(', '),
+      );
+    }
+  } else {
+    limitations.add(
+      'WARNING: Runtime behavior was not matched. Repository checks do not establish rendered styles, prop forwarding, refs, interactions, or theme-state behavior.',
     );
   }
 
@@ -312,10 +366,6 @@ export function evaluateRepositoryEvidence({
         }),
       );
     }
-  } else {
-    limitations.add(
-      'Runtime behavior was not compared. Repository checks do not establish rendered styles, prop forwarding, refs, interactions, or theme-state behavior.',
-    );
   }
 
   if (

@@ -30,6 +30,7 @@ import {
   saveRepositoryEvidenceVerdict,
 } from './verdict';
 import type { CoverageSummary } from './coverage';
+import type { RuntimeCoverageSummary } from '../runtime/coverage';
 import type { EvidenceProviderRegistry } from './registry';
 import type { EvidenceScheduleResult } from './scheduler';
 import type { RepositoryEvidenceSubject } from './subject';
@@ -42,6 +43,7 @@ export type VerificationResult = {
   +subject: RepositoryEvidenceSubject,
   +schedule: EvidenceScheduleResult,
   +coverage: CoverageSummary,
+  +runtimeCoverage: RuntimeCoverageSummary,
   +bundle: RepositoryEvidenceBundle,
   +verdict: RepositoryEvidenceVerdict,
 };
@@ -106,6 +108,7 @@ export async function verifyPersistedCandidates({
       now,
     });
     const coverage = bundle.coverage;
+    const runtimeCoverage = bundle.runtimeCoverage;
     const verdict = evaluateRepositoryEvidence({
       bundle,
       candidates,
@@ -147,7 +150,14 @@ export async function verifyPersistedCandidates({
         now,
       });
     }
-    return Object.freeze({ subject, schedule, coverage, bundle, verdict });
+    return Object.freeze({
+      subject,
+      schedule,
+      coverage,
+      runtimeCoverage,
+      bundle,
+      verdict,
+    });
   } finally {
     removeCandidateWorkspace(workspace);
     if (baselineWorkspace != null) {

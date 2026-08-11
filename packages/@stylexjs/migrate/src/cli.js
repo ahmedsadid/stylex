@@ -226,6 +226,7 @@ function review(
   project: ProjectState,
   id: string,
 ): {
+  +warnings: JsonValue,
   +verdict: JsonValue,
   +evidence: JsonValue,
   +candidates: JsonValue,
@@ -255,11 +256,15 @@ function review(
     return null;
   }
   return {
+    warnings: verdict.limitations.filter((limitation) =>
+      limitation.startsWith('WARNING:'),
+    ) as $FlowFixMe,
     verdict: verdict as $FlowFixMe,
     evidence: {
       id: bundle.id,
       subject: bundle.subject as $FlowFixMe,
       coverage: bundle.coverage as $FlowFixMe,
+      runtimeCoverage: bundle.runtimeCoverage as $FlowFixMe,
       repositoryChecks: bundle.repositoryEntries.map((entry) => ({
         provider: entry.providerId,
         check: entry.evidence.check,
@@ -628,6 +633,10 @@ export async function runCliAsync(
           skippedProviderIds: result.schedule.skippedProviderIds,
         } as $FlowFixMe,
         coverage: result.coverage as $FlowFixMe,
+        runtimeCoverage: result.runtimeCoverage as $FlowFixMe,
+        warnings: result.verdict.limitations.filter((limitation) =>
+          limitation.startsWith('WARNING:'),
+        ) as $FlowFixMe,
         evidenceBundleId: result.bundle.id,
         verdict: result.verdict as $FlowFixMe,
       },
