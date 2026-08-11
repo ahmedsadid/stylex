@@ -238,6 +238,15 @@ export const Contextual = () => <Button {...stylex.props(styles.root)} />;
       state: 'eligible-for-review',
       stateData: { verdictId: verified.verdict.id },
     });
+    const repeated = await verifyPersistedCandidates({
+      project,
+      candidateIds: [submitted.candidateId],
+      workspaceRoot,
+    });
+    expect(repeated.verdict.id).toBe(verified.verdict.id);
+    expect(inspectContextTask(project, opened.task.id).state).toBe(
+      'eligible-for-review',
+    );
   });
 
   test('reports missing evidence as an owner decision, not a pass', async () => {

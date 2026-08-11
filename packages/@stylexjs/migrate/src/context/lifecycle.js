@@ -303,18 +303,18 @@ function persistOpenAttempt({
   saveAttempt(project, attempt, now);
   appendStateEvent({
     project,
-    entityKind: 'attempt',
-    entityId: attempt.id,
-    state: 'open',
-    data: { taskId: task.id, attemptNumber: attempt.attemptNumber },
-    now,
-  });
-  appendStateEvent({
-    project,
     entityKind: 'task',
     entityId: task.id,
     state: 'open',
     data: { attemptId: attempt.id, attemptNumber: attempt.attemptNumber },
+    now,
+  });
+  appendStateEvent({
+    project,
+    entityKind: 'attempt',
+    entityId: attempt.id,
+    state: 'open',
+    data: { taskId: task.id, attemptNumber: attempt.attemptNumber },
     now,
   });
   return Object.freeze({ ok: true, state: 'open', task, attempt });
@@ -670,9 +670,42 @@ export function recordContextVerificationOutcome({
   const attempt = loadAttempt(project, attemptId);
   const entry = taskIndex(project, taskId);
   const data: $FlowFixMe = entry?.data;
+  if (entry != null && entry.state !== 'awaiting-verification') {
+    if (
+      entry.state === 'eligible-for-review' &&
+      data.candidateId === candidate.id &&
+      data.verdictId === verdict.id
+    ) {
+      return Object.freeze({
+        taskId,
+        attemptId,
+        candidateId: candidate.id,
+        verdictId: verdict.id,
+        state: 'eligible-for-review',
+      });
+    }
+    const failure: $FlowFixMe = data.failure;
+    if (
+      (entry.state === 'needs-replan' ||
+        entry.state === 'needs-owner-decision' ||
+        entry.state === 'blocked') &&
+      failure?.candidateId === candidate.id &&
+      failure?.verdictId === verdict.id
+    ) {
+      return Object.freeze({
+        taskId,
+        attemptId,
+        candidateId: candidate.id,
+        verdictId: verdict.id,
+        state: entry.state as any,
+      });
+    }
+    // A retry or later owner action superseded this candidate. Re-verifying
+    // its bytes remains useful evidence, but must not move the active task.
+    return null;
+  }
   if (
     entry == null ||
-    entry.state !== 'awaiting-verification' ||
     data.candidateId !== candidate.id ||
     data.attemptId !== attemptId ||
     attempt.taskId !== taskId ||

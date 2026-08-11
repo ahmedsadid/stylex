@@ -10,14 +10,17 @@
 import fs from 'fs';
 import path from 'path';
 import { canonicalRoot } from '../kernel/snapshot';
-import { parseJson, writeJsonAtomic } from './json';
+import { hashString } from '../kernel/hash';
+import { canonicalJson, parseJson, writeJsonAtomic } from './json';
 import {
+  RECORD_COLLECTIONS,
   STATE_DIRECTORY,
   STATE_SCHEMA_VERSION,
   initializeProject,
   openProject,
   readSchemaVersion,
 } from './project';
+import { rebuildIndexes } from './events';
 import type { JsonValue } from './json';
 import type { ProjectState } from './project';
 
@@ -64,6 +67,175 @@ function migrationBackup(stateRoot: string, now: string): string {
   );
   copyDirectory(stateRoot, destination);
   return destination;
+}
+
+function versionedRecordHash(
+  schemaVersion: number,
+  collection: string,
+  id: string,
+  payload: JsonValue,
+): string {
+  return hashString(canonicalJson({ schemaVersion, collection, id, payload }));
+}
+
+function upgradeV1Config(stateRoot: string): void {
+  const file = path.join(stateRoot, 'config.json');
+  const parsed = parseJson(fs.readFileSync(file, 'utf8'), file);
+  if (parsed == null || Array.isArray(parsed) || typeof parsed !== 'object') {
+    throw new Error('Cannot migrate an invalid schema-v1 project config');
+  }
+  const value: {
+    +schemaVersion: number,
+    +kind: string,
+    +writtenAt: string,
+    +contentHash: string,
+    +config: JsonValue,
+  } = parsed as any;
+  if (
+    value.schemaVersion !== 1 ||
+    value.kind !== 'config' ||
+    typeof value.writtenAt !== 'string' ||
+    value.contentHash !==
+      hashString(
+        canonicalJson({
+          schemaVersion: 1,
+          kind: 'config',
+          config: value.config,
+        }),
+      )
+  ) {
+    throw new Error('Cannot migrate an invalid schema-v1 project config');
+  }
+  writeJsonAtomic(file, {
+    ...value,
+    schemaVersion: STATE_SCHEMA_VERSION,
+    contentHash: hashString(
+      canonicalJson({
+        schemaVersion: STATE_SCHEMA_VERSION,
+        kind: 'config',
+        config: value.config,
+      }),
+    ),
+  });
+}
+
+function upgradeV1Records(stateRoot: string): void {
+  for (const collection of RECORD_COLLECTIONS) {
+    const directory = path.join(stateRoot, collection);
+    if (!fs.existsSync(directory)) {
+      continue;
+    }
+    for (const name of fs.readdirSync(directory).sort()) {
+      if (!name.endsWith('.json')) {
+        throw new Error(`Cannot migrate unexpected state file ${name}`);
+      }
+      const file = path.join(directory, name);
+      const parsed = parseJson(fs.readFileSync(file, 'utf8'), file);
+      if (
+        parsed == null ||
+        Array.isArray(parsed) ||
+        typeof parsed !== 'object'
+      ) {
+        throw new Error(`Cannot migrate invalid ${collection} record ${name}`);
+      }
+      const value: {
+        +schemaVersion: number,
+        +collection: string,
+        +id: string,
+        +writtenAt: string,
+        +contentHash: string,
+        +payload: JsonValue,
+      } = parsed as any;
+      if (
+        value.schemaVersion !== 1 ||
+        value.collection !== collection ||
+        typeof value.id !== 'string' ||
+        name !== `${value.id}.json` ||
+        typeof value.writtenAt !== 'string' ||
+        value.contentHash !==
+          versionedRecordHash(1, collection, value.id, value.payload)
+      ) {
+        throw new Error(`Cannot migrate invalid ${collection} record ${name}`);
+      }
+      writeJsonAtomic(file, {
+        ...value,
+        schemaVersion: STATE_SCHEMA_VERSION,
+        contentHash: versionedRecordHash(
+          STATE_SCHEMA_VERSION,
+          collection,
+          value.id,
+          value.payload,
+        ),
+      });
+    }
+  }
+}
+
+function versionedEventHash(value: JsonValue): string {
+  return hashString(canonicalJson(value));
+}
+
+function upgradeV1Events(stateRoot: string, now: string): void {
+  const source = path.join(stateRoot, 'events');
+  const safeTime = now.replace(/[^0-9A-Za-z.-]/g, '-');
+  const staging = path.join(stateRoot, `events-v2-${safeTime}`);
+  const replaced = path.join(stateRoot, `events-v1-${safeTime}`);
+  fs.mkdirSync(staging);
+  let sequence = 0;
+  let oldPrevious: string | null = null;
+  let newPrevious: string | null = null;
+  for (const name of fs.readdirSync(source).sort()) {
+    if (!/^\d{12}-[a-f0-9]{64}\.json$/.test(name)) {
+      throw new Error(`Cannot migrate unexpected state event ${name}`);
+    }
+    const file = path.join(source, name);
+    const value: $FlowFixMe = parseJson(fs.readFileSync(file, 'utf8'), file);
+    const oldBody = {
+      schemaVersion: value.schemaVersion,
+      sequence: value.sequence,
+      previousEventHash: value.previousEventHash,
+      entityKind: value.entityKind,
+      entityId: value.entityId,
+      state: value.state,
+      timestamp: value.timestamp,
+      data: value.data,
+    };
+    const oldHash = versionedEventHash(oldBody as $FlowFixMe);
+    if (
+      value.schemaVersion !== 1 ||
+      value.sequence !== sequence + 1 ||
+      value.previousEventHash !== oldPrevious ||
+      value.eventHash !== oldHash ||
+      name !== `${String(value.sequence).padStart(12, '0')}-${oldHash}.json`
+    ) {
+      throw new Error(`Cannot migrate invalid state event ${name}`);
+    }
+    const newBody = {
+      ...oldBody,
+      schemaVersion: STATE_SCHEMA_VERSION,
+      previousEventHash: newPrevious,
+    };
+    const newHash = versionedEventHash(newBody as $FlowFixMe);
+    writeJsonAtomic(
+      path.join(
+        staging,
+        `${String(value.sequence).padStart(12, '0')}-${newHash}.json`,
+      ),
+      { ...newBody, eventHash: newHash },
+    );
+    sequence = value.sequence;
+    oldPrevious = oldHash;
+    newPrevious = newHash;
+  }
+  fs.renameSync(source, replaced);
+  fs.renameSync(staging, source);
+  fs.rmSync(replaced, { recursive: true });
+}
+
+function upgradeV1State(stateRoot: string, now: string): void {
+  upgradeV1Config(stateRoot);
+  upgradeV1Records(stateRoot);
+  upgradeV1Events(stateRoot, now);
 }
 
 export function migrateProject({
@@ -113,13 +285,19 @@ export function migrateProject({
     typeof previous.createdAt === 'string'
       ? previous.createdAt
       : timestamp;
+  if (fromVersion === 1) {
+    upgradeV1State(stateRoot, timestamp);
+  }
   writeJsonAtomic(path.join(stateRoot, 'schema.json'), {
     schemaVersion: STATE_SCHEMA_VERSION,
     format: 'stylex-migrate-project-state',
     createdAt,
     updatedAt: timestamp,
   });
-  initializeProject({ repositoryRoot: root, now });
+  const project = initializeProject({ repositoryRoot: root, now });
+  if (fromVersion === 1) {
+    rebuildIndexes(project);
+  }
   return Object.freeze({
     fromVersion,
     toVersion: STATE_SCHEMA_VERSION,
