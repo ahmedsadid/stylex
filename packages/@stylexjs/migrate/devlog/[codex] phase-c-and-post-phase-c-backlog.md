@@ -31,13 +31,12 @@ manifest, policy version, end-to-end candidate test, and exit review.
 - [x] Physical `margin` and `padding` shorthands with one to four simple static
       components, independently expanded and compared with longhand conflicts
       resolved in authored order.
+- [x] Logical margin/padding inline/block edges and inline/block sizes under a
+      six-state direction/writing-mode referee. Unsafe StyleX physical lowering
+      is refused rather than treated as equivalent.
 
 ## Required before Phase C closes
 
-- [ ] Logical/physical properties after conflict modeling.
-  - Account for direction and writing mode rather than comparing only LTR rule
-    text.
-  - Refuse any case whose directional winner is not represented.
 - [ ] Render-local `css()` calls.
   - Prove evaluation count, timing, purity requirements, and binding identity
     are unchanged.

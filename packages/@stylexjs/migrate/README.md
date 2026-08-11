@@ -135,6 +135,11 @@ It admits separate, bounded modifier capabilities:
   authored value for StyleX; the verifier separately expands Emotion's emitted
   CSS and compares all four longhand winners, including shorthand/longhand reset
   order.
+- Logical margin/padding inline/block edges and inline/block sizes under model
+  `directional-referee-v1`. The referee compares LTR and RTL in horizontal-tb,
+  vertical-rl, and vertical-lr modes using StyleX's observed compiler
+  priorities. This intentionally refuses StyleX lowerings such as block-start to
+  top or inline-size to width when they differ in vertical writing modes.
 
 These are not general selector claims. A disagreement in any admitted state or
 target is a refusal. In particular, reversing two otherwise identical hover and
@@ -149,11 +154,11 @@ order. Media queries also cannot yet be mixed with pseudo-classes or
 pseudo-elements.
 
 Dynamic values, spreads, other shorthand families, `!important`, other
-pseudo-elements or pseudo-classes, other at-rules, deeper nesting, percentage or
-multiple keyframes, component `css` props, and sites that also have `className`,
-`style`, or a JSX spread remain outside this mechanical boundary. The comparison
-is local and static: it does not establish whole-page browser behavior,
-repository build success, or runtime equivalence.
+logical-property families, pseudo-elements or pseudo-classes, other at-rules,
+deeper nesting, percentage or multiple keyframes, component `css` props, and
+sites that also have `className`, `style`, or a JSX spread remain outside this
+mechanical boundary. The comparison is local and static: it does not establish
+whole-page browser behavior, repository build success, or runtime equivalence.
 
 The candidate persistence API is available for deterministic integrations. The
 end-user contextual candidate creation protocol and agent skill arrive in a
