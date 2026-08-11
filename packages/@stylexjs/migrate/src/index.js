@@ -153,6 +153,7 @@ export {
   validateThemeDecisionApproval,
   validateThemeDecisionDraft,
 } from './theme/model';
+export { discoverThemeFacts } from './theme/discover';
 export type {
   ThemeDecisionApproval,
   ThemeDecisionDraft,

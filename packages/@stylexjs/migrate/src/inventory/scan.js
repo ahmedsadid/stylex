@@ -14,6 +14,7 @@ import { hashBytes } from '../kernel/hash';
 import { matchesGlob } from '../candidate/scope';
 import { discoverSyntax, usesEmotion } from '../adapters/emotion/discover';
 import { parseSource } from '../static/parse';
+import { discoverThemeFacts } from '../theme/discover';
 import { analyzeProjectActivation } from './activation';
 import { analyzeLocalDependencies } from './resolve';
 import { createFact, inventoryIdentity, siteIdentity } from './model';
@@ -313,6 +314,8 @@ export function scanRepository({
     }
 
     const syntax = discoverSyntax(parsed.ast);
+    const themeFacts = discoverThemeFacts({ ast: parsed.ast, file });
+    facts.push(...themeFacts);
     const dependencyAnalysis = analyzeLocalDependencies({
       ast: parsed.ast,
       repositoryRoot: root,
@@ -333,6 +336,7 @@ export function scanRepository({
     const fileFactIds = [
       ...(activation == null ? [] : [activation.id]),
       ...dependencyFactIds,
+      ...themeFacts.map((fact) => fact.id),
     ];
     if (activation != null) {
       facts.push(activation);
@@ -359,7 +363,11 @@ export function scanRepository({
           sourceHash,
           syntax: 'supported',
           refusalReason: null,
-          factIds: Object.freeze([activation.id, ...dependencyFactIds]),
+          factIds: Object.freeze([
+            activation.id,
+            ...dependencyFactIds,
+            ...themeFacts.map((fact) => fact.id),
+          ]),
           classification: route.classification,
           routingReasons: route.reasons,
         });
@@ -389,7 +397,11 @@ export function scanRepository({
           sourceHash,
           syntax: 'refused',
           refusalReason: raw.reason,
-          factIds: Object.freeze([activation.id, ...dependencyFactIds]),
+          factIds: Object.freeze([
+            activation.id,
+            ...dependencyFactIds,
+            ...themeFacts.map((fact) => fact.id),
+          ]),
           classification: route.classification,
           routingReasons: route.reasons,
         });
