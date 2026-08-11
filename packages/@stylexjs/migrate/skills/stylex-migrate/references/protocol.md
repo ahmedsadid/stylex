@@ -1,9 +1,12 @@
 # Contextual task protocol
 
-The task capsule is immutable JSON bound to its goal, current plan and
-inventory, cluster, base commit, input hashes, facts, scope, decisions, checks,
-limitations, stop conditions, and maximum attempt count. The attempt capsule is
-also immutable and binds the external worktree plus prior failures.
+The task capsule is immutable JSON bound to its origin, goal, current inventory,
+optional plan, work unit, base commit, input hashes, facts, scope, decisions,
+required generated outputs, checks, limitations, stop conditions, and maximum
+attempt count. The attempt capsule is also immutable and binds the external
+worktree, required outputs, and prior failures. A `plan-cluster` origin comes
+from normal planning. A `theme-bridge` origin is a first-class workflow bound to
+one exact theme draft; it does not pretend to be a persisted plan cluster.
 
 ## Authority
 
@@ -21,6 +24,11 @@ The kernel is authoritative for:
 The proposer is responsible only for editing files in the supplied worktree. An
 explanation cannot widen scope, turn missing evidence into a pass, or create an
 additional attempt.
+
+Every `requiredOutputs` entry is kernel-generated and immutable. The kernel
+stores its bytes by content hash, seeds them when opening and retrying, and
+rejects submission if the file is missing, symlinked, or changed. Never run a
+formatter over a required output.
 
 Theme token-map approval is reserved for a named human. Agents may draft,
 inspect, propose from an already active decision, and verify; they may not run
@@ -66,3 +74,10 @@ one, stop and request replanning or an owner decision.
 The source checkout may contain unrelated dirt. Never copy it into the task.
 Declared task inputs are already bound to HEAD and a dirty declared input blocks
 opening the task.
+
+A theme bridge task may change only the exact bridge boundary files and emitted
+theme module. Preserve the existing Emotion provider during bridge coexistence.
+Do not add semantic wrappers or mutate global DOM state merely to carry StyleX
+props. Submission requires every declared generated variant to be referenced by
+`stylex.props` in the frozen boundary set. This syntactic check does not prove
+correct runtime selection, portal coverage, inversion, SSR, or hydration.

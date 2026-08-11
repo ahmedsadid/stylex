@@ -55,6 +55,7 @@ stylex-migrate context abandon <task-id>
 stylex-migrate theme candidates
 stylex-migrate theme draft <json-file> <author>
 stylex-migrate theme inspect <draft-id>
+stylex-migrate theme bridge open <draft-id> "<goal>"
 stylex-migrate theme approve <draft-id> <reviewer> --human-confirm
 stylex-migrate theme propose <draft-id>
 stylex-migrate config set ./stylex-migrate.config.json
@@ -118,6 +119,16 @@ configured runtime cases. Inspection additionally reports whether a pinned
 boundary imports a generated variant and passes it to `stylex.props`. If no such
 application is observed, approval remains permissive but records a second
 prominent warning that the declared bridge implementation was not observed.
+
+For a new bridge, `theme bridge open` creates an isolated contextual task from
+the exact unapproved draft. The kernel emits the target StyleX variables/theme
+module into that workspace and locks its byte hash; an agent or human may edit
+only the declared boundary files. Submission rejects generated-module changes,
+out-of-scope edits, uninspectable boundaries, and wiring that does not reference
+every generated variant through `stylex.props`. The result is still only a
+static wiring signal. Repository checks and relevant light/dark runtime cases
+remain necessary, and the developer applies any reviewed candidate outside the
+tool before rescanning and approving a current map.
 
 Repository checks are configured as argv arrays; shell command strings are
 rejected. Each provider declares whether it applies to one candidate or an exact

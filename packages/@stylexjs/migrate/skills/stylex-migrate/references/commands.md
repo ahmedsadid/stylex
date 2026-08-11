@@ -19,6 +19,7 @@ stylex-migrate context abandon <task-id>
 stylex-migrate theme candidates
 stylex-migrate theme draft <json-file> <author>
 stylex-migrate theme inspect <draft-id>
+stylex-migrate theme bridge open <draft-id> "<goal>"
 stylex-migrate theme approve <draft-id> <reviewer> --human-confirm
 stylex-migrate theme propose <draft-id>
 stylex-migrate verify <candidate-id>
@@ -55,6 +56,13 @@ content-addressed candidate, removes the external worktree, and returns the
 candidate ID. The name and versions describe the proposer; they grant no
 authority.
 
+`theme bridge open` creates a contextual task directly from an exact current
+theme draft before approval. It permits changes only to the draft's boundary
+files and target module, seeds the deterministic module as an immutable required
+output, and binds the draft definition hash to the snapshot and candidate. Use
+the normal `context inspect`, `context submit`, `candidate diff`, `verify`, and
+`review` commands afterward. The command never edits the source checkout.
+
 `theme candidates` reports each exact styled-theme file's definitions,
 `themePaths`, local-provider readiness, bridge readiness, and blockers. It is a
 selection report only; `bridgeReady` does not assert that a repository bridge
@@ -81,10 +89,11 @@ A draft may declare repository-managed bridge `coverageGlobs` and
 `boundaryFiles`. The boundary files are hash-pinned inputs, but the coverage is
 still a human scope assertion. It does not earn a provider-graph or runtime
 claim; configure runtime cases for the covered theme states and boundaries.
-Inspection reports whether any pinned boundary imports a generated variant and
-passes it to `stylex.props`. This observation is only a minimum implementation
-signal. When it is absent, approval records an additional warning rather than
-silently treating the bridge as implemented.
+Inspection reports `complete` only when every generated variant is referenced
+through `stylex.props` across parseable pinned boundaries. This observation is
+only a minimum wiring signal. When it is incomplete, use `theme bridge open`
+before recommending approval. Human approval remains technically permissive with
+warnings; incomplete observation never becomes runtime evidence.
 
 `verify` executes configured repository checks in an isolated candidate
 worktree. Runtime providers additionally execute the same argv against a

@@ -62,6 +62,16 @@ permissive: hash-pinning establishes which boundary code was reviewed, not that
 its provider graph is complete. The approval and verdict retain a prominent
 warning, and runtime cases are required before claiming `runtime-matched`.
 
+Before recommending approval for a new bridge, open a bridge integration task
+from the exact draft. The kernel emits and locks the target StyleX module; edit
+only the declared boundary files. Apply each generated variant through
+`stylex.props` using the same runtime selection source as the existing Emotion
+theme, while retaining the Emotion provider. Do not add a semantic wrapper or a
+global `documentElement` mutation without an explicit owner decision. Frozen
+static observation must see every variant, but it cannot establish selection,
+nesting, portals, inversion, SSR, hydration, or switching behavior. Those need
+repository-owned light/dark runtime cases.
+
 Spreads, class/style mixing, styled provider children, component or dynamic
 descendants, props reads, computed theme expressions, selectors, at-rules,
 embedded interpolations, exports, escapes, multiple eligible styled definitions

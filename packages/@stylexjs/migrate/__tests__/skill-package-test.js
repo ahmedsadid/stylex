@@ -27,6 +27,8 @@ describe('M7 vendor-neutral skill package', () => {
     expect(skill).toContain('theme propose');
     expect(skill).toContain('no-runtime warning');
     expect(skill).toContain('provider subtree');
+    expect(skill).toContain('stylex-migrate theme bridge open');
+    expect(skill).toContain('task.requiredOutputs');
     for (const reference of [
       'protocol.md',
       'commands.md',
