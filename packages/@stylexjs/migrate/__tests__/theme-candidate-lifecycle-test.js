@@ -170,6 +170,39 @@ export const App = () => <ThemeProvider theme={darkTheme}><main>App</main></Them
     expect(readFile(repo, 'src/Provider.tsx')).toBe(provider);
   });
 
+  test('pins a styled theme slice to the approved map and exact site', () => {
+    const styled = `import styled from '@emotion/styled';
+const CardRoot = styled.div\`color: \${p => p.theme.colors.foreground};\`;
+export const Card = () => <CardRoot data-card="true" />;
+`;
+    const { project, inventory, draft, approval } = prepare(
+      { 'src/Card.tsx': styled },
+      'src/Card.tsx',
+    );
+    const site = inventory.sites.find(
+      (item) =>
+        item.file === 'src/Card.tsx' && item.kind === 'styled-theme-intrinsic',
+    );
+    expect(site).toBeDefined();
+    const result = proposeThemeDecisionCandidate({
+      project,
+      draftId: draft.id,
+      workspaceRoot,
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.reason);
+    const output = candidateSource(result, 'src/Card.tsx');
+    expect(output).not.toContain("from '@emotion/styled'");
+    expect(output).toContain('color: themeVars.foreground');
+    expect(output).toContain('<div {...stylex.props(styles.cardRoot)}');
+    expect(result.record.siteIdsByFile['src/Card.tsx']).toEqual([site?.id]);
+    expect(result.record.candidate.decisionArtifactHashes).toEqual([
+      approval.artifactHash,
+    ]);
+    expect(result.record.classification).toBe('repeatable-contextual');
+    expect(readFile(repo, 'src/Card.tsx')).toBe(styled);
+  });
+
   test('a revised active map invalidates its dependent candidate at verification', async () => {
     const { project, inventory, draft } = prepare(
       {

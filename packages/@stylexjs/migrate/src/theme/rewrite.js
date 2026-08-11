@@ -8,12 +8,20 @@
  */
 
 import path from 'path';
+import { discoverStyledReadinessFacts } from '../adapters/emotion/styledReadiness';
+import { discoverStyledThemeTemplateFacts } from '../adapters/emotion/styledTemplate';
+import { discoverStyledUsageFacts } from '../adapters/emotion/styledUsage';
 import {
   collectUsedNames,
   freeName,
   resolveModuleBinding,
 } from '../static/bindings';
-import { STYLEX_MODULE, allocateKeys, serializeValue } from '../static/emit';
+import {
+  STYLEX_MODULE,
+  allocateKeys,
+  sanitizeKey,
+  serializeValue,
+} from '../static/emit';
 import { isShorthandProperty } from '../adapters/emotion/discover';
 import { applyEditsWithPlacements } from '../static/rewrite';
 import { parseSource } from '../static/parse';
@@ -44,7 +52,7 @@ export type ThemeProposal = {
 };
 
 export type ThemeProposalSiteSpan = {
-  +kind: 'theme-css' | 'theme-provider',
+  +kind: 'theme-css' | 'theme-provider' | 'theme-styled',
   +start: number,
   +end: number,
 };
@@ -66,6 +74,17 @@ type StyleSite = {
   +properties: $ReadOnlyArray<StyleProperty>,
 };
 
+type StyledThemeSite = {
+  +definitionStart: number,
+  +definitionEnd: number,
+  +declarationStart: number,
+  +declarationEnd: number,
+  +componentName: string,
+  +targetName: string,
+  +properties: $ReadOnlyArray<StyleProperty>,
+  +consumers: $ReadOnlyArray<$FlowFixMe>,
+};
+
 type ProviderEdit = {
   +openingStart: number,
   +openingEnd: number,
@@ -81,6 +100,10 @@ type ProviderEdit = {
 };
 
 const PROPERTY = /^[A-Za-z][A-Za-z0-9]*$/;
+
+function componentStyleKey(name: string): string {
+  return sanitizeKey(`${name.charAt(0).toLowerCase()}${name.slice(1)}`);
+}
 
 function elementName(opening: $FlowFixMe): string | null {
   return opening?.name?.type === 'JSXIdentifier'
@@ -111,20 +134,6 @@ function runtimeValue(value: $FlowFixMe): ThemeValue | null {
 
 function factValue(fact: Fact): $FlowFixMe {
   return fact.value as any;
-}
-
-function themeReadFacts(ast: $FlowFixMe, file: string): Map<string, Fact> {
-  return new Map(
-    discoverThemeFacts({ ast, file })
-      .filter((fact) => fact.kind === 'theme-read')
-      .map((fact) => {
-        const value = factValue(fact);
-        return [
-          `${String(value.span?.start)}:${String(value.span?.end)}`,
-          fact,
-        ];
-      }),
-  );
 }
 
 function styleObject(
@@ -172,11 +181,10 @@ function styleObject(
 
 function styleSites(
   ast: $FlowFixMe,
-  file: string,
   draft: ThemeDecisionDraft,
+  reads: Map<string, Fact>,
+  usedReads: Set<string>,
 ): { +sites: $ReadOnlyArray<StyleSite>, +problem: string | null } {
-  const reads = themeReadFacts(ast, file);
-  const usedReads = new Set<string>();
   const sites = [];
   let problem = null;
   walk(ast, (node) => {
@@ -243,13 +251,133 @@ function styleSites(
       }),
     );
   });
-  if (problem == null) {
-    const unhandled = [...reads.keys()].filter((key) => !usedReads.has(key));
-    if (unhandled.length > 0) {
-      problem = 'consumer contains theme reads outside converted css values';
-    }
-  }
   return Object.freeze({ sites: Object.freeze(sites), problem });
+}
+
+function styledThemeSites(
+  ast: $FlowFixMe,
+  file: string,
+  draft: ThemeDecisionDraft,
+  themeFacts: $ReadOnlyArray<Fact>,
+  usedReads: Set<string>,
+): {
+  +sites: $ReadOnlyArray<StyledThemeSite>,
+  +readinessFacts: $ReadOnlyArray<Fact>,
+  +problem: string | null,
+} {
+  const readinessFacts = discoverStyledReadinessFacts({ ast, file });
+  const usageFacts = discoverStyledUsageFacts({ ast, file, readinessFacts });
+  const grammarFacts = discoverStyledThemeTemplateFacts({
+    ast,
+    file,
+    readinessFacts,
+    usageFacts,
+    themeFacts,
+  }).filter((fact) => factValue(fact).supported === true);
+  if (grammarFacts.length === 0) {
+    return Object.freeze({
+      sites: Object.freeze([]),
+      readinessFacts,
+      problem: null,
+    });
+  }
+  if (grammarFacts.length !== 1) {
+    return Object.freeze({
+      sites: Object.freeze([]),
+      readinessFacts,
+      problem: 'theme consumer has more than one eligible styled definition',
+    });
+  }
+  const grammarFact = grammarFacts[0];
+  const grammar = factValue(grammarFact);
+  const usageFact = usageFacts.find((fact) => fact.id === grammar.usageFactId);
+  const readinessFact = readinessFacts.find(
+    (fact) => fact.id === grammar.definitionFactId,
+  );
+  const usage = usageFact == null ? null : factValue(usageFact);
+  const readiness = readinessFact == null ? null : factValue(readinessFact);
+  const declaration = usage?.declarationSpan;
+  if (
+    usageFact == null ||
+    readinessFact == null ||
+    usage?.themeSliceEligible !== true ||
+    typeof declaration?.start !== 'number' ||
+    typeof declaration?.end !== 'number' ||
+    typeof readiness?.span?.start !== 'number' ||
+    typeof readiness?.span?.end !== 'number' ||
+    typeof usage?.targetName !== 'string'
+  ) {
+    return Object.freeze({
+      sites: Object.freeze([]),
+      readinessFacts,
+      problem: 'styled theme graph is incomplete or stale',
+    });
+  }
+  const tokens = new Map(
+    draft.tokens.map((token) => [token.sourcePath, token.targetName]),
+  );
+  const properties = [];
+  for (const item of grammar.declarations ?? []) {
+    if (typeof item.property !== 'string') {
+      return Object.freeze({
+        sites: Object.freeze([]),
+        readinessFacts,
+        problem: 'styled theme declaration property is unavailable',
+      });
+    }
+    if (typeof item.value === 'string') {
+      properties.push(
+        Object.freeze({
+          name: item.property,
+          value: serializeValue(item.value),
+        }),
+      );
+      continue;
+    }
+    const targetName = tokens.get(String(item.sourcePath));
+    const readKey = `${String(item.readSpan?.start)}:${String(item.readSpan?.end)}`;
+    if (
+      targetName == null ||
+      !themeFacts.some((fact) => {
+        const value = factValue(fact);
+        return (
+          fact.kind === 'theme-read' &&
+          `${String(value.span?.start)}:${String(value.span?.end)}` ===
+            readKey &&
+          value.sourcePath === item.sourcePath
+        );
+      })
+    ) {
+      return Object.freeze({
+        sites: Object.freeze([]),
+        readinessFacts,
+        problem: 'styled theme callback uses an unmapped or stale token read',
+      });
+    }
+    usedReads.add(readKey);
+    properties.push(
+      Object.freeze({
+        name: item.property,
+        value: `${draft.varsExport}.${targetName}`,
+      }),
+    );
+  }
+  return Object.freeze({
+    sites: Object.freeze([
+      Object.freeze({
+        definitionStart: readiness.span.start,
+        definitionEnd: readiness.span.end,
+        declarationStart: declaration.start,
+        declarationEnd: declaration.end,
+        componentName: String(usage.name),
+        targetName: String(usage.targetName),
+        properties: Object.freeze(properties),
+        consumers: Object.freeze(usage.consumers ?? []),
+      }),
+    ]),
+    readinessFacts,
+    problem: null,
+  });
 }
 
 function emotionProviderImports(ast: $FlowFixMe): Map<string, $FlowFixMe> {
@@ -300,6 +428,34 @@ function identifierSpanCount(ast: $FlowFixMe, name: string): number {
     }
   });
   return spans.size;
+}
+
+function removableStyledImport(
+  ast: $FlowFixMe,
+  readinessFacts: $ReadOnlyArray<Fact>,
+): { +start: number, +end: number } | null {
+  if (readinessFacts.length !== 1) return null;
+  let declaration = null;
+  let localName = null;
+  for (const statement of ast.program?.body ?? []) {
+    if (
+      statement.type === 'ImportDeclaration' &&
+      statement.source?.value === '@emotion/styled' &&
+      (statement.specifiers ?? []).length === 1 &&
+      typeof statement.specifiers[0].local?.name === 'string'
+    ) {
+      declaration = statement;
+      localName = String(statement.specifiers[0].local.name);
+    }
+  }
+  if (declaration == null || localName == null) return null;
+  let uses = 0;
+  walk(ast, (node) => {
+    if (node.type === 'Identifier' && node.name === localName) uses++;
+  });
+  return uses === 2
+    ? Object.freeze({ start: declaration.start, end: declaration.end })
+    : null;
 }
 
 function extensionless(file: string): string {
@@ -426,7 +582,10 @@ function providerEdits(
 function registryText(
   stylexName: string,
   registryName: string,
-  sites: $ReadOnlyArray<StyleSite>,
+  sites: $ReadOnlyArray<{
+    +elementName: string,
+    +properties: $ReadOnlyArray<StyleProperty>,
+  }>,
 ): string {
   const keys = allocateKeys(sites.map((site) => site.elementName));
   const body = sites
@@ -473,12 +632,38 @@ function rewriteConsumer(
   const parsed = parseSource(source, file);
   if (!parsed.ok) return { ok: false, reason: parsed.reason };
   const ast = parsed.ast;
-  const style = styleSites(ast, file, draft);
+  const themeFacts = discoverThemeFacts({ ast, file });
+  const reads = new Map(
+    themeFacts
+      .filter((fact) => fact.kind === 'theme-read')
+      .map((fact) => {
+        const value = factValue(fact);
+        return [
+          `${String(value.span?.start)}:${String(value.span?.end)}`,
+          fact,
+        ];
+      }),
+  );
+  const usedReads = new Set<string>();
+  const style = styleSites(ast, draft, reads, usedReads);
+  const styled = styledThemeSites(ast, file, draft, themeFacts, usedReads);
   const providers = providerEdits(ast, file, draft);
   if (style.problem != null) return { ok: false, reason: style.problem };
+  if (styled.problem != null) return { ok: false, reason: styled.problem };
   if (providers.problem != null)
     return { ok: false, reason: providers.problem };
-  if (style.sites.length === 0 && providers.edits.length === 0) {
+  const unhandled = [...reads.keys()].filter((key) => !usedReads.has(key));
+  if (unhandled.length > 0) {
+    return {
+      ok: false,
+      reason: 'consumer contains theme reads outside converted style values',
+    };
+  }
+  if (
+    style.sites.length === 0 &&
+    styled.sites.length === 0 &&
+    providers.edits.length === 0
+  ) {
     return { ok: false, reason: 'consumer contains no approved theme rewrite' };
   }
 
@@ -490,7 +675,9 @@ function rewriteConsumer(
   const registryName = freeName('styles', usedNames);
   usedNames.add(registryName);
   const requiredExports = new Set<string>();
-  if (style.sites.length > 0) requiredExports.add(draft.varsExport);
+  if (style.sites.length > 0 || styled.sites.length > 0) {
+    requiredExports.add(draft.varsExport);
+  }
   providers.edits.forEach((edit) => requiredExports.add(edit.variantExport));
   const locals = new Map<string, string>();
   for (const exported of [...requiredExports].sort()) {
@@ -526,13 +713,26 @@ function rewriteConsumer(
         : `\n${importLines.join('\n')}`,
   });
 
-  if (style.sites.length > 0) {
-    const registryOffset = style.sites[0].statementStart;
+  if (style.sites.length > 0 || styled.sites.length > 0) {
+    const registryOffset = Math.min(
+      ...style.sites.map((site) => site.statementStart),
+      ...styled.sites.map((site) => site.declarationStart),
+    );
     const varsName = String(locals.get(draft.varsExport));
+    const registrySites = [
+      ...style.sites.map((site) => ({
+        elementName: site.elementName,
+        properties: site.properties,
+      })),
+      ...styled.sites.map((site) => ({
+        elementName: componentStyleKey(site.componentName),
+        properties: site.properties,
+      })),
+    ];
     const registry = registryText(
       stylex.localName,
       registryName,
-      style.sites.map((site) => ({
+      registrySites.map((site) => ({
         ...site,
         properties: site.properties.map((property) => ({
           ...property,
@@ -540,12 +740,23 @@ function rewriteConsumer(
         })),
       })),
     );
-    edits.push({
-      start: registryOffset,
-      end: registryOffset,
-      text: `${registry}\n\n`,
-    });
-    const keys = allocateKeys(style.sites.map((site) => site.elementName));
+    const replacedStyled = styled.sites.find(
+      (site) => site.declarationStart === registryOffset,
+    );
+    edits.push(
+      replacedStyled == null
+        ? {
+            start: registryOffset,
+            end: registryOffset,
+            text: `${registry}\n\n`,
+          }
+        : {
+            start: replacedStyled.declarationStart,
+            end: replacedStyled.declarationEnd,
+            text: registry,
+          },
+    );
+    const keys = allocateKeys(registrySites.map((site) => site.elementName));
     style.sites.forEach((site, index) => {
       edits.push({
         start: site.attributeStart,
@@ -553,6 +764,56 @@ function rewriteConsumer(
         text: `{...${stylex.localName}.props(${registryName}.${keys[index]})}`,
       });
     });
+    styled.sites.forEach((site, styledIndex) => {
+      if (site !== replacedStyled) {
+        edits.push({
+          start: site.declarationStart,
+          end: site.declarationEnd,
+          text: '',
+        });
+      }
+      const key = keys[style.sites.length + styledIndex];
+      for (const consumer of site.consumers) {
+        const opening = consumer.openingName;
+        if (
+          typeof opening?.start !== 'number' ||
+          typeof opening?.end !== 'number' ||
+          source.slice(opening.start, opening.end) !== site.componentName
+        ) {
+          throw new Error('styled theme JSX consumer boundary is stale');
+        }
+        edits.push(
+          { start: opening.start, end: opening.end, text: site.targetName },
+          {
+            start: opening.end,
+            end: opening.end,
+            text: ` {...${stylex.localName}.props(${registryName}.${key})}`,
+          },
+        );
+        const closing = consumer.closingName;
+        if (closing != null) {
+          if (
+            typeof closing.start !== 'number' ||
+            typeof closing.end !== 'number' ||
+            source.slice(closing.start, closing.end) !== site.componentName
+          ) {
+            throw new Error('styled theme JSX closing boundary is stale');
+          }
+          edits.push({
+            start: closing.start,
+            end: closing.end,
+            text: site.targetName,
+          });
+        }
+      }
+    });
+  }
+  const styledImport =
+    styled.sites.length > 0
+      ? removableStyledImport(ast, styled.readinessFacts)
+      : null;
+  if (styledImport != null) {
+    edits.push({ start: styledImport.start, end: styledImport.end, text: '' });
   }
   const removedImports = new Set<string>();
   for (const provider of providers.edits) {
@@ -596,6 +857,11 @@ function rewriteConsumer(
         kind: 'theme-provider' as 'theme-provider',
         start: provider.openingStart,
         end: provider.openingEnd,
+      })),
+      ...styled.sites.map((site) => ({
+        kind: 'theme-styled' as 'theme-styled',
+        start: site.definitionStart,
+        end: site.definitionEnd,
       })),
     ];
     return {

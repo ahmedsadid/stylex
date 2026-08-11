@@ -117,6 +117,82 @@ export const Account = () => (
     );
   });
 
+  test('atomically converts a closed intrinsic styled theme callback', () => {
+    const decision = approved(['src/components/Card.tsx']);
+    const result = proposeApprovedThemeFiles({
+      files: {
+        'src/components/Card.tsx': `import styled from '@emotion/styled';
+const CardRoot = styled.article\`
+  color: \${p => p.theme.colors.foreground};
+  padding-top: 4px;
+\`;
+export const Card = () => <CardRoot id="card"><span>Card</span></CardRoot>;
+`,
+        'src/theme/tokens.stylex.ts': null,
+      },
+      ...decision,
+    });
+    expect(result.status).toBe('proposed');
+    if (result.status !== 'proposed') throw new Error(result.reason);
+    const output = result.files['src/components/Card.tsx'];
+    expect(output).not.toContain("from '@emotion/styled'");
+    expect(output).not.toContain('CardRoot');
+    expect(output).toContain(
+      "import { themeVars } from '../theme/tokens.stylex';",
+    );
+    expect(output).toContain('color: themeVars.foreground');
+    expect(output).toContain("paddingTop: '4px'");
+    expect(output).toContain(
+      '<article {...stylex.props(styles.cardRoot)} id="card">',
+    );
+    expect(output).toContain('</article>');
+    expect(result.siteSpansByFile['src/components/Card.tsx']).toEqual([
+      expect.objectContaining({ kind: 'theme-styled' }),
+    ]);
+    expect(parseSource(output, 'src/components/Card.tsx').ok).toBe(true);
+  });
+
+  test('refuses an unmapped styled token without partial output', () => {
+    const decision = approved(['src/components/Card.tsx']);
+    const result = proposeApprovedThemeFiles({
+      files: {
+        'src/components/Card.tsx': `import styled from '@emotion/styled';
+const CardRoot = styled.div\`color: \${p => p.theme.colors.missing};\`;
+export const Card = () => <CardRoot />;
+`,
+        'src/theme/tokens.stylex.ts': null,
+      },
+      ...decision,
+    });
+    expect(result).toMatchObject({
+      status: 'refused',
+      file: 'src/components/Card.tsx',
+    });
+    if (result.status === 'refused') {
+      expect(result.reason).toMatch(/unmapped|outside converted/);
+    }
+  });
+
+  test('refuses multiple styled theme definitions in one consumer file', () => {
+    const decision = approved(['src/components/Card.tsx']);
+    const result = proposeApprovedThemeFiles({
+      files: {
+        'src/components/Card.tsx': `import styled from '@emotion/styled';
+const A = styled.div\`color: \${p => p.theme.colors.foreground};\`;
+const B = styled.span\`color: \${p => p.theme.colors.foreground};\`;
+export const Card = () => <A><B /></A>;
+`,
+        'src/theme/tokens.stylex.ts': null,
+      },
+      ...decision,
+    });
+    expect(result).toMatchObject({
+      status: 'refused',
+      file: 'src/components/Card.tsx',
+      reason: 'theme consumer has more than one eligible styled definition',
+    });
+  });
+
   test.each([
     [
       'an unmapped token',
