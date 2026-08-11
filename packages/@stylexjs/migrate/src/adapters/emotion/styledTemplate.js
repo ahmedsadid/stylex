@@ -357,9 +357,9 @@ export function discoverStyledThemeTemplateFacts({
   const output = [];
   const providerSpans = themeFacts
     .filter((fact) => fact.kind === 'theme-provider')
-    .map((fact) => {
+    .flatMap((fact) => {
       const value: $FlowFixMe = fact.value;
-      return value.subtreeSpan;
+      return typeof value.variantSource === 'string' ? [value.subtreeSpan] : [];
     })
     .filter(
       (span) =>

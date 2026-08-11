@@ -117,6 +117,7 @@ export function factory(styled) {
       themeTemplateGrammarFacts: 0,
       flatThemeTemplateGrammarEligible: 0,
       providerScopedThemeEligible: 0,
+      providerScopeMissing: 0,
       themeTemplateGrammarBlockedReasons: {},
       plannedThemeSites: 0,
     });

@@ -209,6 +209,7 @@ export const App = () => <ThemeProvider theme={darkTheme}><Card /></ThemeProvide
       themeTemplateGrammarFacts: 1,
       flatThemeTemplateGrammarEligible: 1,
       providerScopedThemeEligible: 1,
+      providerScopeMissing: 0,
       plannedThemeSites: 1,
     });
   });

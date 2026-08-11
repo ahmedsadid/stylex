@@ -441,10 +441,12 @@ function topLevelObjects(ast: $FlowFixMe): $ReadOnlyArray<{
 
 function providerUses(
   ast: $FlowFixMe,
+  file: string,
   providerBindings: $ReadOnlySet<string>,
 ): $ReadOnlyArray<{
   +providerBinding: string,
   +variant: string | null,
+  +variantSource: string | null,
   +status: FactStatus,
   +start: number,
   +end: number,
@@ -453,11 +455,34 @@ function providerUses(
   const output: Array<{
     +providerBinding: string,
     +variant: string | null,
+    +variantSource: string | null,
     +status: FactStatus,
     +start: number,
     +end: number,
     +subtreeSpan: { +start: number, +end: number },
   }> = [];
+  const importSources = new Map<string, string>();
+  for (const statement of ast.program?.body ?? []) {
+    if (
+      statement.type !== 'ImportDeclaration' ||
+      statement.importKind === 'type' ||
+      typeof statement.source?.value !== 'string'
+    ) {
+      continue;
+    }
+    for (const specifier of statement.specifiers ?? []) {
+      if (
+        specifier.importKind !== 'type' &&
+        specifier.local?.type === 'Identifier'
+      ) {
+        importSources.set(
+          String(specifier.local.name),
+          String(statement.source.value),
+        );
+      }
+    }
+  }
+  const localObjects = new Set(topLevelObjects(ast).map((item) => item.name));
   walk(ast, (node) => {
     if (
       node.type !== 'JSXElement' ||
@@ -475,10 +500,16 @@ function providerUses(
     const variant =
       expression?.type === 'Identifier' ? String(expression.name) : null;
     const status: FactStatus = variant == null ? 'inferred' : 'known';
+    const variantSource =
+      variant == null
+        ? null
+        : (importSources.get(variant) ??
+          (localObjects.has(variant) ? file : null));
     output.push(
       Object.freeze({
         providerBinding: String(opening.name.name),
         variant,
+        variantSource,
         status,
         start: Number(opening.start ?? 0),
         end: Number(opening.end ?? 0),
@@ -521,7 +552,7 @@ export function discoverThemeFacts({
     foundBindings.map((binding) => [binding.name, binding]),
   );
   const foundAliases = aliases(ast, bindingMap);
-  const providers = providerUses(ast, imports.providers);
+  const providers = providerUses(ast, file, imports.providers);
   const providerVariants = new Set(
     providers
       .map((provider) => provider.variant)

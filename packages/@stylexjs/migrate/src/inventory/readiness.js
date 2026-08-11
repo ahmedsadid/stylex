@@ -38,6 +38,7 @@ export type ReadinessSummary = {
     +themeTemplateGrammarFacts: number,
     +flatThemeTemplateGrammarEligible: number,
     +providerScopedThemeEligible: number,
+    +providerScopeMissing: number,
     +themeTemplateGrammarBlockedReasons: { +[string]: number },
     +plannedThemeSites: number,
   },
@@ -104,6 +105,7 @@ export function inventoryReadiness(
   let themeTemplateGrammarFacts = 0;
   let flatThemeTemplateGrammarEligible = 0;
   let providerScopedThemeEligible = 0;
+  let providerScopeMissing = 0;
   const themeTemplateGrammarBlockedReasons = {};
   let themeDefinitions = 0;
   let providers = 0;
@@ -146,10 +148,13 @@ export function inventoryReadiness(
     if (fact.kind === 'emotion-styled-theme-template-grammar') {
       const grammar: $FlowFixMe = fact.value;
       themeTemplateGrammarFacts++;
-      if (grammar.supported === true) flatThemeTemplateGrammarEligible++;
-      if (grammar.supported === true && grammar.providerScoped === true) {
-        providerScopedThemeEligible++;
-      } else bump(themeTemplateGrammarBlockedReasons, String(grammar.reason));
+      if (grammar.supported === true) {
+        flatThemeTemplateGrammarEligible++;
+        if (grammar.providerScoped === true) providerScopedThemeEligible++;
+        else providerScopeMissing++;
+      } else {
+        bump(themeTemplateGrammarBlockedReasons, String(grammar.reason));
+      }
       continue;
     }
     if (fact.kind !== 'emotion-styled-readiness') continue;
@@ -274,6 +279,7 @@ export function inventoryReadiness(
       themeTemplateGrammarFacts,
       flatThemeTemplateGrammarEligible,
       providerScopedThemeEligible,
+      providerScopeMissing,
       themeTemplateGrammarBlockedReasons: Object.freeze(
         sortedThemeTemplateGrammarBlockedReasons,
       ),
