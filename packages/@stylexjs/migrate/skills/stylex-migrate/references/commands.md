@@ -9,6 +9,7 @@ stylex-migrate scan
 stylex-migrate readiness
 stylex-migrate plan
 stylex-migrate mechanical propose <cluster-id>
+stylex-migrate styled propose <cluster-id>
 stylex-migrate candidate diff <candidate-id>
 stylex-migrate context open <cluster-id> "<goal>"
 stylex-migrate context open <task-id>
@@ -28,15 +29,21 @@ stylex-migrate status
 `readiness` summarizes binding-backed Emotion styled definitions, same-file
 usage and escape graphs, theme facts, and css-prop classifications from the
 current scan. `firstSliceEligible` means only that the initial binding and JSX
-boundary is closed. It does not accept the CSS grammar. Styled samples remain
-unplanned observations until the kernel builds a definition/consumer cluster;
-do not convert one merely because it appears in this report.
+boundary is closed; `flatTemplateGrammarEligible` adds only the bounded CSS
+syntax screen. Neither alone authorizes an edit. Continue only when the current
+plan contains an isolated `styled-intrinsic` cluster.
 
 `mechanical propose` accepts only a current planned mechanical cluster. It runs
 the deterministic conversion and its static comparison checks, then freezes the
 exact checked bytes without modifying the source checkout. `candidate diff`
 prints that exact frozen patch for review. Its output is intentionally verbatim,
 so do not send it to an external system without the developer's authorization.
+
+`styled propose` atomically rewrites one planned closed intrinsic definition and
+all of its known direct JSX consumers. It freezes only output that passed the
+built-in StyleX and static CSS checks. The candidate remains
+repeatable-contextual: repository checks are mandatory, and missing runtime
+evidence remains a prominent limitation.
 
 The first `context open` creates a task from the current plan. The second form
 opens attempt two only when the kernel recorded `needs-replan`. It cannot reopen

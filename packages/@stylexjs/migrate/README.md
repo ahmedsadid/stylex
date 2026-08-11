@@ -46,6 +46,7 @@ stylex-migrate scan
 stylex-migrate readiness
 stylex-migrate plan
 stylex-migrate mechanical propose <cluster-id>
+stylex-migrate styled propose <cluster-id>
 stylex-migrate candidate diff <candidate-id>
 stylex-migrate context open <cluster-id> "<goal>"
 stylex-migrate context inspect <task-id>
@@ -74,15 +75,23 @@ change ownership and retains the inputs and facts behind each classification.
 escape graphs, theme facts, and css-prop classifications. A
 `firstSliceEligible` styled count means that the binding passed the initial
 component-boundary screen; it does not mean that its CSS grammar has been
-accepted or that a candidate exists. Styled readiness and usage facts are
-observations, not planned or convertible sites. `status` reports counts by
-classification and state; it does not report a conversion percentage.
+accepted or that a candidate exists. `flatTemplateGrammarEligible` means only
+that the closed template is a bounded flat declaration list. `plannedSites`
+counts the conservative one-definition-per-file styled sites that reached the
+repeatable-contextual route. Only those exact clusters may be passed to
+`styled propose`; all earlier facts remain observations. `status` reports
+counts by classification and state; it does not report a conversion percentage.
 `explain` makes routing and blocking reasons available after restarting the
 process.
 
 Every command also accepts `--json`. Run `init` before the other commands.
 `mechanical propose` accepts only a current planned mechanical cluster and
 freezes the exact bytes that passed its static comparison checks.
+`styled propose` accepts only an isolated planned closed-intrinsic styled
+cluster. It atomically rewrites the definition and every known direct JSX
+consumer, freezes the bytes that passed StyleX compile/lint, wiring integrity,
+and static CSS comparison, and still requires repository evidence under the
+contextual policy.
 `candidate diff` prints that frozen patch verbatim for developer review; it does
 not apply it. Theme approval requires an explicit named human and cannot be
 delegated to an agent.

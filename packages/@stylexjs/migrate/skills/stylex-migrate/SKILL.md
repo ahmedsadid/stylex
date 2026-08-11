@@ -18,8 +18,9 @@ migration work. Treat `emotion-styled-readiness` facts as syntax observations
 and `emotion-styled-usage` facts as same-file component-boundary observations
 only. `firstSliceEligible` means that the binding has no known boundary blocker;
 it does not accept the CSS grammar, create a cluster, authorize edits, or claim
-that a styled definition is convertible. Stop if the requested work has no
-planned cluster.
+that a styled definition is convertible. A styled edit is authorized only when
+the current plan contains an isolated `styled-intrinsic` cluster. Stop if the
+requested work has no planned cluster.
 
 Use `stylex-migrate explain <cluster-id>` to follow the current plan's route.
 Use the mechanical workflow only for a planned `mechanical` cluster. Use the
@@ -40,6 +41,22 @@ different lane.
 4. Report the exact claims, comparison models, repository checks, coverage,
    warnings, and limitations. Static CSS matching is bounded to the named models
    and does not imply runtime equivalence.
+
+## Run a closed intrinsic styled proposal
+
+1. Inspect the current readiness and plan. Continue only for an isolated,
+   planned `styled-intrinsic` cluster; do not choose an unplanned readiness or
+   usage fact manually.
+2. Run `stylex-migrate styled propose <cluster-id>`. A refusal is a result; do
+   not rewrite only the definition or bypass an escape/grammar boundary.
+3. Inspect the exact frozen patch with
+   `stylex-migrate candidate diff <candidate-id>`.
+4. Configure applicable repository checks, then run
+   `stylex-migrate verify <candidate-id>` and
+   `stylex-migrate review <candidate-id>`.
+5. Report the exact static comparison model, repository-check coverage,
+   runtime coverage, warnings, and limitations. Built-in static checks do not
+   establish component-tree identity, refs, hydration, or rendered behavior.
 
 ## Run a contextual task
 
