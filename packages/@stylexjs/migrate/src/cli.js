@@ -52,6 +52,15 @@ import {
   openContextTask,
   submitContextAttempt,
 } from './context/lifecycle';
+import {
+  approvePersistedThemeDecision,
+  assertActiveThemeCandidateDecisions,
+  inspectThemeDecision,
+  loadThemeDecisionDraft,
+  persistThemeDecisionDraft,
+} from './theme/decisions';
+import { proposeThemeDecisionCandidate } from './theme/candidate';
+import type { CandidatePatch } from './candidate/patch';
 
 type WriteOutput = (text: string) => mixed;
 
@@ -67,6 +76,12 @@ Commands:
   init                    initialize local project state
   scan                    inventory configured source files
   plan                    form migration clusters from the latest inventory
+  theme draft <json-file> <author>
+                          validate and persist a theme token-map draft
+  theme inspect <draft>   show approval and active/superseded state
+  theme approve <draft> <reviewer> --human-confirm
+                          record a human approval; agents must not run this
+  theme propose <draft>   freeze a candidate from the active approved map
   context open <cluster> <goal>
                           open a contextual workspace from a planned cluster
   context open <task>     open the kernel-owned retry for a failed task
@@ -88,6 +103,7 @@ Options:
   --json                  emit stable JSON
   --dry-run               describe a schema migration without changing files
   --confirm               allow cleanup to delete listed unused files
+  --human-confirm         attest that a named human reviewed the theme map
 `;
 
 function present(value: JsonValue, json: boolean, stdout: WriteOutput): void {
@@ -168,6 +184,15 @@ function explain(
   if (inventory?.id === id) {
     return { kind: 'inventory', detail: inventory as $FlowFixMe };
   }
+  if (id.startsWith('theme-draft-')) {
+    const draft = loadThemeDecisionDraft(project, id);
+    if (draft != null) {
+      return {
+        kind: 'theme-decision',
+        detail: inspectThemeDecision(project, id) as $FlowFixMe,
+      };
+    }
+  }
   if (/^[a-f0-9]{16}$/.test(id)) {
     const candidate = loadVerificationCandidate(project, id);
     if (candidate != null) {
@@ -183,6 +208,11 @@ function explain(
           subjectId: subject.id,
           classification: candidate.classification,
           proposer: candidate.candidate.proposer as $FlowFixMe,
+          decisionArtifactHashes: candidate.candidate.decisionArtifactHashes,
+          decisionStatus: candidateDecisionStatus(
+            project,
+            candidate.candidate,
+          ) as $FlowFixMe,
           files: candidate.candidate.touchedFiles,
           clusters: candidate.candidate.clusterIds,
           latestVerdict: loadLatestRepositoryEvidenceVerdict(
@@ -222,6 +252,24 @@ function explain(
   return null;
 }
 
+function candidateDecisionStatus(
+  project: ProjectState,
+  candidate: CandidatePatch,
+): { +status: string, +reason: string | null } {
+  if (candidate.decisionArtifactHashes.length === 0) {
+    return { status: 'not-applicable', reason: null };
+  }
+  try {
+    assertActiveThemeCandidateDecisions(project, candidate);
+    return { status: 'active', reason: null };
+  } catch (error) {
+    return {
+      status: 'stale',
+      reason: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
 function review(
   project: ProjectState,
   id: string,
@@ -255,10 +303,26 @@ function review(
   if (verdict == null || bundle == null) {
     return null;
   }
+  const candidateRecords = bundle.candidateIds.map((candidateId) => ({
+    candidateId,
+    record: loadVerificationCandidate(project, candidateId),
+  }));
+  const decisionWarnings = candidateRecords
+    .map(({ record }) =>
+      record == null
+        ? null
+        : candidateDecisionStatus(project, record.candidate),
+    )
+    .flatMap((status) =>
+      status?.status === 'stale' ? [`WARNING: ${String(status.reason)}`] : [],
+    );
   return {
-    warnings: verdict.limitations.filter((limitation) =>
-      limitation.startsWith('WARNING:'),
-    ) as $FlowFixMe,
+    warnings: [
+      ...verdict.limitations.filter((limitation) =>
+        limitation.startsWith('WARNING:'),
+      ),
+      ...decisionWarnings,
+    ] as $FlowFixMe,
     verdict: verdict as $FlowFixMe,
     evidence: {
       id: bundle.id,
@@ -275,8 +339,7 @@ function review(
       })) as $FlowFixMe,
       skippedProviderIds: bundle.skippedProviderIds,
     },
-    candidates: bundle.candidateIds.map((candidateId) => {
-      const record = loadVerificationCandidate(project, candidateId);
+    candidates: candidateRecords.map(({ candidateId, record }) => {
       return record == null
         ? { id: candidateId, missing: true }
         : {
@@ -284,6 +347,8 @@ function review(
             classification: record.classification,
             proposer: record.candidate.proposer,
             files: record.candidate.touchedFiles,
+            decisionArtifactHashes: record.candidate.decisionArtifactHashes,
+            decisionStatus: candidateDecisionStatus(project, record.candidate),
           };
     }) as $FlowFixMe,
   };
@@ -348,6 +413,91 @@ export function runCli(
         stdout,
       );
       return 0;
+    }
+    if (args[0] === 'theme' && args[1] === 'draft' && args.length === 4) {
+      const project = openProject(cwd);
+      const source = path.resolve(cwd, args[2]);
+      const definition = parseJson(fs.readFileSync(source, 'utf8'), source);
+      const draft = persistThemeDecisionDraft({
+        project,
+        definition,
+        draftedBy: args[3],
+      });
+      present(
+        {
+          command: 'theme draft',
+          state: 'drafted',
+          draft: draft as $FlowFixMe,
+          next: `A human must inspect this map, then run stylex-migrate theme approve ${draft.id} <reviewer> --human-confirm.`,
+        },
+        json,
+        stdout,
+      );
+      return 0;
+    }
+    if (args[0] === 'theme' && args[1] === 'inspect' && args.length === 3) {
+      const inspection = inspectThemeDecision(openProject(cwd), args[2]);
+      present(
+        {
+          command: 'theme inspect',
+          ...inspection,
+        } as $FlowFixMe,
+        json,
+        stdout,
+      );
+      return 0;
+    }
+    if (args[0] === 'theme' && args[1] === 'approve' && args.length === 4) {
+      if (!argv.includes('--human-confirm')) {
+        throw new Error(
+          'Theme approval requires --human-confirm from the named human reviewer. Agents must not approve their own drafts.',
+        );
+      }
+      const project = openProject(cwd);
+      const approval = approvePersistedThemeDecision({
+        project,
+        draftId: args[2],
+        approvedBy: args[3],
+      });
+      present(
+        {
+          command: 'theme approve',
+          state: 'active',
+          approval: approval as $FlowFixMe,
+          warnings: approval.limitations,
+          next: `Run stylex-migrate theme propose ${args[2]} to create an immutable candidate.`,
+        },
+        json,
+        stdout,
+      );
+      return 0;
+    }
+    if (args[0] === 'theme' && args[1] === 'propose' && args.length === 3) {
+      const result = proposeThemeDecisionCandidate({
+        project: openProject(cwd),
+        draftId: args[2],
+      });
+      present(
+        result.ok
+          ? {
+              command: 'theme propose',
+              state: 'frozen',
+              candidateId: result.record.candidate.id,
+              draftId: result.draftId,
+              approvalArtifactHash: result.approvalArtifactHash,
+              changedFiles: result.record.candidate.touchedFiles,
+              next: `Run stylex-migrate verify ${result.record.candidate.id}.`,
+            }
+          : {
+              command: 'theme propose',
+              state: 'refused',
+              reason: result.reason,
+              file: result.file,
+            },
+        json,
+        stdout,
+      );
+      return result.ok ? 0 : 3;
     }
     if (args[0] === 'context' && args[1] === 'open') {
       const project = openProject(cwd);
