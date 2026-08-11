@@ -248,9 +248,11 @@ export type {
   ContextAttemptCapsule,
   ContextDeclaredInput,
   ContextFailure,
+  ContextRequiredOutput,
   ContextRequiredCheck,
   ContextScope,
   ContextTaskCapsule,
+  ContextTaskOrigin,
 } from './context/capsule';
 
 export { redact, redactText } from './state/redact';

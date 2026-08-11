@@ -8,11 +8,31 @@
  */
 
 import { hashString, shortHash } from '../kernel/hash';
+import { matchesGlob } from '../candidate/scope';
 import { canonicalJson, immutableJson } from '../state/json';
 import type { Cluster, Fact } from '../inventory/model';
 
-export const CONTEXT_PROTOCOL_VERSION: string = 'stylex-migrate-context-v1';
+export const CONTEXT_PROTOCOL_VERSION: string = 'stylex-migrate-context-v2';
 export const CONTEXT_MAX_ATTEMPTS: number = 2;
+
+export type ContextTaskOrigin =
+  | {
+      +kind: 'plan-cluster',
+      +clusterId: string,
+    }
+  | {
+      +kind: 'theme-bridge',
+      +draftId: string,
+      +definitionHash: string,
+      +targetModule: string,
+    };
+
+export type ContextRequiredOutput = {
+  +path: string,
+  +targetHash: string,
+  +role: 'generated-theme-module',
+  +mutable: false,
+};
 
 export type ContextDeclaredInput = {
   +path: string,
@@ -40,6 +60,7 @@ export type ContextTaskCapsule = {
   +id: string,
   +definitionHash: string,
   +goal: string,
+  +origin: ContextTaskOrigin,
   +inventoryId: string,
   +planId: string,
   +cluster: Cluster,
@@ -52,6 +73,7 @@ export type ContextTaskCapsule = {
   +declaredInputs: $ReadOnlyArray<ContextDeclaredInput>,
   +facts: $ReadOnlyArray<Fact>,
   +scope: ContextScope,
+  +requiredOutputs: $ReadOnlyArray<ContextRequiredOutput>,
   +decisionArtifactHashes: $ReadOnlyArray<string>,
   +requiredChecks: $ReadOnlyArray<ContextRequiredCheck>,
   +limitations: $ReadOnlyArray<string>,
@@ -63,6 +85,7 @@ export type ContextTaskCapsule = {
 type ContextTaskDefinition = {
   +protocolVersion: string,
   +goal: string,
+  +origin: ContextTaskOrigin,
   +inventoryId: string,
   +planId: string,
   +cluster: Cluster,
@@ -70,6 +93,7 @@ type ContextTaskDefinition = {
   +declaredInputs: $ReadOnlyArray<ContextDeclaredInput>,
   +facts: $ReadOnlyArray<Fact>,
   +scope: ContextScope,
+  +requiredOutputs: $ReadOnlyArray<ContextRequiredOutput>,
   +decisionArtifactHashes: $ReadOnlyArray<string>,
   +requiredChecks: $ReadOnlyArray<ContextRequiredCheck>,
   +limitations: $ReadOnlyArray<string>,
@@ -97,6 +121,7 @@ export type ContextAttemptCapsule = {
     +baseCommit: string,
     +allowedPaths: $ReadOnlyArray<string>,
   },
+  +requiredOutputs: $ReadOnlyArray<ContextRequiredOutput>,
   +priorFailures: $ReadOnlyArray<ContextFailure>,
   +previousCandidateId: string | null,
   +openedAt: string,
@@ -109,6 +134,7 @@ type ContextAttemptDefinition = {
   +taskDefinitionHash: string,
   +attemptNumber: number,
   +workspace: ContextAttemptCapsule['workspace'],
+  +requiredOutputs: $ReadOnlyArray<ContextRequiredOutput>,
   +priorFailures: $ReadOnlyArray<ContextFailure>,
   +previousCandidateId: string | null,
   +openedAt: string,
@@ -118,12 +144,62 @@ function sortedStrings(values: $ReadOnlyArray<string>): $ReadOnlyArray<string> {
   return Object.freeze([...new Set(values)].sort());
 }
 
+function normalizeOrigin(
+  origin: ContextTaskOrigin | void,
+  cluster: Cluster,
+): ContextTaskOrigin {
+  if (origin == null) {
+    return Object.freeze({ kind: 'plan-cluster', clusterId: cluster.id });
+  }
+  if (origin.kind === 'plan-cluster') {
+    if (origin.clusterId === '' || origin.clusterId !== cluster.id) {
+      throw new Error('Context plan-cluster origin must name its work cluster');
+    }
+    return Object.freeze({ kind: origin.kind, clusterId: origin.clusterId });
+  }
+  if (
+    origin.kind !== 'theme-bridge' ||
+    origin.draftId === '' ||
+    origin.definitionHash === '' ||
+    origin.targetModule === ''
+  ) {
+    throw new Error('Invalid contextual task origin');
+  }
+  return Object.freeze({ ...origin });
+}
+
+function normalizeRequiredOutputs(
+  outputs: $ReadOnlyArray<ContextRequiredOutput>,
+  scope: ContextScope,
+): $ReadOnlyArray<ContextRequiredOutput> {
+  const seen = new Set<string>();
+  const normalized = outputs.map((output) => {
+    if (
+      output.path === '' ||
+      output.targetHash === '' ||
+      output.role !== 'generated-theme-module' ||
+      output.mutable !== false ||
+      !scope.allowedPaths.includes(output.path) ||
+      scope.protectedPaths.some((pattern) =>
+        matchesGlob(output.path, pattern),
+      ) ||
+      seen.has(output.path)
+    ) {
+      throw new Error('Invalid contextual required output');
+    }
+    seen.add(output.path);
+    return Object.freeze({ ...output });
+  });
+  return Object.freeze(normalized.sort((a, b) => a.path.localeCompare(b.path)));
+}
+
 function taskDefinition(task: ContextTaskDefinition): ContextTaskDefinition {
   return task;
 }
 
 export function createContextTaskCapsule({
   goal,
+  origin,
   inventoryId,
   planId,
   cluster,
@@ -134,6 +210,7 @@ export function createContextTaskCapsule({
   declaredInputs,
   facts,
   scope,
+  requiredOutputs = [],
   decisionArtifactHashes = [],
   requiredChecks,
   limitations,
@@ -141,6 +218,7 @@ export function createContextTaskCapsule({
   now = () => new Date().toISOString(),
 }: {
   +goal: string,
+  +origin?: ContextTaskOrigin,
   +inventoryId: string,
   +planId: string,
   +cluster: Cluster,
@@ -151,6 +229,7 @@ export function createContextTaskCapsule({
   +declaredInputs: $ReadOnlyArray<ContextDeclaredInput>,
   +facts: $ReadOnlyArray<Fact>,
   +scope: ContextScope,
+  +requiredOutputs?: $ReadOnlyArray<ContextRequiredOutput>,
   +decisionArtifactHashes?: $ReadOnlyArray<string>,
   +requiredChecks: $ReadOnlyArray<ContextRequiredCheck>,
   +limitations: $ReadOnlyArray<string>,
@@ -174,21 +253,24 @@ export function createContextTaskCapsule({
       }),
     )
     .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  const stableScope = Object.freeze({
+    allowedPaths: sortedStrings(scope.allowedPaths),
+    protectedPaths: sortedStrings(scope.protectedPaths),
+    allowedDeletions: sortedStrings(scope.allowedDeletions),
+    ownerDecisionPaths: sortedStrings(scope.ownerDecisionPaths),
+  });
   const definition = taskDefinition({
     protocolVersion: CONTEXT_PROTOCOL_VERSION,
     goal: goal.trim(),
+    origin: normalizeOrigin(origin, cluster),
     inventoryId,
     planId,
     cluster,
     base: Object.freeze({ repositoryRoot, commit, snapshotHash, configHash }),
     declaredInputs: Object.freeze(stableInputs),
     facts: Object.freeze(stableFacts),
-    scope: Object.freeze({
-      allowedPaths: sortedStrings(scope.allowedPaths),
-      protectedPaths: sortedStrings(scope.protectedPaths),
-      allowedDeletions: sortedStrings(scope.allowedDeletions),
-      ownerDecisionPaths: sortedStrings(scope.ownerDecisionPaths),
-    }),
+    scope: stableScope,
+    requiredOutputs: normalizeRequiredOutputs(requiredOutputs, stableScope),
     decisionArtifactHashes: sortedStrings(decisionArtifactHashes),
     requiredChecks: Object.freeze(stableChecks),
     limitations: sortedStrings(limitations),
@@ -214,6 +296,9 @@ export function validateContextTaskCapsule(value: mixed): ContextTaskCapsule {
     typeof task.id !== 'string' ||
     typeof task.definitionHash !== 'string' ||
     typeof task.createdAt !== 'string' ||
+    task.origin == null ||
+    typeof task.origin !== 'object' ||
+    !Array.isArray(task.requiredOutputs) ||
     task.maxAttempts !== CONTEXT_MAX_ATTEMPTS
   ) {
     throw new Error('Invalid contextual task capsule');
@@ -276,6 +361,7 @@ export function createContextAttemptCapsule({
       baseCommit: task.base.commit,
       allowedPaths: task.scope.allowedPaths,
     }),
+    requiredOutputs: task.requiredOutputs,
     priorFailures: Object.freeze(
       priorFailures.map((failure) =>
         Object.freeze({
@@ -309,6 +395,7 @@ export function validateContextAttemptCapsule(
     attempt.attemptNumber < 1 ||
     attempt.attemptNumber > CONTEXT_MAX_ATTEMPTS ||
     !Array.isArray(attempt.priorFailures) ||
+    !Array.isArray(attempt.requiredOutputs) ||
     attempt.priorFailures.length !== attempt.attemptNumber - 1
   ) {
     throw new Error('Invalid contextual attempt capsule');

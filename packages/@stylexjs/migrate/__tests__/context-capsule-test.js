@@ -76,6 +76,11 @@ describe('M7 contextual task capsules', () => {
     const capsule = task();
     expect(capsule.protocolVersion).toBe(CONTEXT_PROTOCOL_VERSION);
     expect(capsule.maxAttempts).toBe(CONTEXT_MAX_ATTEMPTS);
+    expect(capsule.origin).toEqual({
+      kind: 'plan-cluster',
+      clusterId: 'cluster-1',
+    });
+    expect(capsule.requiredOutputs).toEqual([]);
     expect(capsule.declaredInputs.map((input) => input.path)).toEqual([
       'babel.config.js',
       'src/card.js',
@@ -101,6 +106,7 @@ describe('M7 contextual task capsules', () => {
       now: () => '2026-08-10T00:01:00.000Z',
     });
     expect(validateContextAttemptCapsule(first)).toEqual(first);
+    expect(first.requiredOutputs).toEqual([]);
 
     const second = createContextAttemptCapsule({
       task: task(),
@@ -126,5 +132,71 @@ describe('M7 contextual task capsules', () => {
         priorFailures: second.priorFailures,
       }),
     ).toThrow('Invalid contextual attempt');
+  });
+
+  test('binds workflow origins and immutable generated outputs', () => {
+    const base = task();
+    const capsule = createContextTaskCapsule({
+      ...base,
+      origin: {
+        kind: 'theme-bridge',
+        draftId: 'theme-draft-1',
+        definitionHash: 'f'.repeat(64),
+        targetModule: 'src/theme.stylex.ts',
+      },
+      cluster: {
+        ...base.cluster,
+        id: 'theme-bridge-work-1',
+        changeFiles: ['src/Provider.jsx', 'src/theme.stylex.ts'],
+      },
+      scope: {
+        ...base.scope,
+        allowedPaths: ['src/Provider.jsx', 'src/theme.stylex.ts'],
+      },
+      requiredOutputs: [
+        {
+          path: 'src/theme.stylex.ts',
+          targetHash: '9'.repeat(64),
+          role: 'generated-theme-module',
+          mutable: false,
+        },
+      ],
+    });
+    expect(capsule.origin.kind).toBe('theme-bridge');
+    expect(capsule.requiredOutputs).toEqual([
+      expect.objectContaining({
+        path: 'src/theme.stylex.ts',
+        mutable: false,
+      }),
+    ]);
+    const attempt = createContextAttemptCapsule({
+      task: capsule,
+      attemptNumber: 1,
+      workspacePath: '/tmp/theme-bridge',
+    });
+    expect(attempt.requiredOutputs).toEqual(capsule.requiredOutputs);
+
+    const changed = JSON.parse(JSON.stringify(capsule));
+    changed.requiredOutputs[0].targetHash = '8'.repeat(64);
+    expect(() => validateContextTaskCapsule(changed)).toThrow(
+      'integrity check failed',
+    );
+  });
+
+  test('refuses required outputs outside mutable task scope', () => {
+    const base = task();
+    expect(() =>
+      createContextTaskCapsule({
+        ...base,
+        requiredOutputs: [
+          {
+            path: 'src/theme.stylex.ts',
+            targetHash: '9'.repeat(64),
+            role: 'generated-theme-module',
+            mutable: false,
+          },
+        ],
+      }),
+    ).toThrow('Invalid contextual required output');
   });
 });
