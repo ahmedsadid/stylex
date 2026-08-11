@@ -10,6 +10,19 @@
 export { VERSION } from './version';
 
 export {
+  BOOTSTRAP_DISCOVERY_PROTOCOL_VERSION,
+  inspectBootstrap,
+} from './bootstrap/discover';
+export type {
+  BootstrapInspection,
+  BootstrapPackageInspection,
+  BuildIntegrationInspection,
+  BuildIntegrationKind,
+  PackageManagerInspection,
+  PackageManagerName,
+} from './bootstrap/discover';
+
+export {
   RECORD_COLLECTIONS,
   STATE_DIRECTORY,
   STATE_SCHEMA_VERSION,
