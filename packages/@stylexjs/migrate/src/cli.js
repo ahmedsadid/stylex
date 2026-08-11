@@ -21,6 +21,7 @@ import { rebuildIndexes, replayEvents } from './state/events';
 import { cleanupProject, migrateProject } from './state/maintenance';
 import { redact, redactText } from './state/redact';
 import { scanRepository } from './inventory/scan';
+import { inventoryReadiness } from './inventory/readiness';
 import { createPlan } from './planning/plan';
 import {
   inventoryCounts,
@@ -76,6 +77,7 @@ const HELP = `Usage: stylex-migrate <command> [options]
 Commands:
   init                    initialize local project state
   scan                    inventory configured source files
+  readiness               summarize styled, theme, and css-prop shapes
   plan                    form migration clusters from the latest inventory
   mechanical propose <cluster>
                           freeze a checked candidate from a mechanical cluster
@@ -420,6 +422,24 @@ export function runCli(
           command: 'scan',
           inventoryId: inventory.id,
           counts: inventoryCounts(inventory),
+          readiness: inventoryReadiness(inventory, { sampleLimit: 0 }),
+        },
+        json,
+        stdout,
+      );
+      return 0;
+    }
+    if (args[0] === 'readiness' && args.length === 1) {
+      const project = openProject(cwd);
+      const inventory = loadCurrentInventory(project);
+      if (inventory == null) {
+        throw new Error('No inventory found; run stylex-migrate scan first');
+      }
+      present(
+        {
+          command: 'readiness',
+          inventoryId: inventory.id,
+          readiness: inventoryReadiness(inventory),
         },
         json,
         stdout,
@@ -686,6 +706,9 @@ export function runCli(
               : {
                   id: inventory.id,
                   counts: inventoryCounts(inventory),
+                  readiness: inventoryReadiness(inventory, {
+                    sampleLimit: 0,
+                  }),
                 },
           plan: plan == null ? null : planSummary(plan, inventory),
         },

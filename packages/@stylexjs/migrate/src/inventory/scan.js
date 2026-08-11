@@ -13,6 +13,7 @@ import { canonicalRoot } from '../kernel/snapshot';
 import { hashBytes } from '../kernel/hash';
 import { matchesGlob } from '../candidate/scope';
 import { discoverSyntax, usesEmotion } from '../adapters/emotion/discover';
+import { discoverStyledReadinessFacts } from '../adapters/emotion/styledReadiness';
 import { parseSource } from '../static/parse';
 import { discoverThemeFacts } from '../theme/discover';
 import { analyzeProjectActivation } from './activation';
@@ -315,7 +316,11 @@ export function scanRepository({
 
     const syntax = discoverSyntax(parsed.ast);
     const themeFacts = discoverThemeFacts({ ast: parsed.ast, file });
-    facts.push(...themeFacts);
+    const styledReadinessFacts = discoverStyledReadinessFacts({
+      ast: parsed.ast,
+      file,
+    });
+    facts.push(...themeFacts, ...styledReadinessFacts);
     const dependencyAnalysis = analyzeLocalDependencies({
       ast: parsed.ast,
       repositoryRoot: root,
@@ -337,6 +342,7 @@ export function scanRepository({
       ...(activation == null ? [] : [activation.id]),
       ...dependencyFactIds,
       ...themeFacts.map((fact) => fact.id),
+      ...styledReadinessFacts.map((fact) => fact.id),
     ];
     if (activation != null) {
       facts.push(activation);
