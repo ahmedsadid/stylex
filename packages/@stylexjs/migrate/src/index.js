@@ -464,6 +464,11 @@ export type {
   ShorthandMutation,
   ShorthandMutationId,
 } from './referee/shorthandMutations';
+export { DIRECTIONAL_MUTATION_MANIFEST } from './referee/directionalMutations';
+export type {
+  DirectionalMutation,
+  DirectionalMutationId,
+} from './referee/directionalMutations';
 export type {
   CompilerProbe,
   ObservedCompilerProbe,
