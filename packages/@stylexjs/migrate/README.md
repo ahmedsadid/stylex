@@ -72,15 +72,15 @@ stylex-migrate cleanup --confirm   # remove unreferenced local artifacts
 failures without treating them as absence. `plan` groups sites with overlapping
 change ownership and retains the inputs and facts behind each classification.
 `readiness` reports binding-backed Emotion styled shapes, same-file usage and
-escape graphs, theme facts, and css-prop classifications. A
-`firstSliceEligible` styled count means that the binding passed the initial
-component-boundary screen; it does not mean that its CSS grammar has been
-accepted or that a candidate exists. `flatTemplateGrammarEligible` means only
-that the closed template is a bounded flat declaration list. `plannedSites`
-counts the conservative one-definition-per-file styled sites that reached the
+escape graphs, theme facts, and css-prop classifications. A `firstSliceEligible`
+styled count means that the binding passed the initial component-boundary
+screen; it does not mean that its CSS grammar has been accepted or that a
+candidate exists. `flatTemplateGrammarEligible` means only that the closed
+template is a bounded flat declaration list. `plannedSites` counts the
+conservative one-definition-per-file styled sites that reached the
 repeatable-contextual route. Only those exact clusters may be passed to
-`styled propose`; all earlier facts remain observations. `status` reports
-counts by classification and state; it does not report a conversion percentage.
+`styled propose`; all earlier facts remain observations. `status` reports counts
+by classification and state; it does not report a conversion percentage.
 `explain` makes routing and blocking reasons available after restarting the
 process.
 
@@ -91,10 +91,23 @@ freezes the exact bytes that passed its static comparison checks.
 cluster. It atomically rewrites the definition and every known direct JSX
 consumer, freezes the bytes that passed StyleX compile/lint, wiring integrity,
 and static CSS comparison, and still requires repository evidence under the
-contextual policy.
-`candidate diff` prints that frozen patch verbatim for developer review; it does
-not apply it. Theme approval requires an explicit named human and cannot be
-delegated to an agent.
+contextual policy. `candidate diff` prints that frozen patch verbatim for
+developer review; it does not apply it. Theme approval requires an explicit
+named human and cannot be delegated to an agent.
+
+`theme draft` can scaffold a token map from known reads in exact declared
+consumer files. It resolves only those requested paths through bounded object
+composition and configured-path imports, records each variant's root module, and
+pins every transitive source file it consulted. `theme inspect` exposes the
+exact reviewable entries under `mappings`; an agent must stop before
+`theme approve`.
+
+For repositories with a separately implemented dual Emotion/StyleX theme bridge,
+a draft may declare coverage globs and exact bridge boundary files. Those files
+are hash-pinned and the human approval covers the declaration, but the scope
+remains an assertion rather than a static provider-graph proof. Covered
+candidates therefore carry a warning and cannot earn `runtime-matched` without
+configured runtime cases.
 
 Repository checks are configured as argv arrays; shell command strings are
 rejected. Each provider declares whether it applies to one candidate or an exact

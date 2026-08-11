@@ -24,10 +24,12 @@ requested work has no planned cluster.
 
 `themeSliceEligible` is a separate structural observation for an intrinsic
 styled template whose only modeled runtime input is the theme. It does not
-approve a token map or authorize an edit. Continue only when the plan contains
-a `styled-theme-intrinsic` site and the exact token map is the active
-human-approved theme decision. Route that site through `theme propose`, never
-through `styled propose` or an ad hoc rewrite.
+approve a token map or authorize an edit. A same-file provider conversion may
+appear as a planned `styled-theme-intrinsic` site. A repository-managed bridge
+consumer may instead be selected explicitly in a human-reviewed theme draft; the
+draft must pin bridge boundary files and cover the consumer path. Route either
+form through `theme propose`, never through `styled propose` or an ad hoc
+rewrite.
 
 Use `stylex-migrate explain <cluster-id>` to follow the current plan's route.
 Use the mechanical workflow only for a planned `mechanical` cluster. Use the
@@ -61,9 +63,9 @@ different lane.
 4. Configure applicable repository checks, then run
    `stylex-migrate verify <candidate-id>` and
    `stylex-migrate review <candidate-id>`.
-5. Report the exact static comparison model, repository-check coverage,
-   runtime coverage, warnings, and limitations. Built-in static checks do not
-   establish component-tree identity, refs, hydration, or rendered behavior.
+5. Report the exact static comparison model, repository-check coverage, runtime
+   coverage, warnings, and limitations. Built-in static checks do not establish
+   component-tree identity, refs, hydration, or rendered behavior.
 
 ## Run a contextual task
 
@@ -103,21 +105,29 @@ different lane.
 1. Run `stylex-migrate scan`, then read
    [themes-and-runtime-values.md](references/themes-and-runtime-values.md) and
    the relevant facts with `stylex-migrate explain`.
-2. Draft a complete token map from known literal definitions. Put the temporary
-   JSON input outside the source checkout and run
+2. Put the temporary JSON input outside the source checkout. Declare variants,
+   their root source module, the target module, and exact consumer files. The
+   `tokens` array may be omitted: the tool will scaffold known consumer reads,
+   resolve only those requested paths through bounded object composition and
+   imports, and pin every transitive source file. Run
    `stylex-migrate theme draft <json-file> <agent-name>`.
-3. Run `stylex-migrate theme inspect <draft-id>` and present the exact map,
-   limitations, and approval command to a human.
+3. Run `stylex-migrate theme inspect <draft-id>` and present every exact
+   `mappings` entry, variant source, bridge declaration, limitation, and the
+   approval command to a human.
 4. Stop. Never run `stylex-migrate theme approve`, never pass `--human-confirm`,
    and never describe agent assent as human approval. Resume only after a human
    says they ran the approval command.
 5. Inspect the draft again. Continue only when its state is `active`; then run
    `stylex-migrate theme propose <draft-id>`. This command also owns eligible
    `styled-theme-intrinsic` consumers. It must rewrite the styled definition and
-   every closed same-file JSX consumer atomically. Every consumer must remain
-   inside a provider subtree that the same proposal converts from a declared
-   Emotion variant to the corresponding StyleX theme. A token-only rewrite or
-   partial provider rewrite is a refusal, not a task for agent improvisation.
+   every closed same-file JSX consumer atomically. Without a bridge declaration,
+   every consumer must remain inside a provider subtree that the same proposal
+   converts from a declared Emotion variant to the corresponding StyleX theme.
+   With repository-managed bridge coverage, the boundary implementation must
+   already exist in the pinned boundary files and the consumer must match the
+   approved coverage globs. Coverage is a human assertion, not a static
+   provider-graph proof. A token-only rewrite or partial definition/consumer
+   rewrite is a refusal, not a task for agent improvisation.
 6. Run `stylex-migrate verify <candidate-id>` and
    `stylex-migrate review <candidate-id>`. Inspect the frozen patch with
    `stylex-migrate candidate diff <candidate-id>`. Report the decision artifact
@@ -129,6 +139,12 @@ may still make a permissive verdict eligible for human review when runtime is
 not configured, but that verdict carries a prominent no-runtime warning and no
 `runtime-matched` claim. Never summarize that outcome as theme behavior having
 been verified.
+
+Never draft bridge coverage merely to bypass the same-file provider refusal. Use
+it only for a repository integration that applies the generated StyleX variants
+at the real root, nested, portal, and inverted boundaries named by the project.
+The approval warning remains material even when boundary files are hash-pinned.
+Require runtime cases that traverse the claimed bridge scope.
 
 Changing or superseding the active map makes prior dependent candidates stale.
 Do not reuse their evidence or try to recreate the older activation.

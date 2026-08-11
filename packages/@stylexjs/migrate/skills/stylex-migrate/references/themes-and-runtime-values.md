@@ -18,16 +18,22 @@ stop for replanning.
 
 ## Approved token-map workflow
 
-Use the deterministic theme lane only when the inventory records exactly one
-known literal definition for every declared variant and every consumer is one of
-the bounded forms accepted by the proposer. The draft must declare:
+Use the deterministic theme lane only when every requested token path resolves
+exactly once from a pinned variant entry module and every consumer is one of the
+bounded forms accepted by the proposer. The resolver follows only supported
+object properties, spreads, aliases, zero-argument object helpers, and local or
+configured-path imports. It does not execute repository code. The draft must
+declare:
 
 - the current `inventoryId`;
 - a new canonical `.stylex.js` or `.stylex.ts` target module;
 - the variables export, default variant, and collision-free variant exports;
-- every source token path, target token name, and concrete value for every
-  variant;
+- every source token path and target token name, or omit `tokens` so the CLI
+  scaffolds them from known reads in the exact consumer files;
 - source-definition files and consumer files.
+
+The CLI resolves concrete values for every variant, pins each variant's actual
+entry module, and expands source files to the transitive modules consulted.
 
 Values must reproduce the discovered definitions exactly. Do not insert
 placeholders, infer missing variants, ignore unmapped reads, or declare an
@@ -37,18 +43,24 @@ local dependencies block this lane.
 The current deterministic boundary converts flat host-element Emotion `css`
 objects/callbacks whose dynamic leaves are exact mapped theme reads. It also
 converts an Emotion `ThemeProvider` only when its selected identifier resolves
-directly to a declared theme source and it wraps a static host-only subtree.
-It may also convert one local, non-exported intrinsic `@emotion/styled` tagged
+directly to a declared theme source and it wraps a static host-only subtree. It
+may also convert one local, non-exported intrinsic `@emotion/styled` tagged
 template per consumer file when every interpolation is a synchronous
 one-parameter callback whose body is exactly `props.theme.<mapped.path>`, every
 interpolation occupies the whole declaration value, and the complete same-file
 usage graph contains only direct safe JSX consumers. The definition and all of
-those consumers are one atomic edit. Every converted styled consumer must also
-be inside a same-file `ThemeProvider` subtree selected by an exact declared
-variant. The proposal removes that provider and applies the matching StyleX
-theme to the same generated host subtree in the same atomic patch. A global,
-cross-file, dynamic, or otherwise unresolved provider scope is outside this
-boundary.
+those consumers are one atomic edit. By default, every converted styled consumer
+must also be inside a same-file `ThemeProvider` subtree selected by an exact
+declared variant. The proposal removes that provider and applies the matching
+StyleX theme to the same generated host subtree in the same atomic patch.
+
+A human-approved draft may instead declare repository-managed bridge coverage.
+The decision pins exact bridge boundary files and coverage globs. Covered
+consumers need not have a same-file provider because the repository integration
+owns root, nested, portal, and inverted theme propagation. This is deliberately
+permissive: hash-pinning establishes which boundary code was reviewed, not that
+its provider graph is complete. The approval and verdict retain a prominent
+warning, and runtime cases are required before claiming `runtime-matched`.
 
 Spreads, class/style mixing, styled provider children, component or dynamic
 descendants, props reads, computed theme expressions, selectors, at-rules,

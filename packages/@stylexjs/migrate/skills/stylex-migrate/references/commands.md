@@ -54,15 +54,24 @@ content-addressed candidate, removes the external worktree, and returns the
 candidate ID. The name and versions describe the proposer; they grant no
 authority.
 
-`theme draft` validates a complete token map against the current inventory and
-stores an immutable draft. `theme inspect` reports whether it is drafted,
-active, or superseded. The agent may use both commands.
+`theme draft` may accept an explicit token map or scaffold one from known theme
+reads in the declared consumer files. It resolves the requested paths through a
+bounded static evaluator, pins each variant entry module and all transitive
+source files, validates against the current inventory, and stores an immutable
+draft. `theme inspect` reports whether it is drafted, active, or superseded and
+shows the exact reviewable entries under `mappings`. The agent may use both
+commands.
 
 `theme approve` is a human-only boundary. An agent must never invoke it or pass
 `--human-confirm`, including when operating with broad shell permissions. The
 named reviewer must inspect the map and run the command. `theme propose` is
 allowed only after inspection reports `active`; it deterministically freezes a
 candidate and does not write the source checkout.
+
+A draft may declare repository-managed bridge `coverageGlobs` and
+`boundaryFiles`. The boundary files are hash-pinned inputs, but the coverage is
+still a human scope assertion. It does not earn a provider-graph or runtime
+claim; configure runtime cases for the covered theme states and boundaries.
 
 `verify` executes configured repository checks in an isolated candidate
 worktree. Runtime providers additionally execute the same argv against a
