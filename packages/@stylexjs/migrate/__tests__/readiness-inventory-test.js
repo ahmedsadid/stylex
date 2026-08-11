@@ -120,6 +120,19 @@ export function factory(styled) {
       providerScopeMissing: 0,
       themeTemplateGrammarBlockedReasons: {},
       plannedThemeSites: 0,
+      dynamicValueFacts: 1,
+      dynamicCallbacks: 1,
+      dynamicPropPaths: 1,
+      finiteLiteralConditionals: 0,
+      dynamicSliceEligible: 0,
+      dynamicBlockedReasons: {
+        'exported-definition': 1,
+        'no-direct-jsx-consumers': 1,
+        'non-intrinsic-target': 1,
+        'styled-options': 1,
+        'theme-decision-required': 1,
+      },
+      plannedDynamicSites: 0,
     });
     expect(summary.theme).toMatchObject({
       definitions: 1,
@@ -144,6 +157,69 @@ export function factory(styled) {
           fact.inputFiles.includes('src/shadowed.tsx'),
       ),
     ).toBe(false);
+  });
+
+  test('plans a bounded contextual slice for local prop-dependent intrinsics', () => {
+    const dynamicRepo = createTempRepo({
+      'src/meter.tsx': `import styled from '@emotion/styled';
+const MeterRoot = styled.div<{active: boolean; width: number}>\`
+  color: \${p => (p.active ? 'red' : 'blue')};
+  width: \${({width}) => width}px;
+\`;
+export function Meter({active, width}: {active: boolean; width: number}) {
+  return <MeterRoot className="meter" style={{minWidth: 1}} active={active} width={width} />;
+}
+`,
+    });
+    try {
+      const inventory = scanRepository({ repositoryRoot: dynamicRepo });
+      const summary = inventoryReadiness(inventory);
+      expect(summary.styled).toMatchObject({
+        dynamicValueFacts: 1,
+        dynamicCallbacks: 2,
+        dynamicPropPaths: 2,
+        finiteLiteralConditionals: 1,
+        dynamicSliceEligible: 1,
+        plannedDynamicSites: 1,
+      });
+      const fact = inventory.facts.find(
+        (item) => item.kind === 'emotion-styled-dynamic-value',
+      );
+      expect(fact).toMatchObject({
+        status: 'known',
+        value: {
+          model: 'emotion-styled-dynamic-value-v1',
+          name: 'MeterRoot',
+          callbacks: [
+            {
+              parameterShape: 'identifier',
+              propPaths: ['active'],
+              finiteLiteralConditionals: 1,
+            },
+            {
+              parameterShape: 'object-pattern',
+              propPaths: ['width'],
+            },
+          ],
+          consumerMerge: {
+            className: true,
+            style: true,
+            spread: false,
+          },
+        },
+      });
+      expect(
+        inventory.sites.find(
+          (site) => site.kind === 'styled-dynamic-intrinsic',
+        ),
+      ).toMatchObject({
+        classification: 'repeatable-contextual',
+        syntax: 'refused',
+        refusalReason: 'dynamic-style-value-context-required',
+      });
+    } finally {
+      removeTempDir(dynamicRepo);
+    }
   });
 
   test('exposes compact scan counts and detailed readiness samples', () => {

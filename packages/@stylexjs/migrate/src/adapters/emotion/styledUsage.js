@@ -352,6 +352,50 @@ function themeBlockedReasons(
   return Object.freeze([...new Set(reasons)].sort());
 }
 
+function dynamicBlockedReasons(
+  definition: $FlowFixMe,
+  topLevel: TopLevelDefinition | null,
+  shadowed: boolean,
+  consumers: $ReadOnlyArray<$FlowFixMe>,
+  escapes: $ReadOnlyArray<$FlowFixMe>,
+): $ReadOnlyArray<string> {
+  const reasons = [];
+  if (!/^[A-Z]/.test(String(definition.name))) {
+    reasons.push('non-component-jsx-binding');
+  }
+  if (topLevel == null) reasons.push('definition-not-top-level');
+  else {
+    if (topLevel.kind !== 'const') reasons.push('definition-not-const');
+    if (!topLevel.standalone) reasons.push('multi-declarator-definition');
+  }
+  if (definition.exported === true) reasons.push('exported-definition');
+  if (definition.targetKind !== 'intrinsic') {
+    reasons.push('non-intrinsic-target');
+  }
+  if (definition.callback !== true || definition.propDependent !== true) {
+    reasons.push('not-prop-dependent');
+  }
+  if (definition.themeDependent === true) {
+    reasons.push('theme-decision-required');
+  }
+  if (definition.hasOptions === true) reasons.push('styled-options');
+  if (shadowed) reasons.push('shadowed-binding');
+  if (consumers.length === 0) reasons.push('no-direct-jsx-consumers');
+  if (escapes.length > 0) reasons.push('binding-escapes');
+  if (consumers.some((consumer) => consumer.spread === true)) {
+    reasons.push('jsx-spread');
+  }
+  const contractAttributes = new Set(['as', 'css']);
+  if (
+    consumers.some((consumer) =>
+      consumer.attributes.some((name) => contractAttributes.has(name)),
+    )
+  ) {
+    reasons.push('jsx-polymorphic-or-css-prop');
+  }
+  return Object.freeze([...new Set(reasons)].sort());
+}
+
 /**
  * Build same-file component-boundary facts for every styled definition.
  *
@@ -464,6 +508,17 @@ export function discoverStyledUsageFacts({
           consumers,
           uniqueEscapes,
         );
+        const dynamicCandidate =
+          definition.callback === true && definition.propDependent === true;
+        const dynamicReasons = dynamicCandidate
+          ? dynamicBlockedReasons(
+              definition,
+              topLevel,
+              shadowed,
+              consumers,
+              uniqueEscapes,
+            )
+          : Object.freeze([]);
         return createFact({
           kind: 'emotion-styled-usage',
           status: 'known',
@@ -484,6 +539,10 @@ export function discoverStyledUsageFacts({
             blockedReasons: reasons,
             themeSliceEligible: themeReasons.length === 0,
             themeBlockedReasons: themeReasons,
+            dynamicCandidate,
+            dynamicSliceEligible:
+              dynamicCandidate && dynamicReasons.length === 0,
+            dynamicBlockedReasons: dynamicReasons,
           },
           provenance: [
             {

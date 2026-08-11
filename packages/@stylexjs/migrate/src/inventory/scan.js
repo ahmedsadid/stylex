@@ -15,6 +15,7 @@ import { matchesGlob } from '../candidate/scope';
 import { discoverSyntax, usesEmotion } from '../adapters/emotion/discover';
 import { discoverStyledReadinessFacts } from '../adapters/emotion/styledReadiness';
 import { discoverStyledUsageFacts } from '../adapters/emotion/styledUsage';
+import { discoverStyledDynamicFacts } from '../adapters/emotion/styledDynamic';
 import {
   discoverStyledTemplateFacts,
   discoverStyledThemeTemplateFacts,
@@ -330,6 +331,12 @@ export function scanRepository({
       file,
       readinessFacts: styledReadinessFacts,
     });
+    const styledDynamicFacts = discoverStyledDynamicFacts({
+      ast: parsed.ast,
+      file,
+      readinessFacts: styledReadinessFacts,
+      usageFacts: styledUsageFacts,
+    });
     const styledTemplateFacts = discoverStyledTemplateFacts({
       ast: parsed.ast,
       file,
@@ -347,6 +354,7 @@ export function scanRepository({
       ...themeFacts,
       ...styledReadinessFacts,
       ...styledUsageFacts,
+      ...styledDynamicFacts,
       ...styledTemplateFacts,
       ...styledThemeTemplateFacts,
     );
@@ -373,6 +381,7 @@ export function scanRepository({
       ...themeFacts.map((fact) => fact.id),
       ...styledReadinessFacts.map((fact) => fact.id),
       ...styledUsageFacts.map((fact) => fact.id),
+      ...styledDynamicFacts.map((fact) => fact.id),
       ...styledTemplateFacts.map((fact) => fact.id),
       ...styledThemeTemplateFacts.map((fact) => fact.id),
     ];
@@ -637,6 +646,62 @@ export function scanRepository({
           dependencyResolutionFailed
             ? 'one or more local dependencies could not be resolved'
             : 'closed intrinsic styled theme callback requires an approved token map and repository or runtime evidence',
+        ]),
+      });
+      sites.push(site);
+      fileSiteIds.push(site.id);
+    }
+    for (const dynamicFact of styledDynamicFacts) {
+      const dynamic: $FlowFixMe = dynamicFact.value;
+      const usageFact = styledUsageFacts.find(
+        (fact) => fact.id === dynamic.usageFactId,
+      );
+      const readinessFact = styledReadinessFacts.find(
+        (fact) => fact.id === dynamic.definitionFactId,
+      );
+      const usage: $FlowFixMe = usageFact?.value;
+      if (
+        usageFact == null ||
+        readinessFact == null ||
+        usage?.dynamicSliceEligible !== true ||
+        typeof dynamic.definitionSpan?.start !== 'number' ||
+        typeof dynamic.definitionSpan?.end !== 'number'
+      ) {
+        continue;
+      }
+      const span = {
+        start: dynamic.definitionSpan.start,
+        end: dynamic.definitionSpan.end,
+      };
+      const classification: Classification = dependencyResolutionFailed
+        ? 'owner-decision'
+        : 'repeatable-contextual';
+      const site: Site = Object.freeze({
+        id: siteIdentity({
+          adapter: 'emotion',
+          kind: 'styled-dynamic-intrinsic',
+          file,
+          span,
+          sourceHash,
+        }),
+        adapter: 'emotion',
+        kind: 'styled-dynamic-intrinsic',
+        file,
+        span: Object.freeze(span),
+        sourceHash,
+        syntax: 'refused',
+        refusalReason: 'dynamic-style-value-context-required',
+        factIds: Object.freeze([
+          readinessFact.id,
+          usageFact.id,
+          dynamicFact.id,
+          ...dependencyFactIds,
+        ]),
+        classification,
+        routingReasons: Object.freeze([
+          dependencyResolutionFailed
+            ? 'one or more local dependencies could not be resolved'
+            : 'prop-dependent styled values require a bounded strategy decision and repository evidence',
         ]),
       });
       sites.push(site);

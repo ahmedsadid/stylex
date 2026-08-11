@@ -41,6 +41,13 @@ export type ReadinessSummary = {
     +providerScopeMissing: number,
     +themeTemplateGrammarBlockedReasons: { +[string]: number },
     +plannedThemeSites: number,
+    +dynamicValueFacts: number,
+    +dynamicCallbacks: number,
+    +dynamicPropPaths: number,
+    +finiteLiteralConditionals: number,
+    +dynamicSliceEligible: number,
+    +dynamicBlockedReasons: { +[string]: number },
+    +plannedDynamicSites: number,
   },
   +theme: {
     +definitions: number,
@@ -107,6 +114,12 @@ export function inventoryReadiness(
   let providerScopedThemeEligible = 0;
   let providerScopeMissing = 0;
   const themeTemplateGrammarBlockedReasons = {};
+  let dynamicValueFacts = 0;
+  let dynamicCallbacks = 0;
+  let dynamicPropPaths = 0;
+  let finiteLiteralConditionals = 0;
+  let dynamicSliceEligible = 0;
+  const dynamicBlockedReasons = {};
   let themeDefinitions = 0;
   let providers = 0;
   let reads = 0;
@@ -129,12 +142,26 @@ export function inventoryReadiness(
       directJsxConsumers += (usage.consumers ?? []).length;
       if (usage.firstSliceEligible === true) firstSliceEligible++;
       if (usage.themeSliceEligible === true) themeSliceEligible++;
+      if (usage.dynamicSliceEligible === true) dynamicSliceEligible++;
       if ((usage.escapes ?? []).length > 0) withEscapes++;
       for (const reason of usage.blockedReasons ?? []) {
         bump(blockedReasons, String(reason));
       }
       for (const reason of usage.themeBlockedReasons ?? []) {
         bump(themeBlockedReasons, String(reason));
+      }
+      for (const reason of usage.dynamicBlockedReasons ?? []) {
+        bump(dynamicBlockedReasons, String(reason));
+      }
+      continue;
+    }
+    if (fact.kind === 'emotion-styled-dynamic-value') {
+      const dynamic: $FlowFixMe = fact.value;
+      dynamicValueFacts++;
+      dynamicCallbacks += (dynamic.callbacks ?? []).length;
+      for (const callback of dynamic.callbacks ?? []) {
+        dynamicPropPaths += (callback.propPaths ?? []).length;
+        finiteLiteralConditionals += callback.finiteLiteralConditionals ?? 0;
       }
       continue;
     }
@@ -213,6 +240,10 @@ export function inventoryReadiness(
     (site) =>
       site.adapter === 'emotion' && site.kind === 'styled-theme-intrinsic',
   );
+  const styledDynamicSites = inventory.sites.filter(
+    (site) =>
+      site.adapter === 'emotion' && site.kind === 'styled-dynamic-intrinsic',
+  );
   for (const site of cssPropSites) classification[site.classification]++;
   const sampleLimit = options?.sampleLimit ?? 20;
   if (!Number.isInteger(sampleLimit) || sampleLimit < 0) {
@@ -240,6 +271,10 @@ export function inventoryReadiness(
   for (const reason of Object.keys(themeTemplateGrammarBlockedReasons).sort()) {
     sortedThemeTemplateGrammarBlockedReasons[reason] =
       themeTemplateGrammarBlockedReasons[reason];
+  }
+  const sortedDynamicBlockedReasons: { [string]: number } = {};
+  for (const reason of Object.keys(dynamicBlockedReasons).sort()) {
+    sortedDynamicBlockedReasons[reason] = dynamicBlockedReasons[reason];
   }
 
   return Object.freeze({
@@ -284,6 +319,13 @@ export function inventoryReadiness(
         sortedThemeTemplateGrammarBlockedReasons,
       ),
       plannedThemeSites: styledThemeSites.length,
+      dynamicValueFacts,
+      dynamicCallbacks,
+      dynamicPropPaths,
+      finiteLiteralConditionals,
+      dynamicSliceEligible,
+      dynamicBlockedReasons: Object.freeze(sortedDynamicBlockedReasons),
+      plannedDynamicSites: styledDynamicSites.length,
     }),
     theme: Object.freeze({
       definitions: themeDefinitions,
@@ -304,6 +346,7 @@ export function inventoryReadiness(
       'usage graphs cover same-file bindings only; cross-file consumers, inherited contracts, and runtime behavior are not resolved',
       'flat template grammar eligibility is a syntax boundary, not StyleX acceptance or semantic evidence',
       'theme-dependent and prop-dependent counts are conservative callback syntax signals',
+      'dynamic-value facts record syntax and explicit unknowns; strategy selection still requires contextual review and repository evidence',
       'counts are absolute observations, not a coverage or safety claim',
     ]),
   });
