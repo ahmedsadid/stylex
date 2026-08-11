@@ -27,12 +27,18 @@ export type ReadinessSummary = {
     +withShouldForwardProp: number,
     +usageGraphs: number,
     +firstSliceEligible: number,
+    +themeSliceEligible: number,
     +directJsxConsumers: number,
     +withEscapes: number,
     +blockedReasons: { +[string]: number },
+    +themeBlockedReasons: { +[string]: number },
     +templateGrammarFacts: number,
     +flatTemplateGrammarEligible: number,
     +templateGrammarBlockedReasons: { +[string]: number },
+    +themeTemplateGrammarFacts: number,
+    +flatThemeTemplateGrammarEligible: number,
+    +themeTemplateGrammarBlockedReasons: { +[string]: number },
+    +plannedThemeSites: number,
   },
   +theme: {
     +definitions: number,
@@ -86,12 +92,17 @@ export function inventoryReadiness(
   let withShouldForwardProp = 0;
   let usageGraphs = 0;
   let firstSliceEligible = 0;
+  let themeSliceEligible = 0;
   let directJsxConsumers = 0;
   let withEscapes = 0;
   const blockedReasons = {};
+  const themeBlockedReasons = {};
   let templateGrammarFacts = 0;
   let flatTemplateGrammarEligible = 0;
   const templateGrammarBlockedReasons = {};
+  let themeTemplateGrammarFacts = 0;
+  let flatThemeTemplateGrammarEligible = 0;
+  const themeTemplateGrammarBlockedReasons = {};
   let themeDefinitions = 0;
   let providers = 0;
   let reads = 0;
@@ -113,9 +124,13 @@ export function inventoryReadiness(
       usageGraphs++;
       directJsxConsumers += (usage.consumers ?? []).length;
       if (usage.firstSliceEligible === true) firstSliceEligible++;
+      if (usage.themeSliceEligible === true) themeSliceEligible++;
       if ((usage.escapes ?? []).length > 0) withEscapes++;
       for (const reason of usage.blockedReasons ?? []) {
         bump(blockedReasons, String(reason));
+      }
+      for (const reason of usage.themeBlockedReasons ?? []) {
+        bump(themeBlockedReasons, String(reason));
       }
       continue;
     }
@@ -124,6 +139,13 @@ export function inventoryReadiness(
       templateGrammarFacts++;
       if (grammar.supported === true) flatTemplateGrammarEligible++;
       else bump(templateGrammarBlockedReasons, String(grammar.reason));
+      continue;
+    }
+    if (fact.kind === 'emotion-styled-theme-template-grammar') {
+      const grammar: $FlowFixMe = fact.value;
+      themeTemplateGrammarFacts++;
+      if (grammar.supported === true) flatThemeTemplateGrammarEligible++;
+      else bump(themeTemplateGrammarBlockedReasons, String(grammar.reason));
       continue;
     }
     if (fact.kind !== 'emotion-styled-readiness') continue;
@@ -178,6 +200,10 @@ export function inventoryReadiness(
   const styledSites = inventory.sites.filter(
     (site) => site.adapter === 'emotion' && site.kind === 'styled-intrinsic',
   );
+  const styledThemeSites = inventory.sites.filter(
+    (site) =>
+      site.adapter === 'emotion' && site.kind === 'styled-theme-intrinsic',
+  );
   for (const site of cssPropSites) classification[site.classification]++;
   const sampleLimit = options?.sampleLimit ?? 20;
   if (!Number.isInteger(sampleLimit) || sampleLimit < 0) {
@@ -196,6 +222,15 @@ export function inventoryReadiness(
   for (const reason of Object.keys(templateGrammarBlockedReasons).sort()) {
     sortedTemplateGrammarBlockedReasons[reason] =
       templateGrammarBlockedReasons[reason];
+  }
+  const sortedThemeBlockedReasons: { [string]: number } = {};
+  for (const reason of Object.keys(themeBlockedReasons).sort()) {
+    sortedThemeBlockedReasons[reason] = themeBlockedReasons[reason];
+  }
+  const sortedThemeTemplateGrammarBlockedReasons: { [string]: number } = {};
+  for (const reason of Object.keys(themeTemplateGrammarBlockedReasons).sort()) {
+    sortedThemeTemplateGrammarBlockedReasons[reason] =
+      themeTemplateGrammarBlockedReasons[reason];
   }
 
   return Object.freeze({
@@ -222,14 +257,22 @@ export function inventoryReadiness(
       withShouldForwardProp,
       usageGraphs,
       firstSliceEligible,
+      themeSliceEligible,
       directJsxConsumers,
       withEscapes,
       blockedReasons: Object.freeze(sortedBlockedReasons),
+      themeBlockedReasons: Object.freeze(sortedThemeBlockedReasons),
       templateGrammarFacts,
       flatTemplateGrammarEligible,
       templateGrammarBlockedReasons: Object.freeze(
         sortedTemplateGrammarBlockedReasons,
       ),
+      themeTemplateGrammarFacts,
+      flatThemeTemplateGrammarEligible,
+      themeTemplateGrammarBlockedReasons: Object.freeze(
+        sortedThemeTemplateGrammarBlockedReasons,
+      ),
+      plannedThemeSites: styledThemeSites.length,
     }),
     theme: Object.freeze({
       definitions: themeDefinitions,

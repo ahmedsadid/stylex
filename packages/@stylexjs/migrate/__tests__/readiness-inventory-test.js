@@ -92,6 +92,7 @@ export function factory(styled) {
       withShouldForwardProp: 1,
       usageGraphs: 3,
       firstSliceEligible: 0,
+      themeSliceEligible: 0,
       directJsxConsumers: 0,
       withEscapes: 0,
       blockedReasons: {
@@ -102,9 +103,21 @@ export function factory(styled) {
         'runtime-style-input': 1,
         'styled-options': 1,
       },
+      themeBlockedReasons: {
+        'exported-definition': 3,
+        'no-direct-jsx-consumers': 3,
+        'non-intrinsic-target': 1,
+        'not-a-theme-template': 3,
+        'not-theme-only-runtime-input': 3,
+        'styled-options': 1,
+      },
       templateGrammarFacts: 0,
       flatTemplateGrammarEligible: 0,
       templateGrammarBlockedReasons: {},
+      themeTemplateGrammarFacts: 0,
+      flatThemeTemplateGrammarEligible: 0,
+      themeTemplateGrammarBlockedReasons: {},
+      plannedThemeSites: 0,
     });
     expect(summary.theme).toMatchObject({
       definitions: 1,

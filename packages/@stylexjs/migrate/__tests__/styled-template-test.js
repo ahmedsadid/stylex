@@ -201,6 +201,12 @@ export const App = () => <Card />;
         }),
       ]),
     );
+    expect(inventoryReadiness(inventory).styled).toMatchObject({
+      themeSliceEligible: 1,
+      themeTemplateGrammarFacts: 1,
+      flatThemeTemplateGrammarEligible: 1,
+      plannedThemeSites: 1,
+    });
   });
 
   test.each([
