@@ -324,6 +324,8 @@ export const Contextual = () => <Button {...stylex.props(styles.root)} />;
 
   test('opens dynamic styled clusters with strategy-specific facts and stops', () => {
     const dynamicRepo = createTempRepo({
+      'package.json': '{}\n',
+      'tsconfig.json': '{}\n',
       'src/Meter.tsx': `import styled from '@emotion/styled';
 const MeterRoot = styled.div<{active: boolean; width: number}>\`
   color: \${p => (p.active ? 'red' : 'blue')};
@@ -331,6 +333,10 @@ const MeterRoot = styled.div<{active: boolean; width: number}>\`
 \`;
 export function Meter({active, width}: {active: boolean; width: number}) {
   return <MeterRoot active={active} width={width} />;
+}
+`,
+      'src/Unrelated.tsx': `export function Unrelated() {
+  return <div />;
 }
 `,
     });
@@ -426,6 +432,11 @@ export function Meter({active, width}: {active: boolean; width: number}) {
           }),
         ]),
       );
+      expect(
+        opened.task.facts.some((fact) =>
+          fact.inputFiles.includes('src/Unrelated.tsx'),
+        ),
+      ).toBe(false);
       expect(opened.task.limitations.join(' ')).toContain(
         'runtime value domains',
       );

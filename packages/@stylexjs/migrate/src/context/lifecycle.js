@@ -626,8 +626,15 @@ export function openContextTask({
   }
   const factsById = new Map(inventory.facts.map((fact) => [fact.id, fact]));
   const taskFactIds = new Set(cluster.factIds);
+  const taskInputFileSet = new Set(taskInputFiles);
+  const configInputFileSet = new Set(inventory.configInputs);
   for (const fact of inventory.facts) {
-    if (fact.inputFiles.some((file) => inventory.configInputs.includes(file))) {
+    if (
+      fact.inputFiles.some((file) => configInputFileSet.has(file)) &&
+      fact.inputFiles.every(
+        (file) => configInputFileSet.has(file) || taskInputFileSet.has(file),
+      )
+    ) {
       taskFactIds.add(fact.id);
     }
   }
