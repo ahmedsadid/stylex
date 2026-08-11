@@ -320,4 +320,75 @@ export const Contextual = () => <Button {...stylex.props(styles.root)} />;
       ]),
     });
   });
+
+  test('opens dynamic styled clusters with strategy-specific facts and stops', () => {
+    const dynamicRepo = createTempRepo({
+      'src/Meter.tsx': `import styled from '@emotion/styled';
+const MeterRoot = styled.div<{active: boolean; width: number}>\`
+  color: \${p => (p.active ? 'red' : 'blue')};
+  width: \${p => p.width}px;
+\`;
+export function Meter({active, width}: {active: boolean; width: number}) {
+  return <MeterRoot active={active} width={width} />;
+}
+`,
+    });
+    const dynamicWorkspaceRoot = createTempDir(
+      'stylex-migrate-dynamic-context-',
+    );
+    try {
+      const dynamicProject = initializeProject({
+        repositoryRoot: dynamicRepo,
+      });
+      const inventory = scanRepository({ repositoryRoot: dynamicRepo });
+      const dynamicPlan = createPlan({ inventory });
+      const dynamicSite = inventory.sites.find(
+        (site) => site.kind === 'styled-dynamic-intrinsic',
+      );
+      const dynamicCluster = dynamicPlan.clusters.find((item) =>
+        item.siteIds.includes(dynamicSite?.id ?? ''),
+      );
+      if (dynamicCluster == null) {
+        throw new Error('Fixture did not produce a dynamic styled cluster');
+      }
+      saveInventory(dynamicProject, inventory);
+      savePlan(dynamicProject, dynamicPlan);
+      const opened = openContextTask({
+        project: dynamicProject,
+        clusterId: dynamicCluster.id,
+        goal: 'Choose and implement a bounded runtime-value strategy.',
+        workspaceRoot: dynamicWorkspaceRoot,
+      });
+      if (!opened.ok) throw new Error(opened.reasons.join('\n'));
+      expect(opened.task.scope.allowedPaths).toEqual(['src/Meter.tsx']);
+      expect(opened.task.facts).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            kind: 'emotion-styled-dynamic-value',
+            status: 'known',
+            value: expect.objectContaining({
+              model: 'emotion-styled-dynamic-value-v1',
+              name: 'MeterRoot',
+            }),
+          }),
+        ]),
+      );
+      expect(opened.task.limitations.join(' ')).toContain(
+        'runtime value domains',
+      );
+      expect(opened.task.stopConditions.join(' ')).toContain('Do not hoist');
+      expect(opened.task.stopConditions.join(' ')).toContain(
+        'Retain the Emotion boundary',
+      );
+      expect(
+        abandonContextTask({
+          project: dynamicProject,
+          taskId: opened.task.id,
+        }).state,
+      ).toBe('abandoned');
+    } finally {
+      removeTempDir(dynamicWorkspaceRoot);
+      removeTempDir(dynamicRepo);
+    }
+  });
 });

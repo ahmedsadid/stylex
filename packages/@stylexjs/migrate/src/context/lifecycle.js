@@ -630,6 +630,10 @@ export function openContextTask({
     }
     return fact;
   });
+  const siteById = new Map(inventory.sites.map((site) => [site.id, site]));
+  const dynamicStyledTask = cluster.siteIds.some(
+    (id) => siteById.get(id)?.kind === 'styled-dynamic-intrinsic',
+  );
   const allowed = [...cluster.changeFiles].sort();
   const protectedPaths = [
     '.stylex-migrate/**',
@@ -665,6 +669,12 @@ export function openContextTask({
     })),
     limitations: [
       'M7 does not compare runtime rendering or interaction behavior.',
+      ...(dynamicStyledTask
+        ? [
+            'Dynamic-value facts record syntax, not runtime value domains, getter purity, evaluation behavior, or rendered merge semantics.',
+            'A contextual strategy is eligible for review only within the configured repository and runtime evidence scope.',
+          ]
+        : []),
       ...(config.evidence.providers.length === 0
         ? [
             'No repository evidence providers are configured; verification will block.',
@@ -676,6 +686,14 @@ export function openContextTask({
       'Stop when the migration requires a change outside allowedPaths.',
       'Stop when public behavior or ownership intent cannot be determined.',
       'Do not edit project configuration, lockfiles, or the migration ledger.',
+      ...(dynamicStyledTask
+        ? [
+            'Do not hoist, duplicate, remove, or reorder runtime evaluation without evidence that timing, count, and effects are preserved.',
+            'Stop when a prop value domain or getter purity is material to choosing variants, CSS variables, inline styles, or upstream computation and remains unknown.',
+            'Preserve existing className and style merge order and prevent styling-only props from leaking to the rendered host.',
+            'Retain the Emotion boundary when no bounded strategy preserves the observed contract.',
+          ]
+        : []),
     ],
     now,
   });
