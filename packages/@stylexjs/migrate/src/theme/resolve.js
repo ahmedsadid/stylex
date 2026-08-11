@@ -10,6 +10,7 @@
 import fs from 'fs';
 import path from 'path';
 import { canonicalRoot } from '../kernel/snapshot';
+import { canonicalJson } from '../state/json';
 import { parseSource } from '../static/parse';
 import type { ThemeValue } from './model';
 
@@ -78,6 +79,10 @@ type ResolverContext = {
   +inputFiles: Set<string>,
   +active: Set<string>,
 };
+
+function object(value: mixed): boolean {
+  return value != null && !Array.isArray(value) && typeof value === 'object';
+}
 
 const MISSING: Missing = Object.freeze({ status: 'missing' });
 
@@ -674,4 +679,105 @@ export function resolveThemeValue({
         : result.reason,
     inputFiles,
   });
+}
+
+/**
+ * Fills a token-map definition from source instead of asking a user or agent to
+ * transcribe values. `sourceFiles` initially names the module(s) exporting the
+ * variants; the returned definition expands it to every module consulted by
+ * the bounded resolver. The normal decision validator remains the authority on
+ * the returned schema.
+ */
+export function resolveThemeDecisionDefinition({
+  repositoryRoot,
+  definition: input,
+}: {
+  +repositoryRoot: string,
+  +definition: mixed,
+}): mixed {
+  const definition: $FlowFixMe = input;
+  if (
+    !object(definition) ||
+    !Array.isArray(definition.variants) ||
+    definition.variants.length === 0 ||
+    !Array.isArray(definition.tokens) ||
+    definition.tokens.length === 0 ||
+    !Array.isArray(definition.sourceFiles) ||
+    definition.sourceFiles.length === 0 ||
+    !definition.sourceFiles.every((file) => typeof file === 'string')
+  ) {
+    throw new Error(
+      'Theme resolution requires variants, tokens, and source files',
+    );
+  }
+  const root = canonicalRoot(repositoryRoot);
+  const mappings = projectMappings(root);
+  const context: ResolverContext = {
+    repositoryRoot: root,
+    baseUrl: mappings.baseUrl,
+    paths: mappings.paths,
+    modules: new Map(),
+    inputFiles: new Set(),
+    active: new Set(),
+  };
+  const tokens = definition.tokens.map((tokenInput) => {
+    const token: $FlowFixMe = tokenInput;
+    if (!object(token) || typeof token.sourcePath !== 'string') {
+      throw new Error('Theme resolution requires a sourcePath for every token');
+    }
+    const values = {};
+    for (const variantInput of definition.variants) {
+      const variant: $FlowFixMe = variantInput;
+      if (
+        !object(variant) ||
+        typeof variant.name !== 'string' ||
+        typeof variant.exportName !== 'string'
+      ) {
+        throw new Error('Theme resolution requires named variant exports');
+      }
+      const matches = [];
+      const failures = [];
+      for (const file of definition.sourceFiles) {
+        const result = resolveExport(
+          context,
+          file,
+          variant.exportName,
+          token.sourcePath.split('.'),
+        );
+        if (result.status === 'known') {
+          matches.push({ file, value: result.value });
+        } else if (result.status === 'resolution-failed') {
+          failures.push(result.reason);
+        }
+      }
+      if (matches.length !== 1) {
+        const detail =
+          matches.length > 1
+            ? `resolved from multiple source files: ${matches
+                .map((match) => match.file)
+                .join(', ')}`
+            : (failures[0] ?? 'export or path was not found');
+        throw new Error(
+          `Theme token ${token.sourcePath} variant ${variant.name} could not be resolved exactly once (${detail})`,
+        );
+      }
+      const resolved = matches[0].value;
+      const supplied = token.values?.[variant.name];
+      if (
+        supplied != null &&
+        canonicalJson(supplied) !== canonicalJson(resolved)
+      ) {
+        throw new Error(
+          `Theme token ${token.sourcePath} variant ${variant.name} does not match source`,
+        );
+      }
+      values[variant.name] = resolved;
+    }
+    return { ...token, values };
+  });
+  return {
+    ...definition,
+    tokens,
+    sourceFiles: [...context.inputFiles].sort(),
+  };
 }

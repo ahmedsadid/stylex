@@ -7,7 +7,10 @@
  * @flow strict
  */
 
-import { resolveThemeValue } from '../src/index';
+import {
+  resolveThemeDecisionDefinition,
+  resolveThemeValue,
+} from '../src/index';
 import { createTempRepo, removeTempDir } from './utils/tempRepo';
 
 describe('theme value resolution', () => {
@@ -79,7 +82,7 @@ export const darkTheme = {
 };
 export {actual as values};
 `,
-      'src/index.ts': 'export {values as palette} from \'./values\';\n',
+      'src/index.ts': "export {values as palette} from './values';\n",
       'src/theme.ts': `import * as tokens from './index';
 export const theme = ({colors: tokens.palette} as const);
 `,
@@ -144,5 +147,63 @@ export const spreadTheme = {colors: {foreground: '#111'}, ...dynamic};
         sourcePath: 'colors.foreground',
       }),
     ).toMatchObject({ status: 'known', value: '#111' });
+  });
+
+  test('hydrates a decision map and pins every transitive source module', () => {
+    repo = createTempRepo({
+      'src/tokens.ts': 'export const palette = {light: \'#111\', dark: \'#eee\'};\n',
+      'src/theme.ts': `import {palette} from './tokens';
+export const lightTheme = {colors: {foreground: palette.light}};
+export const darkTheme = {colors: {foreground: palette.dark}};
+`,
+    });
+    expect(
+      resolveThemeDecisionDefinition({
+        repositoryRoot: repo,
+        definition: {
+          variants: [
+            { name: 'light', exportName: 'lightTheme' },
+            { name: 'dark', exportName: 'darkTheme' },
+          ],
+          tokens: [
+            {
+              sourcePath: 'colors.foreground',
+              targetName: 'foreground',
+              existingCssVariable: null,
+            },
+          ],
+          sourceFiles: ['src/theme.ts'],
+        },
+      }),
+    ).toMatchObject({
+      sourceFiles: ['src/theme.ts', 'src/tokens.ts'],
+      tokens: [
+        {
+          sourcePath: 'colors.foreground',
+          values: { light: '#111', dark: '#eee' },
+        },
+      ],
+    });
+  });
+
+  test('refuses a supplied value that differs from source', () => {
+    repo = createTempRepo({
+      'src/theme.ts': 'export const lightTheme = {color: \'#111\'};\n',
+    });
+    expect(() =>
+      resolveThemeDecisionDefinition({
+        repositoryRoot: repo,
+        definition: {
+          variants: [{ name: 'light', exportName: 'lightTheme' }],
+          tokens: [
+            {
+              sourcePath: 'color',
+              values: { light: '#wrong' },
+            },
+          ],
+          sourceFiles: ['src/theme.ts'],
+        },
+      }),
+    ).toThrow('does not match source');
   });
 });

@@ -20,6 +20,7 @@ import {
   validateThemeDecisionApproval,
   validateThemeDecisionDraft,
 } from './model';
+import { resolveThemeDecisionDefinition } from './resolve';
 import type { CandidatePatch } from '../candidate/patch';
 import type { Inventory } from '../inventory/model';
 import type { ProjectState } from '../state/project';
@@ -56,31 +57,6 @@ function factFile(fact: $FlowFixMe, files: $ReadOnlySet<string>): boolean {
   return fact.provenance.some(
     (item) => typeof item.file === 'string' && files.has(item.file),
   );
-}
-
-function matchingDefinition(
-  inventory: Inventory,
-  draft: ThemeDecisionDraft,
-  variantName: string,
-  exportName: string,
-): $FlowFixMe {
-  const sourceFiles = new Set(draft.sourceFiles);
-  const definitions = inventory.facts.filter((fact) => {
-    const value: $FlowFixMe = fact.value;
-    return (
-      fact.kind === 'theme-definition' &&
-      fact.status === 'known' &&
-      factFile(fact, sourceFiles) &&
-      object(value) &&
-      (value.name === variantName || value.name === exportName)
-    );
-  });
-  if (definitions.length !== 1) {
-    throw new Error(
-      `Theme variant ${variantName} must resolve to exactly one known definition in the declared source files`,
-    );
-  }
-  return definitions[0].value;
 }
 
 function assertInventoryFiles(
@@ -132,31 +108,23 @@ export function validateThemeDecisionAgainstInventory(
       `Theme decision names inventory ${draft.inventoryId}, but the current inventory is ${inventory.id}`,
     );
   }
-  assertInventoryFiles(inventory, draft);
-  for (const variant of draft.variants) {
-    const definition = matchingDefinition(
-      inventory,
-      draft,
-      variant.name,
-      variant.exportName,
+  const resolved: $FlowFixMe = resolveThemeDecisionDefinition({
+    repositoryRoot: inventory.repositoryRoot,
+    definition: draft,
+  });
+  if (
+    canonicalJson(resolved.tokens) !== canonicalJson(draft.tokens) ||
+    canonicalJson(resolved.sourceFiles) !== canonicalJson(draft.sourceFiles)
+  ) {
+    throw new Error(
+      'Theme decision values or transitive source files do not match the current repository',
     );
-    if (!object(definition.values)) {
-      throw new Error(`Theme variant ${variant.name} has no literal values`);
-    }
-    for (const token of draft.tokens) {
-      const observed = definition.values[token.sourcePath];
+  }
+  assertInventoryFiles(inventory, draft);
+  for (const token of draft.tokens) {
+    const existingCssVariable = token.existingCssVariable;
+    for (const variant of draft.variants) {
       const decided = token.values[variant.name];
-      const existingCssVariable = token.existingCssVariable;
-      if (typeof observed !== 'string' && typeof observed !== 'number') {
-        throw new Error(
-          `Theme token ${token.sourcePath} is missing from variant ${variant.name}`,
-        );
-      }
-      if (canonicalJson(observed) !== canonicalJson(decided)) {
-        throw new Error(
-          `Theme token ${token.sourcePath} in variant ${variant.name} does not match the current inventory`,
-        );
-      }
       if (
         existingCssVariable != null &&
         (typeof decided !== 'string' ||

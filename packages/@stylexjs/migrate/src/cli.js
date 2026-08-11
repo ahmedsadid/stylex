@@ -61,6 +61,7 @@ import {
   persistThemeDecisionDraft,
 } from './theme/decisions';
 import { proposeThemeDecisionCandidate } from './theme/candidate';
+import { resolveThemeDecisionDefinition } from './theme/resolve';
 import { proposeMechanicalCandidate } from './mechanical/candidate';
 import { proposeStyledCandidate } from './styled/candidate';
 import type { CandidatePatch } from './candidate/patch';
@@ -547,7 +548,10 @@ export function runCli(
     if (args[0] === 'theme' && args[1] === 'draft' && args.length === 4) {
       const project = openProject(cwd);
       const source = path.resolve(cwd, args[2]);
-      const definition = parseJson(fs.readFileSync(source, 'utf8'), source);
+      const definition = resolveThemeDecisionDefinition({
+        repositoryRoot: project.repositoryRoot,
+        definition: parseJson(fs.readFileSync(source, 'utf8'), source),
+      });
       const draft = persistThemeDecisionDraft({
         project,
         definition,
