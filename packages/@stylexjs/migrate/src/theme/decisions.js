@@ -364,12 +364,14 @@ export function inspectThemeDecision(
 export function approvePersistedThemeDecision({
   project,
   draftId,
+  actor,
   approvedBy,
   limitations = [],
   now = () => new Date().toISOString(),
 }: {
   +project: ProjectState,
   +draftId: string,
+  +actor: 'human',
   +approvedBy: string,
   +limitations?: $ReadOnlyArray<string>,
   +now?: () => string,
@@ -385,7 +387,7 @@ export function approvePersistedThemeDecision({
   validateThemeDecisionAgainstInventory(draft, inventory);
   const proposed = approveThemeDecision({
     draft,
-    actor: 'human',
+    actor,
     approvedBy,
     limitations: [...limitations, THEME_NO_RUNTIME_LIMITATION],
     now,

@@ -81,6 +81,7 @@ export const Card = () => <div css={(theme) => ({color: theme.colors.foreground}
     const approval = approvePersistedThemeDecision({
       project,
       draftId: draft.id,
+      actor: 'human',
       approvedBy: 'human-reviewer',
       now: () => '2026-08-11T01:00:00.000Z',
     });
@@ -114,6 +115,23 @@ export const Card = () => <div css={(theme) => ({color: theme.colors.foreground}
     ).toThrow();
   });
 
+  test('requires explicit human authority for persisted approval', () => {
+    const { project, inventory } = setup();
+    const draft = persistThemeDecisionDraft({
+      project,
+      definition: definition(inventory.id),
+      draftedBy: 'agent',
+    });
+    expect(() =>
+      approvePersistedThemeDecision({
+        project,
+        draftId: draft.id,
+        actor: 'agent' as $FlowFixMe,
+        approvedBy: 'migration-agent',
+      }),
+    ).toThrow('Only a named human may approve');
+  });
+
   test('activating a revised map marks the earlier approval as superseded', () => {
     const { project, inventory } = setup();
     const first = persistThemeDecisionDraft({
@@ -124,6 +142,7 @@ export const Card = () => <div css={(theme) => ({color: theme.colors.foreground}
     approvePersistedThemeDecision({
       project,
       draftId: first.id,
+      actor: 'human',
       approvedBy: 'reviewer',
     });
     const second = persistThemeDecisionDraft({
@@ -134,6 +153,7 @@ export const Card = () => <div css={(theme) => ({color: theme.colors.foreground}
     const active = approvePersistedThemeDecision({
       project,
       draftId: second.id,
+      actor: 'human',
       approvedBy: 'reviewer',
     });
     expect(inspectThemeDecision(project, first.id)).toMatchObject({

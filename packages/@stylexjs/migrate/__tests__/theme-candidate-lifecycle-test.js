@@ -94,6 +94,7 @@ export const darkTheme = {colors: {foreground: '#eee'}};
     const approval = approvePersistedThemeDecision({
       project,
       draftId: draft.id,
+      actor: 'human',
       approvedBy: 'reviewer',
     });
     return { project, inventory, draft, approval };
@@ -193,6 +194,7 @@ export const Card = () => <div css={(theme) => ({color: theme.colors.foreground}
     approvePersistedThemeDecision({
       project,
       draftId: revised.id,
+      actor: 'human',
       approvedBy: 'reviewer',
     });
     expect(() =>

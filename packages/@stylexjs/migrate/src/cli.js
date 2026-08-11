@@ -457,6 +457,7 @@ export function runCli(
       const approval = approvePersistedThemeDecision({
         project,
         draftId: args[2],
+        actor: 'human',
         approvedBy: args[3],
       });
       present(
