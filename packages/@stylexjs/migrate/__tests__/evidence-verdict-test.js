@@ -330,7 +330,7 @@ describe('M5 evidence bundles and policy verdicts', () => {
       candidates: [candidate],
     });
     expect(verdict.outcome).toBe('auto-eligible');
-    expect(verdict.policyId).toBe('mechanical-repository-v7');
+    expect(verdict.policyId).toBe('mechanical-repository-v8');
   });
 
   test('the repository verdict accepts the pseudo-element referee model', () => {
@@ -349,7 +349,7 @@ describe('M5 evidence bundles and policy verdicts', () => {
       candidates: [candidate],
     });
     expect(verdict.outcome).toBe('auto-eligible');
-    expect(verdict.policyId).toBe('mechanical-repository-v7');
+    expect(verdict.policyId).toBe('mechanical-repository-v8');
   });
 
   test('the repository verdict accepts the media-query referee model', () => {
@@ -368,7 +368,7 @@ describe('M5 evidence bundles and policy verdicts', () => {
       candidates: [candidate],
     });
     expect(verdict.outcome).toBe('auto-eligible');
-    expect(verdict.policyId).toBe('mechanical-repository-v7');
+    expect(verdict.policyId).toBe('mechanical-repository-v8');
   });
 
   test('the repository verdict accepts the supports nesting referee model', () => {
@@ -387,7 +387,7 @@ describe('M5 evidence bundles and policy verdicts', () => {
       candidates: [candidate],
     });
     expect(verdict.outcome).toBe('auto-eligible');
-    expect(verdict.policyId).toBe('mechanical-repository-v7');
+    expect(verdict.policyId).toBe('mechanical-repository-v8');
   });
 
   test('the repository verdict accepts the keyframes referee model', () => {
@@ -406,7 +406,7 @@ describe('M5 evidence bundles and policy verdicts', () => {
       candidates: [candidate],
     });
     expect(verdict.outcome).toBe('auto-eligible');
-    expect(verdict.policyId).toBe('mechanical-repository-v7');
+    expect(verdict.policyId).toBe('mechanical-repository-v8');
   });
 
   test('the repository verdict accepts the box shorthand referee model', () => {
@@ -425,7 +425,26 @@ describe('M5 evidence bundles and policy verdicts', () => {
       candidates: [candidate],
     });
     expect(verdict.outcome).toBe('auto-eligible');
-    expect(verdict.policyId).toBe('mechanical-repository-v7');
+    expect(verdict.policyId).toBe('mechanical-repository-v8');
+  });
+
+  test('the repository verdict accepts the directional referee model', () => {
+    const candidate = record({
+      proposer: { kind: 'deterministic', version: 'fixture-v1' },
+      classification: 'mechanical',
+      includeStatic: true,
+      comparisonModel: 'directional-referee-v1',
+    });
+    const evidence = inputs(candidate);
+    const verdict = evaluateRepositoryEvidence({
+      bundle: createRepositoryEvidenceBundle({
+        ...evidence,
+        candidates: [candidate],
+      }),
+      candidates: [candidate],
+    });
+    expect(verdict.outcome).toBe('auto-eligible');
+    expect(verdict.policyId).toBe('mechanical-repository-v8');
   });
 
   test('the repository verdict rejects an unreviewed comparison model', () => {
