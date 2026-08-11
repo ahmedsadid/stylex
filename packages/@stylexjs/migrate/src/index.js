@@ -271,6 +271,8 @@ export { analyzeProjectActivation } from './inventory/activation';
 export type { ProjectActivation } from './inventory/activation';
 export { analyzeLocalDependencies } from './inventory/resolve';
 export type { LocalDependency } from './inventory/model';
+export { proposeMechanicalCandidate } from './mechanical/candidate';
+export type { MechanicalCandidateProposalResult } from './mechanical/candidate';
 export {
   createPlan,
   detectClusterConflicts,
