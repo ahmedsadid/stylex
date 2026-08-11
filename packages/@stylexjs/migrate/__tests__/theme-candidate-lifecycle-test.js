@@ -33,6 +33,7 @@ function definition(
   inventoryId: string,
   consumerFile: string,
   targetName: string = 'foreground',
+  bridge: $FlowFixMe = null,
 ) {
   return {
     protocolVersion: THEME_DECISION_PROTOCOL_VERSION,
@@ -54,6 +55,7 @@ function definition(
     ],
     sourceFiles: ['src/theme/themes.ts'],
     consumerFiles: [consumerFile],
+    bridge,
   };
 }
 
@@ -219,6 +221,56 @@ export const Card = () => <ThemeProvider theme={darkTheme}><CardRoot data-card="
         (item) => item.check === 'static-css-comparison',
       ),
     ).toBe(false);
+    expect(readFile(repo, 'src/Card.tsx')).toBe(styled);
+  });
+
+  test('converts a styled theme slice covered by a human-approved repository bridge', () => {
+    const styled = `import styled from '@emotion/styled';
+const CardRoot = styled.div\`color: \${p => p.theme.colors.foreground};\`;
+export const Card = () => <CardRoot data-card="true" />;
+`;
+    repo = createTempRepo({
+      'src/App.tsx': 'export const App = ({children}) => <main>{children}</main>;\n',
+      'src/Card.tsx': styled,
+      'src/theme/themes.ts': `export const lightTheme = {colors: {foreground: '#111'}};
+export const darkTheme = {colors: {foreground: '#eee'}};
+`,
+    });
+    workspaceRoot = createTempDir('stylex-migrate-theme-ws-');
+    const project = initializeProject({ repositoryRoot: repo });
+    const inventory = scanRepository({ repositoryRoot: repo });
+    saveInventory(project, inventory);
+    const draft = persistThemeDecisionDraft({
+      project,
+      definition: definition(inventory.id, 'src/Card.tsx', 'foreground', {
+        coverageGlobs: ['src/**'],
+        boundaryFiles: ['src/App.tsx'],
+      }),
+      draftedBy: 'agent',
+    });
+    const approval = approvePersistedThemeDecision({
+      project,
+      draftId: draft.id,
+      actor: 'human',
+      approvedBy: 'reviewer',
+    });
+    expect(approval.limitations).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining('human-approved scope assertion'),
+      ]),
+    );
+
+    const result = proposeThemeDecisionCandidate({
+      project,
+      draftId: draft.id,
+      workspaceRoot,
+    });
+    if (!result.ok) throw new Error(result.reason);
+    const output = candidateSource(result, 'src/Card.tsx');
+    expect(output).not.toContain("from '@emotion/styled'");
+    expect(output).toContain('color: themeVars.foreground');
+    expect(output).toContain('<div {...stylex.props(styles.cardRoot)}');
+    expect(result.record.snapshot.fileHashes['src/App.tsx']).toBeDefined();
     expect(readFile(repo, 'src/Card.tsx')).toBe(styled);
   });
 

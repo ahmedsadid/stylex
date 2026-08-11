@@ -168,6 +168,7 @@ export type {
 } from './theme/rewrite';
 export {
   THEME_NO_RUNTIME_LIMITATION,
+  THEME_BRIDGE_LIMITATION,
   approvePersistedThemeDecision,
   assertActiveThemeCandidateDecisions,
   inspectThemeDecision,
@@ -181,6 +182,7 @@ export { proposeThemeDecisionCandidate } from './theme/candidate';
 export type { ThemeCandidateProposalResult } from './theme/candidate';
 export type {
   ThemeDecisionApproval,
+  ThemeBridgeCoverage,
   ThemeDecisionDraft,
   ThemeTokenMapDefinition,
   ThemeTokenMapping,

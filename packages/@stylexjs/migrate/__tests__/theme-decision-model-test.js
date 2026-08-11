@@ -153,4 +153,46 @@ describe('M9 theme token-map decisions', () => {
       ),
     ).toBe('./tokens.stylex');
   });
+
+  test('canonicalizes repository-managed bridge coverage into the decision hash', () => {
+    const input = definition();
+    input.bridge = {
+      coverageGlobs: ['src/features/**', 'src/components/**'],
+      boundaryFiles: ['src/App.tsx'],
+    };
+    const draft = createThemeDecisionDraft({
+      definition: input,
+      draftedBy: 'agent',
+    });
+    expect(draft.bridge).toEqual({
+      coverageGlobs: ['src/components/**', 'src/features/**'],
+      boundaryFiles: ['src/App.tsx'],
+    });
+
+    const changed = definition();
+    changed.bridge = {
+      coverageGlobs: ['src/components/**'],
+      boundaryFiles: ['src/App.tsx'],
+    };
+    expect(
+      createThemeDecisionDraft({ definition: changed, draftedBy: 'agent' }).id,
+    ).not.toBe(draft.id);
+  });
+
+  test('refuses empty or escaping bridge coverage', () => {
+    const empty = definition();
+    empty.bridge = { coverageGlobs: [], boundaryFiles: ['src/App.tsx'] };
+    expect(() =>
+      createThemeDecisionDraft({ definition: empty, draftedBy: 'agent' }),
+    ).toThrow('requires globs and boundary files');
+
+    const escaping = definition();
+    escaping.bridge = {
+      coverageGlobs: ['../outside/**'],
+      boundaryFiles: ['src/App.tsx'],
+    };
+    expect(() =>
+      createThemeDecisionDraft({ definition: escaping, draftedBy: 'agent' }),
+    ).toThrow('Invalid theme bridge coverage glob');
+  });
 });

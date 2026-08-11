@@ -28,6 +28,8 @@ import type { ThemeDecisionApproval, ThemeDecisionDraft } from './model';
 
 export const THEME_NO_RUNTIME_LIMITATION: string =
   'WARNING: approving this token map does not establish runtime equivalence; configure runtime evidence before claiming runtime-matched.';
+export const THEME_BRIDGE_LIMITATION: string =
+  'WARNING: repository-managed theme bridge coverage is a human-approved scope assertion, not a static provider-graph proof; require runtime evidence for covered consumers.';
 
 export type ThemeDecisionInspection = {
   +draft: ThemeDecisionDraft,
@@ -64,7 +66,12 @@ function assertInventoryFiles(
   draft: ThemeDecisionDraft,
 ): void {
   const byPath = new Map(inventory.files.map((file) => [file.path, file]));
-  for (const file of [...draft.sourceFiles, ...draft.consumerFiles]) {
+  const decisionFiles = [
+    ...draft.sourceFiles,
+    ...draft.consumerFiles,
+    ...(draft.bridge?.boundaryFiles ?? []),
+  ];
+  for (const file of decisionFiles) {
     const found = byPath.get(file);
     if (
       found == null ||
@@ -87,9 +94,9 @@ function assertInventoryFiles(
   }
   const snapshot = createSnapshot({
     repositoryRoot: inventory.repositoryRoot,
-    files: [...new Set([...draft.sourceFiles, ...draft.consumerFiles])],
+    files: [...new Set(decisionFiles)],
   });
-  for (const file of [...draft.sourceFiles, ...draft.consumerFiles]) {
+  for (const file of decisionFiles) {
     if (snapshot.fileHashes[file] !== byPath.get(file)?.sourceHash) {
       throw new Error(
         `Theme decision input ${file} no longer matches inventory ${inventory.id}; scan again after committing or stashing changes`,
@@ -357,7 +364,11 @@ export function approvePersistedThemeDecision({
     draft,
     actor,
     approvedBy,
-    limitations: [...limitations, THEME_NO_RUNTIME_LIMITATION],
+    limitations: [
+      ...limitations,
+      THEME_NO_RUNTIME_LIMITATION,
+      ...(draft.bridge == null ? [] : [THEME_BRIDGE_LIMITATION]),
+    ],
     now,
   });
   const existing = loadThemeDecisionApproval(project, proposed.artifactHash);

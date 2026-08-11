@@ -113,6 +113,7 @@ export function proposeThemeDecisionCandidate({
       ...new Set([
         ...draft.sourceFiles,
         ...draft.consumerFiles,
+        ...(draft.bridge?.boundaryFiles ?? []),
         ...inventory.configInputs,
         draft.targetModule,
       ]),

@@ -28,6 +28,11 @@ export type ThemeTokenMapping = {
   +existingCssVariable: string | null,
 };
 
+export type ThemeBridgeCoverage = {
+  +coverageGlobs: $ReadOnlyArray<string>,
+  +boundaryFiles: $ReadOnlyArray<string>,
+};
+
 export type ThemeTokenMapDefinition = {
   +protocolVersion: string,
   +inventoryId: string,
@@ -38,6 +43,7 @@ export type ThemeTokenMapDefinition = {
   +tokens: $ReadOnlyArray<ThemeTokenMapping>,
   +sourceFiles: $ReadOnlyArray<string>,
   +consumerFiles: $ReadOnlyArray<string>,
+  +bridge: ThemeBridgeCoverage | null,
 };
 
 export type ThemeDecisionDraft = ThemeTokenMapDefinition & {
@@ -102,6 +108,38 @@ function canonicalFiles(value: mixed, label: string): $ReadOnlyArray<string> {
   return Object.freeze(
     [...new Set(values.map((file) => canonicalFile(file, label)))].sort(),
   );
+}
+
+function canonicalGlobs(value: mixed): $ReadOnlyArray<string> {
+  if (!strings(value)) {
+    throw new Error('Invalid theme bridge coverage globs');
+  }
+  const globs: $ReadOnlyArray<string> = value as any;
+  for (const glob of globs) {
+    if (
+      glob.includes('\\') ||
+      glob.startsWith('/') ||
+      glob.split('/').some((segment) => segment === '..')
+    ) {
+      throw new Error(`Invalid theme bridge coverage glob: ${glob}`);
+    }
+  }
+  return Object.freeze([...new Set(globs)].sort());
+}
+
+function bridgeCoverage(value: mixed): ThemeBridgeCoverage | null {
+  if (value == null) return null;
+  const bridge: $FlowFixMe = value;
+  if (!object(bridge)) throw new Error('Invalid theme bridge coverage');
+  const coverageGlobs = canonicalGlobs(bridge.coverageGlobs);
+  const boundaryFiles = canonicalFiles(
+    bridge.boundaryFiles,
+    'theme bridge boundary files',
+  );
+  if (coverageGlobs.length === 0 || boundaryFiles.length === 0) {
+    throw new Error('Theme bridge coverage requires globs and boundary files');
+  }
+  return Object.freeze({ coverageGlobs, boundaryFiles });
 }
 
 function themeValue(value: mixed, label: string): ThemeValue {
@@ -240,6 +278,12 @@ function normalizeDefinition(value: mixed): ThemeTokenMapDefinition {
       'Theme target module must be distinct from source and consumer files',
     );
   }
+  const bridge = bridgeCoverage(definition.bridge);
+  if (bridge?.boundaryFiles.includes(targetModule)) {
+    throw new Error(
+      'Theme bridge boundary must be distinct from target module',
+    );
+  }
   return immutableJson({
     protocolVersion: THEME_DECISION_PROTOCOL_VERSION,
     inventoryId: definition.inventoryId,
@@ -250,6 +294,7 @@ function normalizeDefinition(value: mixed): ThemeTokenMapDefinition {
     tokens: tokens.sort((a, b) => a.sourcePath.localeCompare(b.sourcePath)),
     sourceFiles,
     consumerFiles,
+    bridge,
   }) as $FlowFixMe;
 }
 

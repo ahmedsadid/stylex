@@ -8,6 +8,7 @@
  */
 
 import path from 'path';
+import { matchesGlob } from '../candidate/scope';
 import { discoverStyledReadinessFacts } from '../adapters/emotion/styledReadiness';
 import { discoverStyledThemeTemplateFacts } from '../adapters/emotion/styledTemplate';
 import { discoverStyledUsageFacts } from '../adapters/emotion/styledUsage';
@@ -660,17 +661,23 @@ function rewriteConsumer(
   const usedReads = new Set<string>();
   const style = styleSites(ast, draft, reads, usedReads);
   const styled = styledThemeSites(ast, file, draft, themeFacts, usedReads);
-  const providers = providerEdits(
-    ast,
-    file,
-    draft,
-    new Set(styled.sites.map((site) => site.componentName)),
-  );
+  const bridgeCovered =
+    draft.bridge?.coverageGlobs.some((glob) => matchesGlob(glob, file)) ===
+    true;
+  const providers = bridgeCovered
+    ? Object.freeze({ edits: Object.freeze([]), problem: null })
+    : providerEdits(
+        ast,
+        file,
+        draft,
+        new Set(styled.sites.map((site) => site.componentName)),
+      );
   if (style.problem != null) return { ok: false, reason: style.problem };
   if (styled.problem != null) return { ok: false, reason: styled.problem };
   if (providers.problem != null)
     return { ok: false, reason: providers.problem };
   if (
+    !bridgeCovered &&
     styled.sites.some((site) =>
       site.consumers.some(
         (consumer) =>
