@@ -569,7 +569,9 @@ export function scanRepository({
     }> = [];
     for (const grammarFact of styledThemeTemplateFacts) {
       const grammar: $FlowFixMe = grammarFact.value;
-      if (grammar.supported !== true) continue;
+      if (grammar.supported !== true || grammar.providerScoped !== true) {
+        continue;
+      }
       const usageFact = styledUsageFacts.find(
         (fact) => fact.id === grammar.usageFactId,
       );

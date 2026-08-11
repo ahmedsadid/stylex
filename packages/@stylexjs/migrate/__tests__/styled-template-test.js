@@ -154,11 +154,13 @@ describe('@emotion/styled theme template grammar', () => {
   test('records exact whole-value theme callbacks as a contextual site', () => {
     repo = createTempRepo({
       'src/theme.tsx': `import styled from '@emotion/styled';
+import {ThemeProvider} from '@emotion/react';
+const darkTheme = {};
 const Card = styled.div\`
   color: \${p => p.theme.colors.foreground};
   padding-top: 4px;
 \`;
-export const App = () => <Card />;
+export const App = () => <ThemeProvider theme={darkTheme}><Card /></ThemeProvider>;
 `,
     });
     const inventory = scanRepository({ repositoryRoot: repo });
@@ -170,6 +172,7 @@ export const App = () => <Card />;
       value: {
         name: 'Card',
         supported: true,
+        providerScoped: true,
         declarations: [
           {
             property: 'color',
@@ -205,6 +208,7 @@ export const App = () => <Card />;
       themeSliceEligible: 1,
       themeTemplateGrammarFacts: 1,
       flatThemeTemplateGrammarEligible: 1,
+      providerScopedThemeEligible: 1,
       plannedThemeSites: 1,
     });
   });

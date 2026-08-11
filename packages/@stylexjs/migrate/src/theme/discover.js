@@ -448,6 +448,7 @@ function providerUses(
   +status: FactStatus,
   +start: number,
   +end: number,
+  +subtreeSpan: { +start: number, +end: number },
 }> {
   const output: Array<{
     +providerBinding: string,
@@ -455,16 +456,18 @@ function providerUses(
     +status: FactStatus,
     +start: number,
     +end: number,
+    +subtreeSpan: { +start: number, +end: number },
   }> = [];
   walk(ast, (node) => {
     if (
-      node.type !== 'JSXOpeningElement' ||
-      node.name?.type !== 'JSXIdentifier' ||
-      !providerBindings.has(String(node.name.name))
+      node.type !== 'JSXElement' ||
+      node.openingElement?.name?.type !== 'JSXIdentifier' ||
+      !providerBindings.has(String(node.openingElement.name.name))
     ) {
       return;
     }
-    const theme = (node.attributes ?? []).find(
+    const opening = node.openingElement;
+    const theme = (opening.attributes ?? []).find(
       (attribute) =>
         attribute.type === 'JSXAttribute' && attribute.name?.name === 'theme',
     );
@@ -474,11 +477,15 @@ function providerUses(
     const status: FactStatus = variant == null ? 'inferred' : 'known';
     output.push(
       Object.freeze({
-        providerBinding: String(node.name.name),
+        providerBinding: String(opening.name.name),
         variant,
         status,
-        start: Number(node.start ?? 0),
-        end: Number(node.end ?? 0),
+        start: Number(opening.start ?? 0),
+        end: Number(opening.end ?? 0),
+        subtreeSpan: Object.freeze({
+          start: Number(node.start ?? 0),
+          end: Number(node.end ?? 0),
+        }),
       }),
     );
   });

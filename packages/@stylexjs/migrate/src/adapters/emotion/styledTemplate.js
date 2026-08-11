@@ -355,6 +355,16 @@ export function discoverStyledThemeTemplateFacts({
       }),
   );
   const output = [];
+  const providerSpans = themeFacts
+    .filter((fact) => fact.kind === 'theme-provider')
+    .map((fact) => {
+      const value: $FlowFixMe = fact.value;
+      return value.subtreeSpan;
+    })
+    .filter(
+      (span) =>
+        typeof span?.start === 'number' && typeof span?.end === 'number',
+    );
   for (const usageFact of usageFacts) {
     const usage: $FlowFixMe = usageFact.value;
     if (usage.themeSliceEligible !== true) continue;
@@ -364,6 +374,12 @@ export function discoverStyledThemeTemplateFacts({
     const analysis = analyzeThemeTemplate(
       templates.get(Number(readiness.span?.start)),
       reads,
+    );
+    const providerScoped = (usage.consumers ?? []).every((consumer) =>
+      providerSpans.some(
+        (span) =>
+          span.start < consumer.span.start && consumer.span.end < span.end,
+      ),
     );
     output.push(
       createFact({
@@ -375,6 +391,7 @@ export function discoverStyledThemeTemplateFacts({
           usageFactId: usageFact.id,
           name: String(usage.name),
           supported: analysis.supported,
+          providerScoped,
           reason: analysis.supported ? null : analysis.reason,
           declarations: analysis.supported
             ? analysis.declarations

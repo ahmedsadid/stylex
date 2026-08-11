@@ -116,6 +116,7 @@ export function factory(styled) {
       templateGrammarBlockedReasons: {},
       themeTemplateGrammarFacts: 0,
       flatThemeTemplateGrammarEligible: 0,
+      providerScopedThemeEligible: 0,
       themeTemplateGrammarBlockedReasons: {},
       plannedThemeSites: 0,
     });
