@@ -16,6 +16,7 @@ stylex-migrate context open <task-id>
 stylex-migrate context inspect <task-id>
 stylex-migrate context submit <task-id> <agent|human> <name> <version> [skill-version]
 stylex-migrate context abandon <task-id>
+stylex-migrate theme candidates
 stylex-migrate theme draft <json-file> <author>
 stylex-migrate theme inspect <draft-id>
 stylex-migrate theme approve <draft-id> <reviewer> --human-confirm
@@ -53,6 +54,11 @@ an owner decision, blocked task, abandoned task, or exhausted task.
 content-addressed candidate, removes the external worktree, and returns the
 candidate ID. The name and versions describe the proposer; they grant no
 authority.
+
+`theme candidates` reports each exact styled-theme file's definitions,
+`themePaths`, local-provider readiness, bridge readiness, and blockers. It is a
+selection report only; `bridgeReady` does not assert that a repository bridge
+exists or covers the path.
 
 `theme draft` may accept an explicit token map or scaffold one from known theme
 reads in the declared consumer files. It resolves the requested paths through a

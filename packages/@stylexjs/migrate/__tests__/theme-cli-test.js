@@ -94,6 +94,27 @@ export const Card = () => <ThemeProvider theme={darkTheme}><CardRoot data-card="
     expect(syncCli(repo, ['init']).code).toBe(0);
     const scan = syncCli(repo, ['scan']);
     expect(scan.code).toBe(0);
+    const candidates = syncCli(repo, ['theme', 'candidates']);
+    expect(candidates).toMatchObject({
+      code: 0,
+      json: {
+        command: 'theme candidates',
+        counts: {
+          bridgeReadyFiles: 1,
+          bridgeReadyDefinitions: 1,
+          localProviderReadyFiles: 1,
+        },
+        candidates: [
+          {
+            file: 'src/Card.tsx',
+            definitionNames: ['CardRoot'],
+            themePaths: ['colors.foreground'],
+            bridgeReady: true,
+            localProviderReady: true,
+          },
+        ],
+      },
+    });
     const definitionFile = path.join(inputRoot, 'theme.json');
     writeFiles(inputRoot, {
       'theme.json': JSON.stringify({

@@ -63,6 +63,7 @@ import {
 import { proposeThemeDecisionCandidate } from './theme/candidate';
 import { resolveThemeDecisionDefinition } from './theme/resolve';
 import { scaffoldThemeDecisionDefinition } from './theme/scaffold';
+import { themeConsumerCandidates } from './theme/candidates';
 import { proposeMechanicalCandidate } from './mechanical/candidate';
 import { proposeStyledCandidate } from './styled/candidate';
 import type { CandidatePatch } from './candidate/patch';
@@ -91,6 +92,7 @@ Commands:
                           print the exact frozen patch without applying it
   theme draft <json-file> <author>
                           validate and persist a theme token-map draft
+  theme candidates        list exact styled-theme consumer batches and blockers
   theme inspect <draft>   show approval and active/superseded state
   theme approve <draft> <reviewer> --human-confirm
                           record a human approval; agents must not run this
@@ -553,6 +555,23 @@ export function runCli(
         return 2;
       }
       presentCandidateDiff(record.candidate, json, stdout);
+      return 0;
+    }
+    if (args[0] === 'theme' && args[1] === 'candidates' && args.length === 2) {
+      const inventory = loadCurrentInventory(openProject(cwd));
+      if (inventory == null) {
+        throw new Error(
+          'Run stylex-migrate scan before listing theme candidates',
+        );
+      }
+      present(
+        {
+          command: 'theme candidates',
+          ...themeConsumerCandidates(inventory),
+        } as $FlowFixMe,
+        json,
+        stdout,
+      );
       return 0;
     }
     if (args[0] === 'theme' && args[1] === 'draft' && args.length === 4) {

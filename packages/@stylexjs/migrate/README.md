@@ -52,6 +52,7 @@ stylex-migrate context open <cluster-id> "<goal>"
 stylex-migrate context inspect <task-id>
 stylex-migrate context submit <task-id> <agent|human> <name> <version> [skill-version]
 stylex-migrate context abandon <task-id>
+stylex-migrate theme candidates
 stylex-migrate theme draft <json-file> <author>
 stylex-migrate theme inspect <draft-id>
 stylex-migrate theme approve <draft-id> <reviewer> --human-confirm
@@ -95,6 +96,9 @@ contextual policy. `candidate diff` prints that frozen patch verbatim for
 developer review; it does not apply it. Theme approval requires an explicit
 named human and cannot be delegated to an agent.
 
+`theme candidates` lists exact styled-theme consumer files, definitions, theme
+paths, local-provider readiness, bridge readiness, and blockers. Bridge-ready is
+a bounded syntax/usage result, not evidence that a repository bridge exists.
 `theme draft` can scaffold a token map from known reads in exact declared
 consumer files. It resolves only those requested paths through bounded object
 composition and configured-path imports, records each variant's root module, and

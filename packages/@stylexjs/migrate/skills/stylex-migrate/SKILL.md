@@ -104,7 +104,10 @@ different lane.
 
 1. Run `stylex-migrate scan`, then read
    [themes-and-runtime-values.md](references/themes-and-runtime-values.md) and
-   the relevant facts with `stylex-migrate explain`.
+   the relevant facts with `stylex-migrate explain`. Run
+   `stylex-migrate theme candidates` to select exact consumer files; treat
+   `bridgeReady` as a syntax/usage result, not proof that bridge coverage
+   exists.
 2. Put the temporary JSON input outside the source checkout. Declare variants,
    their root source module, the target module, and exact consumer files. The
    `tokens` array may be omitted: the tool will scaffold known consumer reads,

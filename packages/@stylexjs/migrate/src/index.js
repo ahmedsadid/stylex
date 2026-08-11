@@ -160,6 +160,11 @@ export {
 } from './theme/resolve';
 export type { ThemeValueResolution } from './theme/resolve';
 export { scaffoldThemeDecisionDefinition } from './theme/scaffold';
+export { themeConsumerCandidates } from './theme/candidates';
+export type {
+  ThemeConsumerCandidate,
+  ThemeConsumerCandidateReport,
+} from './theme/candidates';
 export { emitThemeModule } from './theme/emit';
 export { proposeApprovedThemeFiles } from './theme/rewrite';
 export type {
