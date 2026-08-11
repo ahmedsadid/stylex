@@ -7,6 +7,7 @@
  * @flow strict
  */
 
+import { getDefaultPriority } from '@stylexjs/shared';
 import type {
   Declaration,
   PseudoElement,
@@ -91,19 +92,31 @@ function staticValue(value: StyleValue): StaticValue {
 }
 
 /**
- * Keys are emitted in alphabetical order.
+ * Keys are emitted in StyleX's default property order.
  *
- * This is only safe because the supported subset excludes shorthands: with
- * every declaration addressing an independent property, no ordering of them
- * can change the result, and sorted keys satisfy StyleX's own lint rule without
- * anyone having to run an autofix over the file.
+ * Discovery has already expanded supported shorthands and the IR has already
+ * resolved authored-order conflicts. Reordering the resulting independent
+ * property groups therefore cannot change the style. Matching the lint rule's
+ * order avoids refusing otherwise valid proposals at the final lint gate.
  */
+function propertyOrder(property: string): number {
+  return (
+    getDefaultPriority(property.replace(/[A-Z]/g, '-$&').toLowerCase()) || 1
+  );
+}
+
+function comparePropertyNames(left: string, right: string): number {
+  const leftOrder = propertyOrder(left);
+  const rightOrder = propertyOrder(right);
+  return leftOrder - rightOrder || left.localeCompare(right);
+}
+
 function sortedProperties(
   declarations: $ReadOnlyArray<Declaration>,
 ): $ReadOnlyArray<string> {
   return [
     ...new Set(declarations.map((declaration) => declaration.property)),
-  ].sort();
+  ].sort(comparePropertyNames);
 }
 
 function declarationLines(

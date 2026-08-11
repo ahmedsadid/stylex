@@ -43,6 +43,27 @@ function file(styleObject: string): string {
 }
 
 describe('the comparison model', () => {
+  test('the proposal uses StyleX property order before running lint', () => {
+    const result = proposeStaticConversion({
+      source: file(`{
+        opacity: 0,
+        pointerEvents: 'none',
+        position: 'absolute',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        width: '100%',
+      }`),
+      filename: FILENAME,
+    });
+    expect(result.status).toBe('proposed');
+    if (result.status === 'proposed') {
+      expect(result.code.indexOf('position:')).toBeLessThan(
+        result.code.indexOf('left:'),
+      );
+    }
+  });
+
   test('canonicalises only differences that carry no meaning', () => {
     expect(canonicalValue('  red  ')).toBe('red');
     expect(canonicalValue('rgb(1, 2, 3)')).toBe('rgb(1,2,3)');
