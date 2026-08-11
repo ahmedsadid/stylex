@@ -18,6 +18,7 @@ type DefinitionShape = {
   +targetName: string | null,
   +syntax: 'call' | 'tagged-template',
   +styleForms: $ReadOnlyArray<string>,
+  +templateExpressions: number | null,
   +callback: boolean,
   +themeDependent: boolean,
   +propDependent: boolean,
@@ -300,6 +301,10 @@ function definitionShape(
       syntax === 'tagged-template'
         ? Object.freeze(['tagged-template'])
         : Object.freeze(styleNodes.map(styleForm)),
+    templateExpressions:
+      syntax === 'tagged-template'
+        ? (expression.quasi?.expressions ?? []).length
+        : null,
     ...signals,
     hasOptions: optionsNode != null,
     hasShouldForwardProp:

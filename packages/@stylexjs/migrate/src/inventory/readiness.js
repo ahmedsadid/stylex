@@ -17,6 +17,9 @@ export type ReadinessSummary = {
     +targets: { +intrinsic: number, +component: number, +unknown: number },
     +syntax: { +call: number, +'tagged-template': number },
     +styleForms: { +[string]: number },
+    +closedTemplates: number,
+    +intrinsicClosedTemplates: number,
+    +componentClosedTemplates: number,
     +callbacks: number,
     +themeDependent: number,
     +propDependent: number,
@@ -41,6 +44,7 @@ export type ReadinessSummary = {
     +targetName: string | null,
     +syntax: string,
     +styleForms: $ReadOnlyArray<string>,
+    +templateExpressions: number | null,
     +themeDependent: boolean,
     +propDependent: boolean,
     +hasOptions: boolean,
@@ -65,6 +69,9 @@ export function inventoryReadiness(
   const samples = [];
   let definitions = 0;
   let callbacks = 0;
+  let closedTemplates = 0;
+  let intrinsicClosedTemplates = 0;
+  let componentClosedTemplates = 0;
   let themeDependent = 0;
   let propDependent = 0;
   let withOptions = 0;
@@ -93,6 +100,11 @@ export function inventoryReadiness(
     else targetCounts.unknown++;
     if (value.syntax in syntaxCounts) syntaxCounts[value.syntax]++;
     for (const form of value.styleForms ?? []) bump(styleForms, String(form));
+    if (value.syntax === 'tagged-template' && value.templateExpressions === 0) {
+      closedTemplates++;
+      if (value.targetKind === 'intrinsic') intrinsicClosedTemplates++;
+      if (value.targetKind === 'component') componentClosedTemplates++;
+    }
     if (value.callback === true) callbacks++;
     if (value.themeDependent === true) themeDependent++;
     if (value.propDependent === true) propDependent++;
@@ -109,6 +121,10 @@ export function inventoryReadiness(
       styleForms: Object.freeze(
         (value.styleForms ?? []).map((form) => String(form)),
       ),
+      templateExpressions:
+        typeof value.templateExpressions === 'number'
+          ? value.templateExpressions
+          : null,
       themeDependent: value.themeDependent === true,
       propDependent: value.propDependent === true,
       hasOptions: value.hasOptions === true,
@@ -152,6 +168,9 @@ export function inventoryReadiness(
           ),
         ),
       ),
+      closedTemplates,
+      intrinsicClosedTemplates,
+      componentClosedTemplates,
       callbacks,
       themeDependent,
       propDependent,
