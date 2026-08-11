@@ -209,6 +209,26 @@ export type {
   ThemeValue,
   ThemeVariantDefinition,
 } from './theme/model';
+export {
+  DYNAMIC_STRATEGY_PROTOCOL_VERSION,
+  createDynamicStrategyDraft,
+  validateDynamicStrategyDraft,
+} from './dynamic/model';
+export type {
+  DynamicStrategyDefinition,
+  DynamicStrategyDraft,
+  DynamicStrategyEntry,
+  DynamicStrategyKind,
+} from './dynamic/model';
+export {
+  assertCurrentDynamicStrategy,
+  currentDynamicStrategy,
+  inspectDynamicStrategy,
+  loadDynamicStrategyDraft,
+  persistDynamicStrategyDraft,
+  validateDynamicStrategyAgainstCurrentProject,
+} from './dynamic/decisions';
+export type { DynamicStrategyInspection } from './dynamic/decisions';
 export { runRuntimeCommandProvider } from './runtime/provider';
 export { aggregateRuntimeCoverage } from './runtime/coverage';
 export type {

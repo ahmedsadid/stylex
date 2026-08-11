@@ -70,6 +70,10 @@ import { proposeStyledCandidate } from './styled/candidate';
 import type { CandidatePatch } from './candidate/patch';
 import { THEME_DECISION_PROTOCOL_VERSION } from './theme/model';
 import type { ThemeDecisionDraft } from './theme/model';
+import {
+  inspectDynamicStrategy,
+  persistDynamicStrategyDraft,
+} from './dynamic/decisions';
 
 type WriteOutput = (text: string) => mixed;
 
@@ -92,6 +96,10 @@ Commands:
                           freeze a checked closed-intrinsic styled candidate
   candidate diff <candidate>
                           print the exact frozen patch without applying it
+  dynamic strategy draft <json-file> <agent|human> <author>
+                          persist an exact per-prop contextual strategy
+  dynamic strategy inspect <draft>
+                          show active/superseded strategy state
   theme draft <json-file> <author>
                           validate and persist a theme token-map draft
   theme candidates        list exact styled-theme consumer batches and blockers
@@ -583,6 +591,60 @@ export function runCli(
           command: 'theme candidates',
           ...themeConsumerCandidates(inventory),
         } as $FlowFixMe,
+        json,
+        stdout,
+      );
+      return 0;
+    }
+    if (
+      args[0] === 'dynamic' &&
+      args[1] === 'strategy' &&
+      args[2] === 'draft' &&
+      args.length === 6
+    ) {
+      const source = path.resolve(cwd, args[3]);
+      const authorKind = args[4];
+      if (authorKind !== 'agent' && authorKind !== 'human') {
+        throw new Error('Dynamic strategy author kind must be agent or human');
+      }
+      const draft = persistDynamicStrategyDraft({
+        project: openProject(cwd),
+        definition: parseJson(fs.readFileSync(source, 'utf8'), source),
+        authorKind,
+        authoredBy: args[5],
+      });
+      present(
+        {
+          command: 'dynamic strategy draft',
+          state: 'active',
+          draft: draft as $FlowFixMe,
+          warnings: [
+            'A dynamic strategy is a content-addressed migration input, not semantic proof or human approval.',
+          ],
+          next: `Run stylex-migrate context open ${draft.clusterId} "<goal>".`,
+        },
+        json,
+        stdout,
+      );
+      return 0;
+    }
+    if (
+      args[0] === 'dynamic' &&
+      args[1] === 'strategy' &&
+      args[2] === 'inspect' &&
+      args.length === 4
+    ) {
+      const inspection = inspectDynamicStrategy(openProject(cwd), args[3]);
+      present(
+        {
+          command: 'dynamic strategy inspect',
+          state: inspection.state,
+          activeDefinitionHash: inspection.activeDefinitionHash,
+          draft: inspection.draft as $FlowFixMe,
+          warnings: [
+            'The strategy records a selected approach and evidence requirements; it does not resolve the dynamic fact unknowns.',
+          ],
+        },
         json,
         stdout,
       );
