@@ -70,11 +70,15 @@ stylex-migrate cleanup --confirm   # remove unreferenced local artifacts
 `scan` inventories configured source globs and records parse or resolution
 failures without treating them as absence. `plan` groups sites with overlapping
 change ownership and retains the inputs and facts behind each classification.
-`readiness` reports binding-backed Emotion styled shapes, theme facts, and
-css-prop classifications. Styled definitions in that report are observations,
-not planned or convertible sites. `status` reports counts by classification and
-state; it does not report a conversion percentage. `explain` makes routing and
-blocking reasons available after restarting the process.
+`readiness` reports binding-backed Emotion styled shapes, same-file usage and
+escape graphs, theme facts, and css-prop classifications. A
+`firstSliceEligible` styled count means that the binding passed the initial
+component-boundary screen; it does not mean that its CSS grammar has been
+accepted or that a candidate exists. Styled readiness and usage facts are
+observations, not planned or convertible sites. `status` reports counts by
+classification and state; it does not report a conversion percentage.
+`explain` makes routing and blocking reasons available after restarting the
+process.
 
 Every command also accepts `--json`. Run `init` before the other commands.
 `mechanical propose` accepts only a current planned mechanical cluster and
