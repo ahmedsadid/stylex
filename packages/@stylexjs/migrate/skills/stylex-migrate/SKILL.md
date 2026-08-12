@@ -160,7 +160,7 @@ StyleX build integration.
    - `needs-owner-decision`: stop and report the decision or evidence required.
    - `blocked`: stop. Do not create another attempt outside the protocol.
 
-An `evidence-surface` task is different: both allowed files are generated and
+An `evidence-surface` task is different: all required outputs are generated and
 immutable, so make no edits. Submit it immediately. Verify its candidate
 together with every migration candidate named by its runtime cases; verifying
 the surface alone cannot establish coverage of unchanged application paths.
@@ -170,7 +170,11 @@ workflow in
 [themes-and-runtime-values.md](references/themes-and-runtime-values.md).
 Submission runs a frozen-byte wiring guard before repository verification. A
 guard pass is a syntax claim only; it does not resolve the dynamic fact's
-unknowns or earn `runtime-matched`.
+unknowns or earn `runtime-matched`. When an exact exported component can render
+from JSON-safe props without application providers, use the retained component
+workflow in [runtime-evidence.md](references/runtime-evidence.md): it compares
+the original Emotion component with the exact candidate rather than asking the
+agent to predict browser output.
 
 ## Run a theme decision
 

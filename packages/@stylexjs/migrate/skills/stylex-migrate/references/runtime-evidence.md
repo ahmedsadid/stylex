@@ -16,6 +16,11 @@ Runtime evidence has three different baseline modes:
    locked expected observations. It is not a retained baseline and must never be
    labelled as one.
 
+The dynamic component generator is a retained-repository mode even though the
+harness itself is generated: the same immutable harness renders the original
+component in the detached baseline and the exact converted component in the
+candidate workspace.
+
 ## Open a generated probe
 
 Use this only when `runtime inspect` finds no `known` native surface capable of
@@ -56,6 +61,40 @@ The tool does not silently choose representative states. When a developer allows
 inferred test inputs, record them with `stylex-migrate assumption record`,
 inspect the artifact, and bind its ID to the contextual task. A test assumption
 cannot earn approval.
+
+## Open a retained dynamic component probe
+
+Use this after persisting a current dynamic strategy when the exact exported
+component can render from JSON-safe props without routing, providers, network
+data, or agent-authored JavaScript. Prefer a repository-owned test when one can
+exercise the same cases.
+
+1. Record a test assumption whose files include the component and every source
+   used to justify the prop cases. Name every case ID explicitly.
+2. Create a temporary `stylex-migrate-dynamic-runtime-probe-v2` JSON definition
+   outside the repository. Declare one safe repository-relative consumer file,
+   its named export, the dynamic site IDs, JSON-safe props for each case,
+   target selectors, computed properties, public attributes, DOM/ref
+   observations, viewport, rationale, and limitations. The generator accepts
+   data only; it does not accept wrapper code or arbitrary imports.
+3. Run
+   `stylex-migrate dynamic probe open <strategy-id> <assumption-id> <json-file> "<goal>"`.
+   Submit the returned task immediately without changing any required output.
+4. Verify the probe candidate together with the exact dynamic candidate and any
+   bootstrap candidate required to compile it. The verifier runs the same
+   harness twice: retained repository plus probe files for the baseline, and
+   bootstrap plus migration plus probe files for the candidate.
+
+Observe contract-relevant output, not implementation details chosen by the
+strategy. For example, a CSS-variable strategy should compare the resulting
+computed value and public prop filtering; compare the raw internal `style`
+attribute only when its byte representation is itself a required contract.
+
+Generated component probes are deliberately narrow. If the component needs a
+theme provider, router, application store, localization initialization, or
+other context, use a repository-native surface or record the case as not
+runtime-covered. Do not expand the declarative input into executable fixture
+code.
 
 Each provider declares case IDs, changed paths, site IDs, theme, interaction,
 and viewport. Its command must print one `stylex-migrate-runtime-v1` JSON report

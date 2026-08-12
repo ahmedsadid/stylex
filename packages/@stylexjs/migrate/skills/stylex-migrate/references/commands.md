@@ -15,6 +15,7 @@ stylex-migrate bootstrap open "<goal>" [package-root] [stylex-spec] [integration
 stylex-migrate candidate diff <candidate-id>
 stylex-migrate dynamic strategy draft <json-file> <agent|human> <author>
 stylex-migrate dynamic strategy inspect <draft-id>
+stylex-migrate dynamic probe open <draft-id> <assumption-id> <json-file> "<goal>"
 stylex-migrate assumption record <json-file> <agent|human> <author>
 stylex-migrate assumption inspect <assumption-id>
 stylex-migrate runtime inspect
@@ -88,6 +89,14 @@ The command records migration intent and evidence requirements; it is neither
 human approval nor behavioral evidence. `dynamic strategy inspect` reports the
 exact entries and whether the draft remains active. Put its temporary JSON input
 outside the source checkout.
+
+`dynamic probe open` generates a locked React/Rspack/Playwright harness for one
+exact exported component and JSON-safe prop cases. Its baseline renders the
+retained repository bytes; its candidate renders the composed bootstrap and
+migration candidates. Submit the generated task unchanged, then verify its
+candidate together with the bootstrap candidate when required and the dynamic
+candidate named by its cases. This is sampled retained behavior, not an agent-
+authored expected-value oracle or production-route coverage.
 
 The first `context open` creates a task from the current plan. The second form
 opens attempt two only when the kernel recorded `needs-replan`. It cannot reopen
