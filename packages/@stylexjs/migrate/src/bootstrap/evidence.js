@@ -18,6 +18,12 @@ import type { VerificationCandidate } from '../evidence/candidates';
 import type { EvidenceConfig, EvidenceSubjectKind } from '../evidence/config';
 import type { ProjectState } from '../state/project';
 
+function buildCoversPath(packageRoot: string, file: string): boolean {
+  if (file.startsWith('.stylex-migrate-probes/')) return false;
+  if (packageRoot === '' || packageRoot === '.') return true;
+  return file.startsWith(`${packageRoot}/`);
+}
+
 export function withBootstrapEvidenceProviders({
   project,
   candidates,
@@ -49,6 +55,16 @@ export function withBootstrapEvidenceProviders({
         `Bootstrap candidate ${candidate.candidate.id} has no passing frozen wiring check`,
       );
     }
+    const fileGlobs = [
+      ...new Set([
+        ...(inspection.task.scope.bootstrapPaths ?? []),
+        ...candidates.flatMap((record) =>
+          record.candidate.changes
+            .map((change) => change.path)
+            .filter((file) => buildCoversPath(origin.packageRoot, file)),
+        ),
+      ]),
+    ].sort();
     generated.push({
       id: bootstrapRspackProviderId(origin.inspectionId),
       kind: 'bootstrap-rspack',
@@ -61,7 +77,7 @@ export function withBootstrapEvidenceProviders({
       buildCommand: origin.buildCommand,
       cwd: '.',
       allowedEnv: ['CI', 'PATH'],
-      fileGlobs: inspection.task.scope.bootstrapPaths ?? [],
+      fileGlobs,
       limitations: [RSPACK_SENTINEL_LIMITATION],
       timeoutMs: 15 * 60 * 1000,
     });

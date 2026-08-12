@@ -165,10 +165,38 @@ export default {
       ],
     });
     if (candidate == null) throw new Error('candidate was not persisted');
+    const composedCandidate = {
+      ...candidate,
+      candidate: {
+        ...candidate.candidate,
+        touchedFiles: [
+          ...candidate.candidate.touchedFiles,
+          'src/App.tsx',
+          '.stylex-migrate-probes/runtime-collector.cjs',
+        ],
+        changes: [
+          ...candidate.candidate.changes,
+          {
+            path: 'src/App.tsx',
+            status: 'modified' as 'modified',
+            content: 'export const App = () => <main />;\n',
+            contentHash: 'app-target',
+            mode: '100644',
+          },
+          {
+            path: '.stylex-migrate-probes/runtime-collector.cjs',
+            status: 'added' as 'added',
+            content: 'module.exports = {};\n',
+            contentHash: 'probe-target',
+            mode: '100644',
+          },
+        ],
+      },
+    };
     expect(
       withBootstrapEvidenceProviders({
         project,
-        candidates: [candidate],
+        candidates: [composedCandidate],
         subject: 'candidate',
         config: readConfig(project).evidence,
       }).providers,
@@ -176,7 +204,12 @@ export default {
       expect.objectContaining({
         kind: 'bootstrap-rspack',
         packageManager: 'pnpm',
-        fileGlobs: ['package.json', 'pnpm-lock.yaml', 'rspack.config.ts'],
+        fileGlobs: [
+          'package.json',
+          'pnpm-lock.yaml',
+          'rspack.config.ts',
+          'src/App.tsx',
+        ],
       }),
     ]);
     expect(readFile(repo, 'package.json')).toBe(originalManifest);
