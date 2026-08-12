@@ -43,8 +43,10 @@ jobs:
         echo "table<<EOF" >> $GITHUB_OUTPUT
         yarn workspace benchmarks run compare -- ${{ env.BASE_JSON }} ${{ env.PATCH_JSON }} >> markdown
         cat markdown >> $GITHUB_OUTPUT
+        cat markdown >> $GITHUB_STEP_SUMMARY
         echo "EOF" >> $GITHUB_OUTPUT
     - name: 'Post comment'
+      continue-on-error: true
       uses: edumserrano/find-create-or-update-comment@v3
       with:
         issue-number: ${{ github.event.pull_request.number }}
@@ -97,8 +99,10 @@ jobs:
         echo "table<<EOF" >> $GITHUB_OUTPUT
         yarn workspace benchmarks run compare -- ${{ env.BASE_JSON }} ${{ env.PATCH_JSON }} >> markdown
         cat markdown >> $GITHUB_OUTPUT
+        cat markdown >> $GITHUB_STEP_SUMMARY
         echo "EOF" >> $GITHUB_OUTPUT
     - name: 'Post comment'
+      continue-on-error: true
       uses: edumserrano/find-create-or-update-comment@v3
       with:
         issue-number: ${{ github.event.pull_request.number }}

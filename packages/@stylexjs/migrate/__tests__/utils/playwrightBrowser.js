@@ -11,13 +11,13 @@
 
 const fs = require('fs');
 
-type BrowserInspection = {
+/*:: type BrowserInspection = {
   +available: boolean,
   +executablePath: string | null,
   +reason: string | null,
-};
+}; */
 
-function inspectBrowser(): BrowserInspection {
+function inspectBrowser() /*: BrowserInspection */ {
   try {
     const { chromium } = require('playwright');
     const managed = chromium.executablePath();
@@ -57,7 +57,7 @@ function inspectBrowser(): BrowserInspection {
   }
 }
 
-function browserTest(testFunction: $FlowFixMe): $FlowFixMe {
+function browserTest(testFunction /*: $FlowFixMe */) /*: $FlowFixMe */ {
   if (
     process.env.STYLEX_MIGRATE_REQUIRE_PLAYWRIGHT === '1' &&
     process.env.STYLEX_MIGRATE_SKIP_PLAYWRIGHT === '1'
