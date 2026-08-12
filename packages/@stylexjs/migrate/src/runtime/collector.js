@@ -8,7 +8,7 @@
  */
 
 export const GENERATED_RUNTIME_COLLECTOR_VERSION: string =
-  'stylex-migrate-generated-collector-v3';
+  'stylex-migrate-generated-collector-v4';
 
 export function emitGeneratedRuntimeCollector(): string {
   return String.raw`'use strict';
@@ -26,13 +26,16 @@ const playwright = require(resolveFromPackage(config.playwrightPackage));
 const {version: playwrightVersion} = require(resolveFromPackage(config.playwrightPackage + '/package.json'));
 
 function browserExecutablePath() {
+  const managedCandidate = playwright.chromium.executablePath();
   const systemCandidates = process.platform === 'darwin'
     ? ['/Applications/Google Chrome.app/Contents/MacOS/Google Chrome']
     : process.platform === 'linux'
       ? ['/usr/bin/google-chrome', '/usr/bin/chromium', '/usr/bin/chromium-browser']
       : [];
-  return systemCandidates.find(candidate => fs.existsSync(candidate))
-    || playwright.chromium.executablePath();
+  if (process.env.STYLEX_MIGRATE_REQUIRE_MANAGED_PLAYWRIGHT === '1') {
+    return managedCandidate;
+  }
+  return systemCandidates.find(candidate => fs.existsSync(candidate)) || managedCandidate;
 }
 
 function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }

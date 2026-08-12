@@ -8,37 +8,32 @@
  */
 
 import fs from 'fs';
+import net from 'net';
 import path from 'path';
 import { spawnSync } from 'child_process';
 import { emitGeneratedRuntimeCollector } from '../src/index';
 import { createTempDir, removeTempDir } from './utils/tempRepo';
+const { browserTest } = require('./utils/playwrightBrowser');
 
-let browserAvailable = false;
-let browserUnavailableReason = 'no Playwright browser executable was found';
-try {
-  const { chromium } = require('playwright');
-  const candidates = [
-    '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-    '/usr/bin/google-chrome',
-    '/usr/bin/chromium',
-    '/usr/bin/chromium-browser',
-    chromium.executablePath(),
-  ];
-  browserAvailable = candidates.some((candidate) => fs.existsSync(candidate));
-  browserUnavailableReason = `none of these paths exists: ${candidates.join(', ')}`;
-} catch (error) {
-  browserUnavailableReason =
-    error instanceof Error ? error.message : 'Playwright could not be loaded';
+const testWithBrowser = browserTest(test);
+
+function availablePort(): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const server = net.createServer();
+    server.once('error', reject);
+    server.listen({ port: 0, host: '127.0.0.1' }, () => {
+      const address = server.address();
+      if (address == null || typeof address === 'string') {
+        server.close();
+        reject(new Error('Could not allocate a local evidence-server port'));
+        return;
+      }
+      server.close((error) =>
+        error == null ? resolve(address.port) : reject(error),
+      );
+    });
+  });
 }
-if (
-  process.env.STYLEX_MIGRATE_REQUIRE_PLAYWRIGHT === '1' &&
-  !browserAvailable
-) {
-  throw new Error(
-    `Playwright is required for this test run, but ${browserUnavailableReason}`,
-  );
-}
-const testWithBrowser = browserAvailable ? test : test.skip;
 
 describe('generated runtime collector in Playwright', () => {
   let fixture: string;
@@ -51,7 +46,8 @@ describe('generated runtime collector in Playwright', () => {
 
   testWithBrowser(
     'normalizes source CSS independently and matches candidate computed styles',
-    () => {
+    async () => {
+      const port = await availablePort();
       const collectorPath = path.join(fixture, 'collector.cjs');
       const serverPath = path.join(fixture, 'server.cjs');
       const configPath = path.join(fixture, 'config.json');
@@ -63,7 +59,7 @@ const http = require('node:http');
 http.createServer((_request, response) => {
   response.writeHead(200, {'content-type': 'text/html'});
   response.end('<!doctype html><style>[data-theme-probe]{color:#111}</style><body><div data-theme-probe="root">Root</div></body>');
-}).listen(4179, '127.0.0.1');
+}).listen(${String(port)}, '127.0.0.1');
 `,
       );
       fs.writeFileSync(
@@ -77,7 +73,7 @@ http.createServer((_request, response) => {
             argv: [process.execPath, serverPath],
             cwd: fixture,
             inputFiles: [serverPath],
-            url: 'http://127.0.0.1:4179/',
+            url: `http://127.0.0.1:${String(port)}/`,
             timeoutMs: 5000,
           },
           cases: [

@@ -15,34 +15,10 @@ import type {
   RuntimeCommandProviderConfig,
 } from '../src/index';
 import { createTempDir, removeTempDir } from './utils/tempRepo';
+const { browserTest } = require('./utils/playwrightBrowser');
 
 const collector = path.join(__dirname, 'utils/playwrightRuntimeCollector.js');
-let browserAvailable = false;
-let browserUnavailableReason = 'no Playwright browser executable was found';
-try {
-  const { chromium } = require('playwright');
-  const candidates = [
-    '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-    '/usr/bin/google-chrome',
-    '/usr/bin/chromium',
-    '/usr/bin/chromium-browser',
-    chromium.executablePath(),
-  ];
-  browserAvailable = candidates.some((candidate) => fs.existsSync(candidate));
-  browserUnavailableReason = `none of these paths exists: ${candidates.join(', ')}`;
-} catch (error) {
-  browserUnavailableReason =
-    error instanceof Error ? error.message : 'Playwright could not be loaded';
-}
-if (
-  process.env.STYLEX_MIGRATE_REQUIRE_PLAYWRIGHT === '1' &&
-  !browserAvailable
-) {
-  throw new Error(
-    `Playwright is required for this test run, but ${browserUnavailableReason}`,
-  );
-}
-const testWithBrowser = browserAvailable ? test : test.skip;
+const testWithBrowser = browserTest(test);
 
 const SUBJECT: RepositoryEvidenceSubject = Object.freeze({
   kind: 'candidate',
@@ -74,7 +50,10 @@ const PROVIDER: RuntimeCommandProviderConfig = Object.freeze({
     "process.stdout.write('playwright-collector-v1')",
   ]),
   cwd: '.',
-  allowedEnv: Object.freeze(['PATH']),
+  allowedEnv: Object.freeze([
+    'PATH',
+    'STYLEX_MIGRATE_REQUIRE_MANAGED_PLAYWRIGHT',
+  ]),
   fileGlobs: Object.freeze(['src/**']),
   limitations: Object.freeze(['real browser fixture']),
   timeoutMs: 30000,

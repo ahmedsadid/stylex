@@ -11,22 +11,16 @@ const fs = require('fs');
 const os = require('os');
 const { chromium } = require('playwright');
 const { version: playwrightVersion } = require('playwright/package.json');
+const { inspectBrowser } = require('./playwrightBrowser');
 
 function browserExecutablePath() {
-  const systemCandidates =
-    process.platform === 'darwin'
-      ? ['/Applications/Google Chrome.app/Contents/MacOS/Google Chrome']
-      : process.platform === 'linux'
-        ? [
-            '/usr/bin/google-chrome',
-            '/usr/bin/chromium',
-            '/usr/bin/chromium-browser',
-          ]
-        : [];
-  return (
-    systemCandidates.find((candidate) => fs.existsSync(candidate)) ??
-    chromium.executablePath()
-  );
+  const browser = inspectBrowser();
+  if (!browser.available || browser.executablePath == null) {
+    throw new Error(
+      `Playwright browser unavailable: ${String(browser.reason)}`,
+    );
+  }
+  return browser.executablePath;
 }
 
 async function main() {
