@@ -14,6 +14,10 @@ import { appendStateEvent, replayEvents } from '../state/events';
 import { canonicalJson } from '../state/json';
 import { readRecord, writeRecord } from '../state/project';
 import {
+  assertCurrentTestAssumption,
+  loadTestAssumptionByArtifactHash,
+} from '../assumption/records';
+import {
   THEME_DECISION_PROTOCOL_VERSION,
   approveThemeDecision,
   createThemeDecisionDraft,
@@ -26,6 +30,23 @@ import type { CandidatePatch } from '../candidate/patch';
 import type { Inventory } from '../inventory/model';
 import type { ProjectState } from '../state/project';
 import type { ThemeDecisionApproval, ThemeDecisionDraft } from './model';
+
+export function loadThemeDecisionDraftByDefinitionHash(
+  project: ProjectState,
+  definitionHash: string,
+): ThemeDecisionDraft | null {
+  if (!/^[a-f0-9]{64}$/.test(definitionHash)) {
+    throw new Error('Invalid theme decision definition hash');
+  }
+  const draft = loadThemeDecisionDraft(
+    project,
+    `theme-draft-${shortHash(definitionHash)}`,
+  );
+  if (draft != null && draft.definitionHash !== definitionHash) {
+    throw new Error('Theme decision definition identity collision');
+  }
+  return draft;
+}
 
 export const THEME_NO_RUNTIME_LIMITATION: string =
   'WARNING: approving this token map does not establish runtime equivalence; configure runtime evidence before claiming runtime-matched.';
@@ -471,4 +492,44 @@ export function assertActiveThemeCandidateDecisions(
       `Theme candidate ${candidate.id} is stale because another decision is active for ${draft.targetModule}`,
     );
   }
+}
+
+export function assertCurrentThemeExperimentCandidate(
+  project: ProjectState,
+  candidate: CandidatePatch,
+): void {
+  if (candidate.proposer.version !== 'theme-experiment-v1') return;
+  if (
+    candidate.decisionArtifactHashes.length !== 1 ||
+    candidate.assumptionArtifactHashes.length !== 1
+  ) {
+    throw new Error(
+      `Theme experiment candidate ${candidate.id} must bind one draft and one test assumption`,
+    );
+  }
+  const draft = loadThemeDecisionDraftByDefinitionHash(
+    project,
+    candidate.decisionArtifactHashes[0],
+  );
+  if (draft == null) {
+    throw new Error(
+      `Theme experiment candidate ${candidate.id} refers to a missing draft`,
+    );
+  }
+  const inventory = loadCurrentInventory(project);
+  if (inventory == null || inventory.id !== draft.inventoryId) {
+    throw new Error(
+      `Theme experiment candidate ${candidate.id} names a stale draft inventory`,
+    );
+  }
+  const assumption = loadTestAssumptionByArtifactHash(
+    project,
+    candidate.assumptionArtifactHashes[0],
+  );
+  if (assumption == null) {
+    throw new Error(
+      `Theme experiment candidate ${candidate.id} refers to a missing test assumption`,
+    );
+  }
+  assertCurrentTestAssumption(project, assumption);
 }

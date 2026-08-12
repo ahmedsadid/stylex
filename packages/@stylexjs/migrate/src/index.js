@@ -231,7 +231,7 @@ export type {
   ThemeConsumerCandidateReport,
 } from './theme/candidates';
 export { emitThemeModule } from './theme/emit';
-export { proposeApprovedThemeFiles } from './theme/rewrite';
+export { proposeApprovedThemeFiles, proposeThemeFiles } from './theme/rewrite';
 export type {
   ThemeProposal,
   ThemeProposalOutcome,
@@ -243,15 +243,24 @@ export {
   THEME_BRIDGE_UNOBSERVED_LIMITATION,
   approvePersistedThemeDecision,
   assertActiveThemeCandidateDecisions,
+  assertCurrentThemeExperimentCandidate,
   inspectThemeDecision,
   loadThemeDecisionApproval,
   loadThemeDecisionDraft,
+  loadThemeDecisionDraftByDefinitionHash,
   persistThemeDecisionDraft,
   validateThemeDecisionAgainstInventory,
 } from './theme/decisions';
 export type { ThemeDecisionInspection } from './theme/decisions';
-export { proposeThemeDecisionCandidate } from './theme/candidate';
-export type { ThemeCandidateProposalResult } from './theme/candidate';
+export {
+  THEME_EXPERIMENT_PROTOCOL_VERSION,
+  proposeThemeDecisionCandidate,
+  proposeThemeExperimentCandidate,
+} from './theme/candidate';
+export type {
+  ThemeCandidateProposalResult,
+  ThemeExperimentProposalResult,
+} from './theme/candidate';
 export {
   THEME_BRIDGE_TASK_PROTOCOL_VERSION,
   openThemeBridgeTask,

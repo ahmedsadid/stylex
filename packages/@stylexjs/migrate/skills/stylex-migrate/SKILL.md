@@ -77,8 +77,8 @@ StyleX build integration.
    workspace without a shell. Do not substitute another version, source,
    package, package manager, flag, or working tree. Then wire the unplugin's
    `.rspack(...)` adapter into the discovered config while preserving existing
-   plugins and options. Do not add unrelated dependencies, scripts, entry
-   files, or migrations.
+   plugins and options. Do not add unrelated dependencies, scripts, entry files,
+   or migrations.
 5. Submit with `stylex-migrate context submit`, then inspect the frozen patch
    and run `stylex-migrate verify <candidate-id>` and
    `stylex-migrate review <candidate-id>`.
@@ -131,8 +131,8 @@ StyleX build integration.
    regenerate, annotate, or otherwise change its bytes; submission enforces the
    recorded hash.
 4. Treat every fact status literally. `unknown` and `resolution-failed` do not
-   mean false. Stop when a capsule stop condition applies.
-   When a developer authorizes a disposable test assumption, record it with
+   mean false. Stop when a capsule stop condition applies. When a developer
+   authorizes a disposable test assumption, record it with
    `stylex-migrate assumption record`, inspect it, and pass its ID after the
    goal in `context open`. Bound assumptions are exact test inputs, never owner
    decisions. Do not delete their warnings from reports.
@@ -191,26 +191,26 @@ unknowns or earn `runtime-matched`.
    `mappings` entry, variant source, bridge declaration, limitation, and the
    approval command to a human. If a bridge is declared and
    `bridgeEvidence.complete` is not true, do not recommend approval. Run
-   `stylex-migrate theme bridge open <draft-id> "<goal>" [assumption-id...]` to open the bounded
-   prerequisite integration task. Its generated theme module is a locked
-   required output. Edit only the named boundary files, keep the Emotion
-   provider, reuse its exact variant-selection source, avoid new semantic DOM
-   wrappers or unreviewed global DOM mutation. A body/document host experiment
-   requires a bound test assumption. Split `stylex.props(theme).className` on
-   whitespace, filter empty tokens, and spread the same token list into both
-   `classList.add` and `classList.remove`; the frozen guard rejects unsplit or
-   asymmetric wiring. Then submit through the normal
-   contextual protocol. Every generated variant must reach `stylex.props` in the
-   frozen candidate. Static observation remains only a wiring guard; require
-   repository checks and relevant light/dark runtime cases. The developer, not
-   the tool or agent, decides whether and how to apply the reviewed bridge
-   candidate. Rescan and create a current draft after external application.
-   For a disposable, assumption-bound root/body-portal experiment, create the
-   small v2 probe JSON described in
+   `stylex-migrate theme bridge open <draft-id> "<goal>" [assumption-id...]` to
+   open the bounded prerequisite integration task. Its generated theme module is
+   a locked required output. Edit only the named boundary files, keep the
+   Emotion provider, reuse its exact variant-selection source, avoid new
+   semantic DOM wrappers or unreviewed global DOM mutation. A body/document host
+   experiment requires a bound test assumption. Split
+   `stylex.props(theme).className` on whitespace, filter empty tokens, and
+   spread the same token list into both `classList.add` and `classList.remove`;
+   the frozen guard rejects unsplit or asymmetric wiring. Then submit through
+   the normal contextual protocol. Every generated variant must reach
+   `stylex.props` in the frozen candidate. Static observation remains only a
+   wiring guard; require repository checks and relevant light/dark runtime
+   cases. The developer, not the tool or agent, decides whether and how to apply
+   the reviewed bridge candidate. Rescan and create a current draft after
+   external application. For a disposable, assumption-bound root/body-portal
+   experiment, create the small v2 probe JSON described in
    [runtime-evidence.md](references/runtime-evidence.md), then run
-   `stylex-migrate theme probe open <draft-id> <assumption-id> <json-file>
-   "<goal>"`. Select `surface: "repository"` only for a real executable route;
-   select `surface: "generated-rspack"` when no such route is usable. Do not
+   `stylex-migrate theme probe open <draft-id> <assumption-id> <json-file> "<goal>"`.
+   Select `surface: "repository"` only for a real executable route; select
+   `surface: "generated-rspack"` when no such route is usable. Do not
    hand-author the four cases or copy browser-normalized values into expected
    observations. The tool derives light/dark × root/portal cases and source
    token values from the exact persisted draft. Submit the immutable surface
@@ -219,7 +219,11 @@ unknowns or earn `runtime-matched`.
    only the generated theme module and earns no bridge or consumer claim.
 4. Stop at approval. Never run `stylex-migrate theme approve`, never pass
    `--human-confirm`, and never describe agent assent as human approval. Resume
-   only after a human says they ran the approval command.
+   only after a human says they ran the approval command for production-intent
+   migration. For a disposable test explicitly authorized by a current test
+   assumption, run `stylex-migrate theme experiment <draft-id> <assumption-id>`
+   instead. Its deterministic candidate binds the draft and assumption hashes,
+   never earns `approved`, and must retain the warning in review output.
 5. Inspect the draft again. Continue only when its state is `active`; then run
    `stylex-migrate theme propose <draft-id>`. This command also owns eligible
    `styled-theme-intrinsic` consumers. It must rewrite the styled definition and

@@ -32,6 +32,7 @@ stylex-migrate theme inspect <draft-id>
 stylex-migrate theme bridge open <draft-id> "<goal>" [assumption-id...]
 stylex-migrate theme approve <draft-id> <reviewer> --human-confirm
 stylex-migrate theme propose <draft-id>
+stylex-migrate theme experiment <draft-id> <assumption-id>
 stylex-migrate verify <candidate-id>
 stylex-migrate review <candidate-or-verdict-id>
 stylex-migrate explain <cluster-or-candidate-id>
@@ -71,14 +72,14 @@ unambiguous Rspack target and creates a normal contextual task whose
 `bootstrapPaths` authorize only the discovered manifest, lockfile, and config.
 Submission requires the StyleX packages, a changed lockfile, and syntactic
 `.rspack(...)` adapter wiring. Verification automatically installs the locked
-candidate dependencies, compiles a real emitted-CSS sentinel, and runs the
-exact selected repository application build command. Without a real migrated
-consumer, only the isolated sentinel proves emitted StyleX CSS.
-The optional StyleX and integration specs default to the migrate package
-version; omitting only the integration spec reuses the StyleX spec. The unplugin
-peer defaults to `^2.3.11`. Supplying another literal is an explicit developer
-choice recorded in the task origin. The agent must run the returned
-`installCommands` argv arrays exactly.
+candidate dependencies, compiles a real emitted-CSS sentinel, and runs the exact
+selected repository application build command. Without a real migrated consumer,
+only the isolated sentinel proves emitted StyleX CSS. The optional StyleX and
+integration specs default to the migrate package version; omitting only the
+integration spec reuses the StyleX spec. The unplugin peer defaults to
+`^2.3.11`. Supplying another literal is an explicit developer choice recorded in
+the task origin. The agent must run the returned `installCommands` argv arrays
+exactly.
 
 `dynamic strategy draft` validates exact coverage of every observed prop path in
 one current planned `styled-dynamic-intrinsic` cluster and activates the
@@ -96,14 +97,14 @@ an owner decision, blocked task, abandoned task, or exhausted task.
 facts, repository input fingerprints, rationale, scope, alternatives, author,
 and limitations. Both agents and humans may author one. It never becomes
 `approved`. `assumption inspect` reports current or stale. Passing IDs after a
-context or bridge goal binds them separately from decision artifacts through
-the task, candidate, and evidence subject.
+context or bridge goal binds them separately from decision artifacts through the
+task, candidate, and evidence subject.
 
 `runtime inspect` reports repository-native Playwright, Storybook, and
-component-test surfaces as `known`, dependency-only possibilities as
-`inferred`, and absence as `unknown`. `theme topology` records direct global
-hosts, class mutations, portals, secondary windows, and secondary-document
-access. Neither command supplies runtime proof.
+component-test surfaces as `known`, dependency-only possibilities as `inferred`,
+and absence as `unknown`. `theme topology` records direct global hosts, class
+mutations, portals, secondary windows, and secondary-document access. Neither
+command supplies runtime proof.
 
 `runtime probe open` creates an immutable `evidence-surface` task from a strict
 declarative definition and a bound test assumption. It generates the collector
@@ -112,11 +113,11 @@ then verify the resulting candidate together with every migration candidate
 named by its runtime cases. The generated provider is attached automatically to
 that exact candidate set.
 
-`theme probe open` compiles a smaller repository-wiring definition plus an
-exact persisted theme draft into the standard light/dark root/portal matrix. It
+`theme probe open` compiles a smaller repository-wiring definition plus an exact
+persisted theme draft into the standard light/dark root/portal matrix. It
 derives expected source values from the draft and browser-normalizes them using
-the mapped CSS property; the agent does not supply expected computed values.
-The result remains generated-probe evidence bound to a test assumption, not a
+the mapped CSS property; the agent does not supply expected computed values. The
+result remains generated-probe evidence bound to a test assumption, not a
 retained application baseline or owner approval.
 
 `context submit` freezes the worktree diff, validates its actual paths, stores a
@@ -129,12 +130,12 @@ guard does not replace repository or runtime evidence.
 `theme bridge open` creates a contextual task directly from an exact current
 theme draft before approval. It permits changes only to the draft's boundary
 files and target module, seeds the deterministic module as an immutable required
-output, and binds the draft definition hash to the snapshot and candidate.
-Bound test assumptions may authorize named global-host experiments without
-claiming production intent. Global-host wiring must split the StyleX class name
-and spread identical tokens into DOMTokenList add/remove calls. Use
-the normal `context inspect`, `context submit`, `candidate diff`, `verify`, and
-`review` commands afterward. The command never edits the source checkout.
+output, and binds the draft definition hash to the snapshot and candidate. Bound
+test assumptions may authorize named global-host experiments without claiming
+production intent. Global-host wiring must split the StyleX class name and
+spread identical tokens into DOMTokenList add/remove calls. Use the normal
+`context inspect`, `context submit`, `candidate diff`, `verify`, and `review`
+commands afterward. The command never edits the source checkout.
 
 `theme candidates` reports each exact styled-theme file's definitions,
 `themePaths`, local-provider readiness, bridge readiness, and blockers. It is a
@@ -157,6 +158,15 @@ The agent may use both commands.
 named reviewer must inspect the map and run the command. `theme propose` is
 allowed only after inspection reports `active`; it deterministically freezes a
 candidate and does not write the source checkout.
+
+`theme experiment` is the test-only counterpart to `theme propose`. It accepts a
+current draft plus a current test assumption whose file scope contains the
+target module and every selected consumer. A bridge boundary need only be in
+scope when the experiment also changes or claims runtime coverage for it. It
+uses the same deterministic rewriter but binds the draft definition hash and
+assumption hash instead of creating or consuming an approval. It cannot earn
+`approved` or establish repository intent. Keep its warning and exact assumption
+scope in every report.
 
 A draft may declare repository-managed bridge `coverageGlobs` and
 `boundaryFiles`. The boundary files are hash-pinned inputs, but the coverage is

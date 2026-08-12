@@ -126,6 +126,7 @@ export const Account = () => (
 import {ThemeProvider} from '@emotion/react';
 import {darkTheme} from '../theme/themes';
 const CardRoot = styled.article\`
+  position: relative;
   color: \${p => p.theme.colors.foreground};
   padding-top: 4px;
 \`;
@@ -149,6 +150,7 @@ export const Card = () => (
     expect(output).toContain('darkTheme');
     expect(output).toContain('color: themeVars.foreground');
     expect(output).toContain("paddingTop: '4px'");
+    expect(output.indexOf('color:')).toBeLessThan(output.indexOf('position:'));
     expect(output).toContain(
       '<article {...stylex.props(styles.cardRoot)} {...stylex.props(darkTheme)} id="card">',
     );
@@ -162,7 +164,8 @@ export const Card = () => (
       ]),
     );
     expect(parseSource(output, 'src/components/Card.tsx').ok).toBe(true);
-    expect(lintStyleX(output, 'src/components/Card.tsx').ok).toBe(true);
+    const linted = lintStyleX(output, 'src/components/Card.tsx');
+    if (!linted.ok) throw new Error(JSON.stringify(linted.messages));
   });
 
   test('refuses an unmapped styled token without partial output', () => {

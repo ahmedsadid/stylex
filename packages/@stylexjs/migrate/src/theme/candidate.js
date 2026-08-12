@@ -25,15 +25,21 @@ import { appendStateEvent } from '../state/events';
 import { canonicalJson } from '../state/json';
 import { readConfig } from '../state/project';
 import {
+  assertCurrentTestAssumption,
+  loadTestAssumption,
+} from '../assumption/records';
+import {
   assertActiveThemeCandidateDecisions,
   inspectThemeDecision,
   validateThemeDecisionAgainstInventory,
 } from './decisions';
 import { THEME_DECISION_PROTOCOL_VERSION } from './model';
-import { proposeApprovedThemeFiles } from './rewrite';
+import { proposeApprovedThemeFiles, proposeThemeFiles } from './rewrite';
 import type { VerificationCandidate } from '../evidence/candidates';
 import type { EvidenceResult } from '../kernel/evidence';
 import type { ProjectState } from '../state/project';
+import type { TestAssumption } from '../assumption/model';
+import type { ThemeDecisionApproval, ThemeDecisionDraft } from './model';
 
 export type ThemeCandidateProposalResult =
   | {
@@ -47,6 +53,22 @@ export type ThemeCandidateProposalResult =
       +reason: string,
       +file: string | null,
     };
+
+export type ThemeExperimentProposalResult =
+  | {
+      +ok: true,
+      +record: VerificationCandidate,
+      +draftId: string,
+      +assumptionArtifactHash: string,
+    }
+  | {
+      +ok: false,
+      +reason: string,
+      +file: string | null,
+    };
+
+export const THEME_EXPERIMENT_PROTOCOL_VERSION: string =
+  'stylex-migrate-theme-experiment-v1';
 
 function readTextOrNull(root: string, file: string): string | null {
   const absolute = path.join(root, file);
@@ -97,10 +119,82 @@ export function proposeThemeDecisionCandidate({
   }
   const draft = inspection.draft;
   const approval = inspection.approval;
+  return proposeThemeCandidate({
+    project,
+    draft,
+    approval,
+    assumption: null,
+    workspaceRoot,
+    now,
+  });
+}
+
+export function proposeThemeExperimentCandidate({
+  project,
+  draftId,
+  assumptionId,
+  workspaceRoot,
+  now = () => new Date().toISOString(),
+}: {
+  +project: ProjectState,
+  +draftId: string,
+  +assumptionId: string,
+  +workspaceRoot?: string,
+  +now?: () => string,
+}): ThemeExperimentProposalResult {
+  const inspection = inspectThemeDecision(project, draftId);
+  const assumption = loadTestAssumption(project, assumptionId);
+  if (assumption == null) {
+    throw new Error(`No test assumption found for ${assumptionId}`);
+  }
+  assertCurrentTestAssumption(project, assumption);
+  const draft = inspection.draft;
+  const requiredScope = [draft.targetModule, ...draft.consumerFiles];
+  const missingScope = requiredScope.filter(
+    (file) => !assumption.scope.files.includes(file),
+  );
+  if (missingScope.length > 0) {
+    throw new Error(
+      `Test assumption ${assumptionId} does not authorize theme experiment paths: ${missingScope.join(', ')}`,
+    );
+  }
+  const result = proposeThemeCandidate({
+    project,
+    draft,
+    approval: null,
+    assumption,
+    workspaceRoot,
+    now,
+  });
+  return result.ok
+    ? {
+        ok: true,
+        record: result.record,
+        draftId,
+        assumptionArtifactHash: assumption.artifactHash,
+      }
+    : result;
+}
+
+function proposeThemeCandidate({
+  project,
+  draft,
+  approval,
+  assumption,
+  workspaceRoot,
+  now,
+}: {
+  +project: ProjectState,
+  +draft: ThemeDecisionDraft,
+  +approval: ThemeDecisionApproval | null,
+  +assumption: TestAssumption | null,
+  +workspaceRoot?: string,
+  +now: () => string,
+}): ThemeCandidateProposalResult {
   const inventory = loadCurrentInventory(project);
   if (inventory == null || inventory.id !== draft.inventoryId) {
     throw new Error(
-      `Theme decision ${draftId} is stale; run stylex-migrate scan and draft a new map`,
+      `Theme decision ${draft.id} is stale; run stylex-migrate scan and draft a new map`,
     );
   }
   validateThemeDecisionAgainstInventory(draft, inventory);
@@ -116,10 +210,15 @@ export function proposeThemeDecisionCandidate({
         ...(draft.bridge?.boundaryFiles ?? []),
         ...inventory.configInputs,
         draft.targetModule,
+        ...(assumption?.declaredInputs.map((input) => input.path) ?? []),
       ]),
     ].sort(),
     configHash,
-    decisionArtifactHashes: [approval.artifactHash],
+    decisionArtifactHashes: [
+      approval == null ? draft.definitionHash : approval.artifactHash,
+    ],
+    assumptionArtifactHashes:
+      assumption == null ? [] : [assumption.artifactHash],
   });
   const stale = detectStaleFiles(snapshot);
   if (stale.length > 0) {
@@ -142,7 +241,10 @@ export function proposeThemeDecisionCandidate({
       ]),
       [draft.targetModule, readTextOrNull(workspace.path, draft.targetModule)],
     ]);
-    const proposal = proposeApprovedThemeFiles({ files, draft, approval });
+    const proposal =
+      approval == null
+        ? proposeThemeFiles({ files, draft })
+        : proposeApprovedThemeFiles({ files, draft, approval });
     if (proposal.status === 'refused') {
       return {
         ok: false,
@@ -183,6 +285,12 @@ export function proposeThemeDecisionCandidate({
           ...(compiled.ok ? {} : { detail: compiled.reason }),
           limitations: [
             'the StyleX babel plugin was run without the repository compiler configuration',
+            ...(assumption == null
+              ? []
+              : [
+                  `WARNING: Test assumption ${assumption.id} authorizes a disposable theme experiment, not repository intent or human approval.`,
+                  ...assumption.limitations,
+                ]),
           ],
         }),
       );
@@ -218,10 +326,17 @@ export function proposeThemeDecisionCandidate({
       snapshot,
       proposer: {
         kind: 'deterministic',
-        version: 'theme-decision-v1',
-        protocolVersion: THEME_DECISION_PROTOCOL_VERSION,
+        version: approval == null ? 'theme-experiment-v1' : 'theme-decision-v1',
+        protocolVersion:
+          approval == null
+            ? THEME_EXPERIMENT_PROTOCOL_VERSION
+            : THEME_DECISION_PROTOCOL_VERSION,
       },
-      decisionArtifactHashes: [approval.artifactHash],
+      decisionArtifactHashes: [
+        approval == null ? draft.definitionHash : approval.artifactHash,
+      ],
+      assumptionArtifactHashes:
+        assumption == null ? [] : [assumption.artifactHash],
       expectedContent,
     });
     if (!built.ok) {
@@ -257,7 +372,9 @@ export function proposeThemeDecisionCandidate({
       siteIdsByFile: Object.freeze(siteIdsByFile),
       staticEvidence: Object.freeze(staticEvidence),
     });
-    assertActiveThemeCandidateDecisions(project, record.candidate);
+    if (approval != null) {
+      assertActiveThemeCandidateDecisions(project, record.candidate);
+    }
     saveVerificationCandidate(project, record, { now });
     appendStateEvent({
       project,
@@ -265,8 +382,9 @@ export function proposeThemeDecisionCandidate({
       entityId: record.candidate.id,
       state: 'frozen',
       data: {
-        draftId,
-        approvalArtifactHash: approval.artifactHash,
+        draftId: draft.id,
+        approvalArtifactHash:
+          approval == null ? draft.definitionHash : approval.artifactHash,
         changes: changedPaths(record.candidate),
       },
       now,
@@ -274,8 +392,9 @@ export function proposeThemeDecisionCandidate({
     return Object.freeze({
       ok: true,
       record,
-      draftId,
-      approvalArtifactHash: approval.artifactHash,
+      draftId: draft.id,
+      approvalArtifactHash:
+        approval == null ? draft.definitionHash : approval.artifactHash,
     });
   } finally {
     removeCandidateWorkspace(workspace);

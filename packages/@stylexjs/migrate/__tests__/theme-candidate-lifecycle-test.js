@@ -16,7 +16,9 @@ import {
   createCandidateEvidenceSubject,
   initializeProject,
   persistThemeDecisionDraft,
+  persistTestAssumption,
   proposeThemeDecisionCandidate,
+  proposeThemeExperimentCandidate,
   saveInventory,
   scanRepository,
   verifyPersistedCandidates,
@@ -324,6 +326,75 @@ export const darkTheme = {colors: {foreground: '#eee'}};
     expect(output).toContain('borderColor: themeVars.foreground');
     expect(output).toContain('<div {...stylex.props(styles.cardRoot)}>');
     expect(output).toContain('<span {...stylex.props(styles.cardLabel)}>');
+    expect(readFile(repo, 'src/Card.tsx')).toBe(styled);
+  });
+
+  test('freezes a theme experiment under a test assumption without human approval', () => {
+    const styled = `import styled from '@emotion/styled';
+const CardRoot = styled.div\`color: \${p => p.theme.colors.foreground};\`;
+export const Card = () => <CardRoot data-card="true" />;
+`;
+    repo = createTempRepo({
+      'src/App.tsx':
+        'export const App = ({children}) => <main>{children}</main>;\n',
+      'src/Card.tsx': styled,
+      'src/theme/themes.ts': `export const lightTheme = {colors: {foreground: '#111'}};
+export const darkTheme = {colors: {foreground: '#eee'}};
+`,
+    });
+    workspaceRoot = createTempDir('stylex-migrate-theme-ws-');
+    const project = initializeProject({ repositoryRoot: repo });
+    const inventory = scanRepository({ repositoryRoot: repo });
+    saveInventory(project, inventory);
+    const draft = persistThemeDecisionDraft({
+      project,
+      definition: definition(inventory.id, 'src/Card.tsx', 'foreground', {
+        coverageGlobs: ['src/**'],
+        boundaryFiles: ['src/App.tsx'],
+      }),
+      draftedBy: 'agent',
+    });
+    const assumption = persistTestAssumption({
+      project,
+      input: {
+        purpose: 'Exercise the inferred theme bridge in a disposable run.',
+        facts: [
+          {
+            statement: 'The fixture bridge is the selected experimental host.',
+            status: 'inferred',
+            inputFiles: ['src/App.tsx'],
+            detail: 'This is test wiring, not repository intent.',
+          },
+        ],
+        scope: {
+          files: ['src/App.tsx', 'src/Card.tsx', 'src/theme/tokens.stylex.ts'],
+          cases: ['theme-light-root', 'theme-dark-root'],
+        },
+        rationale: 'Test deterministic output before owner review.',
+        alternatives: ['Ask a human to approve the production map.'],
+        limitations: ['Does not approve the bridge.'],
+      },
+      authorKind: 'agent',
+      authoredBy: 'fixture-agent',
+    });
+    const result = proposeThemeExperimentCandidate({
+      project,
+      draftId: draft.id,
+      assumptionId: assumption.id,
+      workspaceRoot,
+    });
+    if (!result.ok) throw new Error(result.reason);
+    expect(result.record.candidate).toMatchObject({
+      proposer: {
+        version: 'theme-experiment-v1',
+        protocolVersion: 'stylex-migrate-theme-experiment-v1',
+      },
+      decisionArtifactHashes: [draft.definitionHash],
+      assumptionArtifactHashes: [assumption.artifactHash],
+    });
+    expect(candidateSource(result, 'src/Card.tsx')).toContain(
+      'color: themeVars.foreground',
+    );
     expect(readFile(repo, 'src/Card.tsx')).toBe(styled);
   });
 

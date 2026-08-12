@@ -15,7 +15,10 @@ import {
 import { recordContextVerificationOutcome } from '../context/lifecycle';
 import { withBootstrapEvidenceProviders } from '../bootstrap/evidence';
 import { withGeneratedRuntimeProbeProviders } from '../runtime/evidence';
-import { assertActiveThemeCandidateDecisions } from '../theme/decisions';
+import {
+  assertActiveThemeCandidateDecisions,
+  assertCurrentThemeExperimentCandidate,
+} from '../theme/decisions';
 import { appendStateEvent } from '../state/events';
 import { readConfig } from '../state/project';
 import {
@@ -72,6 +75,7 @@ export async function verifyPersistedCandidates({
   const candidates = loadVerificationCandidates(project, candidateIds);
   for (const record of candidates) {
     assertActiveThemeCandidateDecisions(project, record.candidate);
+    assertCurrentThemeExperimentCandidate(project, record.candidate);
   }
   const subjectInputs = candidates.map((record) => ({
     candidate: record.candidate,

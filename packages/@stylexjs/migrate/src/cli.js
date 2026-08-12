@@ -56,11 +56,15 @@ import {
 import {
   approvePersistedThemeDecision,
   assertActiveThemeCandidateDecisions,
+  assertCurrentThemeExperimentCandidate,
   inspectThemeDecision,
   loadThemeDecisionDraft,
   persistThemeDecisionDraft,
 } from './theme/decisions';
-import { proposeThemeDecisionCandidate } from './theme/candidate';
+import {
+  proposeThemeDecisionCandidate,
+  proposeThemeExperimentCandidate,
+} from './theme/candidate';
 import { openThemeBridgeTask } from './theme/bridgeTask';
 import { resolveThemeDecisionDefinition } from './theme/resolve';
 import { scaffoldThemeDecisionDefinition } from './theme/scaffold';
@@ -133,6 +137,8 @@ Commands:
   theme approve <draft> <reviewer> --human-confirm
                           record a human approval; agents must not run this
   theme propose <draft>   freeze a candidate from the active approved map
+  theme experiment <draft> <assumption>
+                          freeze a test-only candidate without human approval
   theme bridge open <draft> <goal> [assumption...]
                           open a scoped bridge task with optional test assumptions
   context open <cluster> <goal> [assumption...]
@@ -347,6 +353,21 @@ function candidateDecisionStatus(
 ): { +status: string, +reason: string | null } {
   if (candidate.decisionArtifactHashes.length === 0) {
     return { status: 'not-applicable', reason: null };
+  }
+  if (candidate.proposer.version === 'theme-experiment-v1') {
+    try {
+      assertCurrentThemeExperimentCandidate(project, candidate);
+      return {
+        status: 'test-assumption',
+        reason:
+          'This theme map is bound to a current disposable test assumption, not human approval.',
+      };
+    } catch (error) {
+      return {
+        status: 'stale',
+        reason: error instanceof Error ? error.message : String(error),
+      };
+    }
   }
   if (
     candidate.proposer.protocolVersion !== THEME_DECISION_PROTOCOL_VERSION &&
@@ -964,6 +985,36 @@ export function runCli(
             }
           : {
               command: 'theme propose',
+              state: 'refused',
+              reason: result.reason,
+              file: result.file,
+            },
+        json,
+        stdout,
+      );
+      return result.ok ? 0 : 3;
+    }
+    if (args[0] === 'theme' && args[1] === 'experiment' && args.length === 4) {
+      const result = proposeThemeExperimentCandidate({
+        project: openProject(cwd),
+        draftId: args[2],
+        assumptionId: args[3],
+      });
+      present(
+        result.ok
+          ? {
+              command: 'theme experiment',
+              state: 'frozen',
+              candidateId: result.record.candidate.id,
+              draftId: result.draftId,
+              assumptionArtifactHash: result.assumptionArtifactHash,
+              changedFiles: result.record.candidate.touchedFiles,
+              warning:
+                'WARNING: This candidate is a disposable test assumption, not repository intent or human approval.',
+              next: `Run stylex-migrate verify ${result.record.candidate.id}.`,
+            }
+          : {
+              command: 'theme experiment',
               state: 'refused',
               reason: result.reason,
               file: result.file,

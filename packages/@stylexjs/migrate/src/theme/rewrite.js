@@ -8,6 +8,7 @@
  */
 
 import path from 'path';
+import { getDefaultPriority } from '@stylexjs/shared';
 import { matchesGlob } from '../candidate/scope';
 import { discoverStyledReadinessFacts } from '../adapters/emotion/styledReadiness';
 import { discoverStyledThemeTemplateFacts } from '../adapters/emotion/styledTemplate';
@@ -66,6 +67,13 @@ type StyleProperty = {
   +name: string,
   +value: string,
 };
+
+function stylePropertyOrder(left: StyleProperty, right: StyleProperty): number {
+  const priority = (name: string) =>
+    getDefaultPriority(name.replace(/[A-Z]/g, '-$&').toLowerCase()) ?? 1;
+  const difference = priority(left.name) - priority(right.name);
+  return difference === 0 ? left.name.localeCompare(right.name) : difference;
+}
 
 type StyleSite = {
   +attributeStart: number,
@@ -615,7 +623,8 @@ function registryText(
   const keys = allocateKeys(sites.map((site) => site.elementName));
   const body = sites
     .map((site, index) => {
-      const values = site.properties
+      const values = [...site.properties]
+        .sort(stylePropertyOrder)
         .map((property) => `    ${property.name}: ${property.value},`)
         .join('\n');
       return `  ${keys[index]}: {\n${values}\n  },`;
@@ -945,6 +954,23 @@ export function proposeApprovedThemeFiles({
     draft,
     approval: inputApproval,
   });
+  const proposal = proposeThemeFiles({ files, draft });
+  return proposal.status === 'refused'
+    ? proposal
+    : Object.freeze({
+        ...proposal,
+        decisionArtifactHash: approval.artifactHash,
+      });
+}
+
+export function proposeThemeFiles({
+  files,
+  draft: inputDraft,
+}: {
+  +files: { +[file: string]: string | null },
+  +draft: ThemeDecisionDraft,
+}): ThemeProposalOutcome {
+  const draft = validateThemeDecisionDraft(inputDraft);
   const proposed: { [file: string]: string } = {};
   const siteSpansByFile: {
     [file: string]: $ReadOnlyArray<ThemeProposalSiteSpan>,
@@ -990,6 +1016,6 @@ export function proposeApprovedThemeFiles({
     files: Object.freeze(proposed),
     changedFiles: Object.freeze(changedFiles),
     siteSpansByFile: Object.freeze(siteSpansByFile),
-    decisionArtifactHash: approval.artifactHash,
+    decisionArtifactHash: draft.definitionHash,
   });
 }
