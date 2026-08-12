@@ -182,6 +182,7 @@ describe('M5 shell-free command evidence provider', () => {
   test('the registry refuses ambiguous runner replacement', () => {
     const registry = createEvidenceProviderRegistry();
     expect(registry.kinds()).toEqual([
+      'bootstrap-babel',
       'bootstrap-rspack',
       'command',
       'generated-runtime-probe',
