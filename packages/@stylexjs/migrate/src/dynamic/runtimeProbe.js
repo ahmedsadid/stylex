@@ -22,7 +22,7 @@ import type { ProjectState } from '../state/project';
 import type { EvidenceSurfaceSupportOutput } from '../runtime/evidenceSurfaceTask';
 
 export const DYNAMIC_RUNTIME_PROBE_PROTOCOL_VERSION: string =
-  'stylex-migrate-dynamic-runtime-probe-v1';
+  'stylex-migrate-dynamic-runtime-probe-v2';
 const ENTRY_PATH = '.stylex-migrate-probes/dynamic-probe-entry.js';
 const RSPACK_PATH = '.stylex-migrate-probes/dynamic-probe-rspack.cjs';
 const SERVER_PATH = '.stylex-migrate-probes/dynamic-probe-server.cjs';
@@ -81,14 +81,28 @@ function safeValue(value: mixed, depth: number = 0): boolean {
   );
 }
 
+function safeRepositoryPath(value: mixed): boolean {
+  if (typeof value !== 'string' || value === '' || value.includes('\\')) {
+    return false;
+  }
+  const normalized = path.posix.normalize(value);
+  return (
+    normalized === value &&
+    !path.posix.isAbsolute(value) &&
+    value !== '..' &&
+    !value.startsWith('../') &&
+    !value.includes('/../') &&
+    !value.includes('\0')
+  );
+}
+
 function input(value: mixed): DynamicProbeInput {
   if (!object(value)) throw new Error('Invalid dynamic runtime-probe input');
   const source: $FlowFixMe = value;
   if (
     source.protocolVersion !== DYNAMIC_RUNTIME_PROBE_PROTOCOL_VERSION ||
     !object(source.consumer) ||
-    typeof source.consumer.file !== 'string' ||
-    source.consumer.file === '' ||
+    !safeRepositoryPath(source.consumer.file) ||
     !/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(source.consumer.exportName) ||
     !strings(source.siteIds) ||
     !Array.isArray(source.cases) ||
@@ -152,8 +166,10 @@ document.head.append(stylesheet);
 function rspackSource(): string {
   return String.raw`'use strict';
 const path = require('node:path');
-const rspackModule = require('@rspack/core');
-const unpluginModule = require('@stylexjs/unplugin');
+const moduleSearchPaths = [process.cwd(), process.env.STYLEX_MIGRATE_MODULE_ROOT].filter(Boolean);
+const requireFromProbe = name => require(require.resolve(name, {paths: moduleSearchPaths}));
+const rspackModule = requireFromProbe('@rspack/core');
+const unpluginModule = requireFromProbe('@stylexjs/unplugin');
 const stylexPlugin = unpluginModule.default || unpluginModule;
 class SeedCssAssetPlugin {
   apply(compiler) {
@@ -189,7 +205,9 @@ module.exports = {
 function serverSource(port: number): string {
   return String.raw`'use strict';
 const fs = require('node:fs'); const http = require('node:http'); const path = require('node:path');
-const rspackModule = require('@rspack/core'); const config = require('./dynamic-probe-rspack.cjs');
+const moduleSearchPaths = [process.cwd(), process.env.STYLEX_MIGRATE_MODULE_ROOT].filter(Boolean);
+const requireFromProbe = name => require(require.resolve(name, {paths: moduleSearchPaths}));
+const rspackModule = requireFromProbe('@rspack/core'); const config = require('./dynamic-probe-rspack.cjs');
 const compiler = rspackModule.rspack(config);
 compiler.run((error, stats) => {
   compiler.close(() => {}); if (error) throw error;

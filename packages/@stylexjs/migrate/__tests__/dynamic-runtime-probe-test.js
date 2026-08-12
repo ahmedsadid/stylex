@@ -162,6 +162,12 @@ const Root = styled('div')\`display: \${p => p.active ? 'block' : 'none'};\`;
         'utf8',
       ),
     ).toContain('import {Card as ProbeConsumer}');
+    expect(
+      fs.readFileSync(
+        `${opened.attempt.workspace.path}/.stylex-migrate-probes/dynamic-probe-rspack.cjs`,
+        'utf8',
+      ),
+    ).toContain('require.resolve(name, {paths: moduleSearchPaths})');
     const submitted = submitContextAttempt({
       project,
       taskId: opened.task.id,
@@ -172,5 +178,103 @@ const Root = styled('div')\`display: \${p => p.active ? 'block' : 'none'};\`;
       ok: true,
       state: 'awaiting-verification',
     });
+  });
+
+  test('rejects consumer paths that can escape or inject generated source', () => {
+    const project = initializeProject({ repositoryRoot: repo });
+    const inventory = scanRepository({ repositoryRoot: repo });
+    saveInventory(project, inventory);
+    const plan = createPlan({ inventory });
+    savePlan(project, plan);
+    const site = inventory.sites.find(
+      (item) => item.kind === 'styled-dynamic-intrinsic',
+    );
+    const cluster = plan.clusters.find((item) =>
+      item.siteIds.includes(site?.id ?? ''),
+    );
+    const dynamicFact = inventory.facts.find(
+      (item) => item.kind === 'emotion-styled-dynamic-value',
+    );
+    if (site == null || cluster == null || dynamicFact == null) {
+      throw new Error('Fixture dynamic site was not discovered');
+    }
+    const dynamic = dynamicFact.value as $FlowFixMe;
+    const strategy = persistDynamicStrategyDraft({
+      project,
+      definition: {
+        protocolVersion: 'stylex-migrate-dynamic-strategy-v1',
+        inventoryId: inventory.id,
+        clusterId: cluster.id,
+        entries: [
+          {
+            definitionFactId: dynamic.definitionFactId,
+            propPath: 'active',
+            strategy: 'stylex-variants',
+            rationale: 'Boolean literal display branch.',
+            evidenceRequirements: ['Retained browser comparison.'],
+          },
+        ],
+      },
+      authorKind: 'agent',
+      authoredBy: 'fixture-agent',
+    });
+    const assumption = persistTestAssumption({
+      project,
+      input: {
+        purpose: 'Reject an unsafe generated import.',
+        facts: [
+          {
+            statement: 'The fixture component is the intended probe consumer.',
+            status: 'known',
+            inputFiles: ['src/Card.tsx'],
+            detail: 'Declared by the fixture source.',
+          },
+        ],
+        scope: { files: ['src/Card.tsx'], cases: ['invalid'] },
+        rationale: 'Generated imports must stay inside the repository.',
+        alternatives: [],
+        limitations: [],
+      },
+      authorKind: 'agent',
+      authoredBy: 'fixture-agent',
+    });
+    expect(() =>
+      openDynamicRuntimeProbeTask({
+        project,
+        strategyId: strategy.id,
+        assumptionId: assumption.id,
+        value: {
+          protocolVersion: DYNAMIC_RUNTIME_PROBE_PROTOCOL_VERSION,
+          packageRoot: '.',
+          playwrightPackage: 'playwright',
+          nativeSurfaceDisposition: 'known-insufficient',
+          consumer: { file: "../Card.tsx';alert(1)//", exportName: 'Card' },
+          siteIds: [site.id],
+          cases: [
+            {
+              id: 'invalid',
+              props: {},
+              theme: 'none',
+              interaction: 'initial',
+            },
+          ],
+          targets: [
+            {
+              id: 'card',
+              selector: 'main > *',
+              computedProperties: ['display'],
+              attributes: [],
+              observeDom: false,
+              observeRef: false,
+            },
+          ],
+          viewport: { width: 800, height: 600, deviceScaleFactor: 1 },
+          rationale: 'Invalid fixture.',
+          limitations: [],
+        },
+        goal: 'Reject the unsafe path.',
+        workspaceRoot,
+      }),
+    ).toThrow('Invalid dynamic runtime-probe input');
   });
 });
