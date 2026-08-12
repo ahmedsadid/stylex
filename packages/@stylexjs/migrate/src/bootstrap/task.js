@@ -45,17 +45,18 @@ type DependencyIntent = {
 };
 
 function dependencyIntents(
-  packageSpec: string,
+  stylexSpec: string,
+  integrationSpec: string,
 ): $ReadOnlyArray<DependencyIntent> {
   return Object.freeze([
     Object.freeze({
       name: '@stylexjs/stylex',
-      spec: packageSpec,
+      spec: stylexSpec,
       section: 'dependencies',
     }),
     Object.freeze({
       name: '@stylexjs/unplugin',
-      spec: packageSpec,
+      spec: integrationSpec,
       section: 'devDependencies',
     }),
   ]);
@@ -261,7 +262,8 @@ export function openBootstrapTask({
   goal,
   packageRoot = null,
   integration = null,
-  packageSpec = VERSION,
+  stylexSpec = VERSION,
+  integrationSpec = VERSION,
   workspaceRoot,
   now = () => new Date().toISOString(),
 }: {
@@ -269,12 +271,18 @@ export function openBootstrapTask({
   +goal: string,
   +packageRoot?: string | null,
   +integration?: BuildIntegrationKind | null,
-  +packageSpec?: string,
+  +stylexSpec?: string,
+  +integrationSpec?: string,
   +workspaceRoot?: string,
   +now?: () => string,
 }): ContextOpenResult {
-  if (packageSpec === '' || packageSpec.includes('\0')) {
-    throw new Error('Bootstrap package spec must be a non-empty literal');
+  if (
+    stylexSpec === '' ||
+    stylexSpec.includes('\0') ||
+    integrationSpec === '' ||
+    integrationSpec.includes('\0')
+  ) {
+    throw new Error('Bootstrap package specs must be non-empty literals');
   }
   const inventory = loadCurrentInventory(project);
   if (inventory == null) {
@@ -408,7 +416,7 @@ export function openBootstrapTask({
     };
   }
   const cluster = workUnit({ inspection, changeFiles });
-  const dependencies = dependencyIntents(packageSpec);
+  const dependencies = dependencyIntents(stylexSpec, integrationSpec);
   const commands = installCommands({
     manager: packageManager,
     packageName: selectedPackage.name,

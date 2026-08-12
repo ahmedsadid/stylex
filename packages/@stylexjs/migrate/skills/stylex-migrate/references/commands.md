@@ -11,7 +11,7 @@ stylex-migrate plan
 stylex-migrate mechanical propose <cluster-id>
 stylex-migrate styled propose <cluster-id>
 stylex-migrate bootstrap inspect
-stylex-migrate bootstrap open "<goal>" [package-root] [package-spec]
+stylex-migrate bootstrap open "<goal>" [package-root] [stylex-spec] [integration-spec]
 stylex-migrate candidate diff <candidate-id>
 stylex-migrate dynamic strategy draft <json-file> <agent|human> <author>
 stylex-migrate dynamic strategy inspect <draft-id>
@@ -68,9 +68,10 @@ Submission requires the StyleX packages, a changed lockfile, and syntactic
 candidate dependencies, compiles a real emitted-CSS sentinel, and runs the
 exact selected repository application build command. Without a real migrated
 consumer, only the isolated sentinel proves emitted StyleX CSS.
-The optional package spec defaults to the migrate package version. Supplying a
-different literal is an explicit developer choice recorded in the task origin;
-the agent must run the returned `installCommands` argv arrays exactly.
+The optional StyleX and integration specs default to the migrate package
+version; omitting only the integration spec reuses the StyleX spec. Supplying a
+different literal is an explicit developer choice recorded in the task origin.
+The agent must run the returned `installCommands` argv arrays exactly.
 
 `dynamic strategy draft` validates exact coverage of every observed prop path in
 one current planned `styled-dynamic-intrinsic` cluster and activates the
