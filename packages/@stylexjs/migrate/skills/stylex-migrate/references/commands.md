@@ -19,6 +19,7 @@ stylex-migrate assumption record <json-file> <agent|human> <author>
 stylex-migrate assumption inspect <assumption-id>
 stylex-migrate runtime inspect
 stylex-migrate runtime probe open <assumption-id> <json-file> "<goal>"
+stylex-migrate theme probe open <draft-id> <assumption-id> <json-file> "<goal>"
 stylex-migrate theme topology
 stylex-migrate context open <cluster-id> "<goal>" [assumption-id...]
 stylex-migrate context open <task-id>
@@ -110,6 +111,13 @@ and config rather than accepting an agent-authored script. Submit it unchanged,
 then verify the resulting candidate together with every migration candidate
 named by its runtime cases. The generated provider is attached automatically to
 that exact candidate set.
+
+`theme probe open` compiles a smaller repository-wiring definition plus an
+exact persisted theme draft into the standard light/dark root/portal matrix. It
+derives expected source values from the draft and browser-normalizes them using
+the mapped CSS property; the agent does not supply expected computed values.
+The result remains generated-probe evidence bound to a test assumption, not a
+retained application baseline or owner approval.
 
 `context submit` freezes the worktree diff, validates its actual paths, stores a
 content-addressed candidate, removes the external worktree, and returns the

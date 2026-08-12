@@ -59,6 +59,7 @@ describe('M7 vendor-neutral skill package', () => {
     expect(commands).toContain('assumption inspect');
     expect(commands).toContain('runtime inspect');
     expect(commands).toContain('runtime probe open');
+    expect(commands).toContain('theme probe open');
     const runtime = fs.readFileSync(
       path.join(SKILL_ROOT, 'references', 'runtime-evidence.md'),
       'utf8',

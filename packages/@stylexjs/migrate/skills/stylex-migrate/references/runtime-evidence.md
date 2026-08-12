@@ -28,7 +28,7 @@ repository test.
    migration path the cases will cover and whose `scope.cases` contains every
    case ID.
 2. Create a temporary definition outside the source checkout with protocol
-   `stylex-migrate-evidence-surface-v1`. Declare the package root, resolvable
+   `stylex-migrate-evidence-surface-v2`. Declare the package root, resolvable
    Playwright package, local HTTP server argv/cwd/URL, cases, selectors,
    actions, target properties/attributes, exact expected observations,
    rationale, and limitations. Commands are argv arrays; never use a shell
@@ -67,6 +67,39 @@ same-document portals, secondary documents, and uncovered topology explicitly.
 A body-host probe must include separate light/dark root and portal cases. A
 generated portal probe does not prove that a real migrated component renders in
 that portal.
+
+Prefer `stylex-migrate theme probe open` over constructing those four theme
+cases manually. Its input protocol is `stylex-migrate-theme-runtime-probe-v1`.
+Declare the server fields used by a generic generated probe plus:
+
+- one `path`, exact `testedConsumerFiles`, optional `siteIds`, and viewport;
+- `activation.light` and `activation.dark` declarative action arrays;
+- `targets.root` and `targets.portal`, each with a selector and one or more
+  `{sourcePath, cssProperty}` mappings; and
+- an explicit `numberSerialization` of `raw`, `px`, or `ms` when a mapped draft
+  value is numeric.
+
+The tool requires the persisted draft to contain exact `light` and `dark`
+variants, validates every source path and consumer, includes the draft's target
+module and bridge boundary files in all four cases, and generates
+`theme-light-root`, `theme-light-portal`, `theme-dark-root`, and
+`theme-dark-portal`. It locks raw source values from the draft. In Playwright it
+normalizes those values on a blank page using the mapped CSS properties, then
+observes the candidate route separately in the same browser context. This is a
+synthetic source-value oracle, not a retained repository baseline. It compares
+only the exact computed declarations; repository DOM, ref, attribute, and
+interaction contracts require separate cases or repository-native evidence.
+
+The test assumption must name all four case IDs and every generated
+`changePath`. Variant actions and selectors remain labelled repository-wiring
+assumptions; the generator does not turn them into owner decisions. Run:
+
+`stylex-migrate theme probe open <draft-id> <assumption-id> <json-file> "<goal>"`
+
+Submit the resulting evidence-surface candidate unchanged. Verify it together
+with candidates that actually change every named theme-module, bridge, and
+consumer path. A draft hash is bound independently from the assumption hash;
+changing either invalidates the evidence subject and cache key.
 
 ## Interpret results literally
 

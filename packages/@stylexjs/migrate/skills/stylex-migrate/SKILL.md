@@ -205,6 +205,15 @@ unknowns or earn `runtime-matched`.
    repository checks and relevant light/dark runtime cases. The developer, not
    the tool or agent, decides whether and how to apply the reviewed bridge
    candidate. Rescan and create a current draft after external application.
+   For a disposable, assumption-bound root/body-portal experiment, create the
+   small repository-wiring JSON described in
+   [runtime-evidence.md](references/runtime-evidence.md), then run
+   `stylex-migrate theme probe open <draft-id> <assumption-id> <json-file>
+   "<goal>"`. Do not hand-author the four cases or copy browser-normalized
+   values into expected observations. The tool derives light/dark × root/portal
+   cases and source token values from the exact persisted draft. Submit the
+   immutable surface unchanged and verify it in the same candidate set as the
+   matching theme module, bridge, and tested consumers.
 4. Stop at approval. Never run `stylex-migrate theme approve`, never pass
    `--human-confirm`, and never describe agent assent as human approval. Resume
    only after a human says they ran the approval command.
