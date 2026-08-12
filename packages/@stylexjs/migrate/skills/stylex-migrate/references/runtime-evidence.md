@@ -69,19 +69,30 @@ generated portal probe does not prove that a real migrated component renders in
 that portal.
 
 Prefer `stylex-migrate theme probe open` over constructing those four theme
-cases manually. Its input protocol is `stylex-migrate-theme-runtime-probe-v1`.
-Declare the server fields used by a generic generated probe plus:
+cases manually. Its input protocol is `stylex-migrate-theme-runtime-probe-v2`.
+Declare `surface` as either `repository` or `generated-rspack`, plus:
 
-- one `path`, exact `testedConsumerFiles`, optional `siteIds`, and viewport;
+- the package root, Playwright package, native-surface disposition, one `path`,
+  exact `testedConsumerFiles`, optional `siteIds`, and viewport;
 - `activation.light` and `activation.dark` declarative action arrays;
 - `targets.root` and `targets.portal`, each with a selector and one or more
   `{sourcePath, cssProperty}` mappings; and
 - an explicit `numberSerialization` of `raw`, `px`, or `ms` when a mapped draft
   value is numeric.
 
+For `surface: "repository"`, also declare the generic probe's exact server
+fields and at least one tested consumer. The resulting cases cover the generated
+theme module, bridge boundaries, and named consumers. For
+`surface: "generated-rspack"`, omit `server`, allow an empty consumer list, and
+use the locked selectors `[data-stylex-migrate-probe="root"]` and
+`[data-stylex-migrate-probe="portal"]`. The kernel then emits a locked Rspack
+entry, config, and local server around the exact generated theme module. This
+fallback requires the candidate dependency graph to provide StyleX, the StyleX
+Rspack unplugin, Rspack, and Playwright; compose it with the bootstrap candidate
+when the repository did not already provide them.
+
 The tool requires the persisted draft to contain exact `light` and `dark`
-variants, validates every source path and consumer, includes the draft's target
-module and bridge boundary files in all four cases, and generates
+variants, validates every source path and consumer, and generates
 `theme-light-root`, `theme-light-portal`, `theme-dark-root`, and
 `theme-dark-portal`. It locks raw source values from the draft. In Playwright it
 normalizes those values on a blank page using the mapped CSS properties, then
@@ -90,6 +101,12 @@ synthetic source-value oracle, not a retained repository baseline. It compares
 only the exact computed declarations; repository DOM, ref, attribute, and
 interaction contracts require separate cases or repository-native evidence.
 
+For a repository surface, all four cases cover the draft target, bridge, and
+named consumers. For a generated Rspack surface, all four cases cover only the
+draft target module: the isolated harness does not execute the repository
+bridge, consumers, React lifecycle, or application route. Never attach the
+resulting `runtime-matched` claim to those uncovered paths.
+
 The test assumption must name all four case IDs and every generated
 `changePath`. Variant actions and selectors remain labelled repository-wiring
 assumptions; the generator does not turn them into owner decisions. Run:
@@ -97,9 +114,12 @@ assumptions; the generator does not turn them into owner decisions. Run:
 `stylex-migrate theme probe open <draft-id> <assumption-id> <json-file> "<goal>"`
 
 Submit the resulting evidence-surface candidate unchanged. Verify it together
-with candidates that actually change every named theme-module, bridge, and
-consumer path. A draft hash is bound independently from the assumption hash;
-changing either invalidates the evidence subject and cache key.
+with candidates that actually change every path named by its cases. If the
+generated Rspack surface depends on a bootstrap candidate, include both in the
+same verification command: bootstrap setup runs to a pass before the browser
+provider starts. A failed or unavailable setup skips browser evidence. A draft
+hash is bound independently from the assumption hash; changing either
+invalidates the evidence subject and cache key.
 
 ## Interpret results literally
 

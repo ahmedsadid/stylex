@@ -206,14 +206,17 @@ unknowns or earn `runtime-matched`.
    the tool or agent, decides whether and how to apply the reviewed bridge
    candidate. Rescan and create a current draft after external application.
    For a disposable, assumption-bound root/body-portal experiment, create the
-   small repository-wiring JSON described in
+   small v2 probe JSON described in
    [runtime-evidence.md](references/runtime-evidence.md), then run
    `stylex-migrate theme probe open <draft-id> <assumption-id> <json-file>
-   "<goal>"`. Do not hand-author the four cases or copy browser-normalized
-   values into expected observations. The tool derives light/dark × root/portal
-   cases and source token values from the exact persisted draft. Submit the
-   immutable surface unchanged and verify it in the same candidate set as the
-   matching theme module, bridge, and tested consumers.
+   "<goal>"`. Select `surface: "repository"` only for a real executable route;
+   select `surface: "generated-rspack"` when no such route is usable. Do not
+   hand-author the four cases or copy browser-normalized values into expected
+   observations. The tool derives light/dark × root/portal cases and source
+   token values from the exact persisted draft. Submit the immutable surface
+   unchanged. A repository surface must be verified with the matching theme
+   module, bridge, and tested consumers. A generated Rspack surface exercises
+   only the generated theme module and earns no bridge or consumer claim.
 4. Stop at approval. Never run `stylex-migrate theme approve`, never pass
    `--human-confirm`, and never describe agent assent as human approval. Resume
    only after a human says they ran the approval command.
