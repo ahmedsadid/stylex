@@ -524,7 +524,7 @@ export function verifyStyledConversion({
         ? {}
         : { detail: describeDifferences(comparison.differences) }),
       limitations: [
-        'flat declaration comparison only; no repository build or runtime rendering',
+        'This comparison covers flat declarations only; repository checks and runtime evidence are separate.',
       ],
     }),
   );

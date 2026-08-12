@@ -165,38 +165,20 @@ export default {
       ],
     });
     if (candidate == null) throw new Error('candidate was not persisted');
-    const composedCandidate = {
-      ...candidate,
+    const applicationCandidate: $FlowFixMe = {
       candidate: {
-        ...candidate.candidate,
-        touchedFiles: [
-          ...candidate.candidate.touchedFiles,
-          'src/App.tsx',
-          '.stylex-migrate-probes/runtime-collector.cjs',
-        ],
         changes: [
-          ...candidate.candidate.changes,
-          {
-            path: 'src/App.tsx',
-            status: 'modified' as 'modified',
-            content: 'export const App = () => <main />;\n',
-            contentHash: 'app-target',
-            mode: '100644',
-          },
-          {
-            path: '.stylex-migrate-probes/runtime-collector.cjs',
-            status: 'added' as 'added',
-            content: 'module.exports = {};\n',
-            contentHash: 'probe-target',
-            mode: '100644',
-          },
+          { path: 'src/App.tsx' },
+          { path: '.stylex-migrate-probes/runtime-collector.cjs' },
         ],
+        proposer: {},
       },
+      staticEvidence: [],
     };
     expect(
       withBootstrapEvidenceProviders({
         project,
-        candidates: [composedCandidate],
+        candidates: [candidate, applicationCandidate],
         subject: 'candidate',
         config: readConfig(project).evidence,
       }).providers,

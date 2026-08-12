@@ -26,7 +26,7 @@ import type { BootstrapRspackProviderConfig } from '../evidence/config';
 export const RSPACK_SENTINEL_CHECK_VERSION: string =
   'stylex-rspack-emitted-css-v2';
 export const RSPACK_SENTINEL_LIMITATION: string =
-  'The sentinel compiles with the candidate dependency graph in an isolated minimal Rspack compilation. The repository build runs separately against the candidate config, but without a migrated application consumer it does not prove that the real application pipeline emits StyleX CSS.';
+  'The sentinel and repository build are separate checks in one candidate workspace. The sentinel proves StyleX transformation and CSS emission; the repository build proves only that the exact application paths credited by this provider compiled successfully.';
 
 export function bootstrapRspackProviderId(inspectionId: string): string {
   return `stylex-bootstrap-rspack-${inspectionId}`;
