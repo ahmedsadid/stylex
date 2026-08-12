@@ -125,6 +125,7 @@ describe('M8 Playwright runtime collector', () => {
       expect(matched.evidence).toMatchObject({
         result: 'pass',
         runtime: {
+          baselineKind: 'retained-repository',
           runtimeInterface: 'playwright',
           comparison: {
             result: 'matched',

@@ -136,6 +136,7 @@ describe('M8 runtime command provider', () => {
         result: 'pass',
         providerVersion: 'fixture-runtime-v1',
         runtime: {
+          baselineKind: 'retained-repository',
           runtimeInterface,
           comparison: {
             result: 'matched',

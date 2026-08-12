@@ -368,6 +368,7 @@ describe('M5 evidence bundles and policy verdicts', () => {
         ? { detail: 'browser was unavailable' }
         : {
             runtime: {
+              baselineKind: 'retained-repository',
               runtimeInterface: 'playwright',
               baselineCommand: command,
               candidateCommand: command,

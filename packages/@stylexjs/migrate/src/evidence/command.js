@@ -49,6 +49,7 @@ export type RepositoryEvidenceResult = {
   +outputPreview: string,
   +limitations: $ReadOnlyArray<string>,
   +runtime?: {
+    +baselineKind: 'retained-repository',
     +runtimeInterface: RuntimeInterface,
     +baselineCommand: CommandRecord,
     +candidateCommand: CommandRecord,

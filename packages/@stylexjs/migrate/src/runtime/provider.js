@@ -267,6 +267,7 @@ export async function runRuntimeCommandProvider(
     comparison == null
       ? null
       : Object.freeze({
+          baselineKind: 'retained-repository',
           runtimeInterface: config.runtimeInterface,
           baselineCommand,
           candidateCommand,
