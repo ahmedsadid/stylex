@@ -56,6 +56,7 @@ export type EvidenceSurfaceDefinition = {
   +server: {
     +argv: $ReadOnlyArray<string>,
     +cwd: string,
+    +inputFiles: $ReadOnlyArray<string>,
     +url: string,
     +timeoutMs: number,
   },
@@ -257,6 +258,11 @@ export function normalizeEvidenceSurfaceDefinition(
     server: {
       argv: argv(input.server.argv),
       cwd: relative(input.server.cwd, 'server cwd', true),
+      inputFiles: Object.freeze(
+        texts(input.server.inputFiles, 'server input files').map((file) =>
+          relative(file, 'server input file', false),
+        ),
+      ),
       url: parsedUrl.toString(),
       timeoutMs,
     },

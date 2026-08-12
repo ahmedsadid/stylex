@@ -32,8 +32,11 @@ repository test.
    Playwright package, local HTTP server argv/cwd/URL, cases, selectors,
    actions, target properties/attributes, exact expected observations,
    rationale, and limitations. Commands are argv arrays; never use a shell
-   string. Expectations have no browser metadata because they are values, not a
-   fabricated baseline execution.
+   string. The server may be only an exact package script or a declared tracked
+   Node script; list every server input so the task snapshot pins it. Inline
+   evaluation and arbitrary executables are rejected. Expectations have no
+   browser metadata because they are values, not a fabricated baseline
+   execution.
 3. Run `stylex-migrate runtime probe open <assumption-id> <json-file>
    "<goal>"`. Read its task and warnings. The kernel generates and locks the
    collector and config; do not edit either file.

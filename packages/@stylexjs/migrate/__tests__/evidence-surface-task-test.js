@@ -45,6 +45,7 @@ describe('generated evidence-surface tasks', () => {
     repo = createTempRepo({
       'package.json': JSON.stringify({ private: true }),
       'src/Card.jsx': 'export const Card = () => <div>Card</div>;\n',
+      'scripts/serve.cjs': 'require("http").createServer().listen(4173);\n',
     });
     workspaceRoot = createTempDir('stylex-migrate-evidence-surface-');
     project = initializeProject({ repositoryRoot: repo });
@@ -87,6 +88,7 @@ describe('generated evidence-surface tasks', () => {
       server: {
         argv: ['node', 'scripts/serve.cjs'],
         cwd: '.',
+        inputFiles: ['scripts/serve.cjs'],
         url: 'http://127.0.0.1:4173/',
         timeoutMs: 5000,
       },
@@ -207,6 +209,7 @@ describe('generated evidence-surface tasks', () => {
       }),
       'playwright.config.js': 'module.exports = {};\n',
       'src/Card.jsx': 'export const Card = () => <div>Card</div>;\n',
+      'scripts/serve.cjs': 'require("http").createServer().listen(4173);\n',
     });
     try {
       const nativeProject = initializeProject({ repositoryRoot: nativeRepo });
@@ -292,5 +295,38 @@ describe('generated evidence-surface tasks', () => {
       origin: { kind: 'evidence-surface' },
       warnings: [expect.stringContaining('not repository intent')],
     });
+  });
+
+  test('rejects inline or arbitrary server execution', () => {
+    expect(() =>
+      openEvidenceSurfaceTask({
+        project,
+        assumptionId: assumption.id,
+        input: {
+          ...definition(),
+          server: {
+            ...definition().server,
+            argv: ['node', '-e', 'require("http").createServer().listen(4173)'],
+          },
+        },
+        goal: 'Reject inline execution.',
+        workspaceRoot,
+      }),
+    ).toThrow('inline evaluation');
+    expect(() =>
+      openEvidenceSurfaceTask({
+        project,
+        assumptionId: assumption.id,
+        input: {
+          ...definition(),
+          server: {
+            ...definition().server,
+            argv: ['sh', '-c', 'node scripts/serve.cjs'],
+          },
+        },
+        goal: 'Reject a shell command.',
+        workspaceRoot,
+      }),
+    ).toThrow('arbitrary executables');
   });
 });

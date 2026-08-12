@@ -7,6 +7,7 @@
  * @flow strict
  */
 
+import fs from 'fs';
 import { createContextTaskCapsule } from '../context/capsule';
 import { openContextTaskFromSpec } from '../context/lifecycle';
 import { hashBytes, hashString, shortHash } from '../kernel/hash';
@@ -36,6 +37,73 @@ export const EVIDENCE_SURFACE_TASK_VERSION: string =
   'stylex-migrate-evidence-surface-task-v1';
 const COLLECTOR_PATH = '.stylex-migrate-probes/runtime-collector.cjs';
 const CONFIG_PATH = '.stylex-migrate-probes/runtime-probe.json';
+
+function repositoryServerCommandProblem(
+  root: string,
+  definition: $FlowFixMe,
+): string | null {
+  const command = definition.server.argv;
+  const cwd = definition.server.cwd === '.' ? '' : definition.server.cwd;
+  const manifestPath = cwd === '' ? 'package.json' : `${cwd}/package.json`;
+  const executable = command[0];
+  if (executable === 'node' || executable === process.execPath) {
+    if (
+      command.length < 2 ||
+      command[1].startsWith('-') ||
+      !definition.server.inputFiles.includes(
+        cwd === '' ? command[1] : `${cwd}/${command[1]}`,
+      )
+    ) {
+      return 'A direct Node evidence server must execute a declared tracked input file; inline evaluation and undeclared scripts are forbidden.';
+    }
+    return null;
+  }
+  let scriptName = null;
+  if (executable === 'npm' && command[1] === 'run' && command.length === 3) {
+    scriptName = command[2];
+  } else if (
+    (executable === 'yarn' || executable === 'pnpm') &&
+    command.length === 3 &&
+    command[1] === 'run'
+  ) {
+    scriptName = command[2];
+  } else if (
+    executable === 'corepack' &&
+    (command[1] === 'yarn' || command[1] === 'pnpm') &&
+    command[2] === 'run' &&
+    command.length === 4
+  ) {
+    scriptName = command[3];
+  }
+  if (scriptName == null) {
+    return 'Evidence servers must use an exact npm/yarn/pnpm package script or a declared tracked Node script; arbitrary executables are forbidden.';
+  }
+  if (!definition.server.inputFiles.includes(manifestPath)) {
+    return `Evidence server package script requires declared input ${manifestPath}.`;
+  }
+  try {
+    const manifest = JSON.parse(
+      fs.readFileSync(`${root}/${manifestPath}`, 'utf8'),
+    );
+    if (
+      manifest == null ||
+      Array.isArray(manifest) ||
+      typeof manifest !== 'object' ||
+      manifest.scripts == null ||
+      Array.isArray(manifest.scripts) ||
+      typeof manifest.scripts !== 'object' ||
+      typeof manifest.scripts[scriptName] !== 'string' ||
+      !/\S/.test(manifest.scripts[scriptName])
+    ) {
+      return `Evidence server package script ${scriptName} is not present in ${manifestPath}.`;
+    }
+  } catch (error) {
+    return `Evidence server manifest ${manifestPath} could not be read: ${
+      error instanceof Error ? error.message : String(error)
+    }`;
+  }
+  return null;
+}
 
 export function openEvidenceSurfaceTask({
   project,
@@ -72,6 +140,11 @@ export function openEvidenceSurfaceTask({
   }
   assertCurrentTestAssumption(project, assumption);
   const definition = normalizeEvidenceSurfaceDefinition(input);
+  const serverProblem = repositoryServerCommandProblem(
+    project.repositoryRoot,
+    definition,
+  );
+  if (serverProblem != null) throw new Error(serverProblem);
   const definitionCaseIds = definition.cases.map((item) => item.id);
   if (
     definitionCaseIds.some((caseId) => !assumption.scope.cases.includes(caseId))
@@ -109,6 +182,7 @@ export function openEvidenceSurfaceTask({
   const declaredInputs = [
     ...new Set([
       ...assumption.declaredInputs.map((item) => item.path),
+      ...definition.server.inputFiles,
       ...discovered.inputFiles,
     ]),
   ].sort();
