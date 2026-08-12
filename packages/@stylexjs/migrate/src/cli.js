@@ -91,6 +91,7 @@ import { inspectRuntimeSurfaces } from './runtime/discover';
 import { openEvidenceSurfaceTask } from './runtime/evidenceSurfaceTask';
 import { inspectThemeTopology } from './theme/topology';
 import { openThemeRuntimeProbeTask } from './theme/runtimeProbe';
+import { openDynamicRuntimeProbeTask } from './dynamic/runtimeProbe';
 
 type WriteOutput = (text: string) => mixed;
 
@@ -120,6 +121,8 @@ Commands:
                           persist an exact per-prop contextual strategy
   dynamic strategy inspect <draft>
                           show active/superseded strategy state
+  dynamic probe open <strategy> <assumption> <json-file> <goal>
+                          generate a retained before/after component probe
   assumption record <json-file> <agent|human> <author>
                           record a labelled, non-approved test assumption
   assumption inspect <assumption>
@@ -857,6 +860,42 @@ export function runCli(
         stdout,
       );
       return 0;
+    }
+    if (
+      args[0] === 'dynamic' &&
+      args[1] === 'probe' &&
+      args[2] === 'open' &&
+      args.length === 7
+    ) {
+      const source = path.resolve(cwd, args[5]);
+      const result = openDynamicRuntimeProbeTask({
+        project: openProject(cwd),
+        strategyId: args[3],
+        assumptionId: args[4],
+        value: parseJson(fs.readFileSync(source, 'utf8'), source),
+        goal: args[6],
+      });
+      present(
+        result.ok
+          ? {
+              command: 'dynamic probe open',
+              state: result.state,
+              taskId: result.task.id,
+              attemptId: result.attempt.id,
+              workspace: result.attempt.workspace.path,
+              requiredOutputs: result.task.requiredOutputs,
+              warnings: result.task.limitations,
+              next: `Submit the immutable surface with stylex-migrate context submit ${result.task.id} <agent|human> <name> <version> [skill-version].`,
+            }
+          : {
+              command: 'dynamic probe open',
+              state: result.state,
+              reasons: result.reasons,
+            },
+        json,
+        stdout,
+      );
+      return result.ok ? 0 : 3;
     }
     if (
       args[0] === 'dynamic' &&

@@ -300,6 +300,11 @@ export function openEvidenceSurfaceTask({
       collectorPath: COLLECTOR_PATH,
       configPath: CONFIG_PATH,
       supportPaths,
+      baselineKind:
+        definition.expectedObservations == null &&
+        definition.syntheticCssExpectations == null
+          ? 'retained-repository'
+          : 'generated-probe',
       expectedObservations: definition.expectedObservations,
       syntheticCssExpectations: definition.syntheticCssExpectations,
       cases: definition.cases.map(

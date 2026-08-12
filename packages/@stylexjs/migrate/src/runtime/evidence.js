@@ -51,9 +51,10 @@ export function withGeneratedRuntimeProbeProviders({
         );
       }
     }
-    generated.push({
+    const retained = origin.baselineKind === 'retained-repository';
+    const common = {
       id: `stylex-generated-runtime-${taskId}`,
-      kind: 'generated-runtime-probe',
+      kind: retained ? 'runtime-command' : 'generated-runtime-probe',
       check: 'runtime-render',
       checkVersion: origin.protocolVersion,
       subject,
@@ -80,15 +81,24 @@ export function withGeneratedRuntimeProbeProviders({
         ]),
       ],
       limitations: [
-        'Generated expectations are bound test assumptions, not retained repository behavior or owner approval.',
+        retained
+          ? 'The harness is generated under a bound test assumption; its baseline is retained repository behavior, not owner-approved production-route coverage.'
+          : 'Generated expectations are bound test assumptions, not retained repository behavior or owner approval.',
         ...origin.limitations,
       ],
       timeoutMs: 15 * 60 * 1000,
       cases: origin.cases,
-      assumptionArtifactHash: origin.assumptionArtifactHash,
-      expectedObservations: origin.expectedObservations,
-      syntheticCssExpectations: origin.syntheticCssExpectations ?? null,
-    });
+    };
+    generated.push(
+      retained
+        ? common
+        : {
+            ...common,
+            assumptionArtifactHash: origin.assumptionArtifactHash,
+            expectedObservations: origin.expectedObservations,
+            syntheticCssExpectations: origin.syntheticCssExpectations ?? null,
+          },
+    );
   }
   if (generated.length === 0) return config;
   if (generated.length > 1) {

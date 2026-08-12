@@ -61,6 +61,7 @@ export type ContextTaskOrigin =
       +collectorPath: string,
       +configPath: string,
       +supportPaths?: $ReadOnlyArray<string>,
+      +baselineKind?: 'retained-repository' | 'generated-probe',
       +expectedObservations: RuntimeExpectedObservations | null,
       +syntheticCssExpectations?: RuntimeSyntheticCssExpectations | null,
       +cases: $ReadOnlyArray<RuntimeCaseDefinition>,
@@ -244,6 +245,13 @@ function normalizeOrigin(
       !Array.isArray(origin.limitations)
     ) {
       throw new Error('Invalid evidence-surface task origin');
+    }
+    if (
+      origin.baselineKind != null &&
+      origin.baselineKind !== 'retained-repository' &&
+      origin.baselineKind !== 'generated-probe'
+    ) {
+      throw new Error('Invalid evidence-surface baseline kind');
     }
     return immutableJson(origin) as $FlowFixMe;
   }

@@ -29,6 +29,11 @@ export {
 } from './assumption/records';
 
 export {
+  DYNAMIC_RUNTIME_PROBE_PROTOCOL_VERSION,
+  openDynamicRuntimeProbeTask,
+} from './dynamic/runtimeProbe';
+
+export {
   BOOTSTRAP_DISCOVERY_PROTOCOL_VERSION,
   inspectBootstrap,
 } from './bootstrap/discover';

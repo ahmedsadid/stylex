@@ -348,9 +348,9 @@ export function normalizeEvidenceSurfaceDefinition(
   });
   const hasLockedExpectations = input.expectedObservations != null;
   const hasSyntheticExpectations = input.syntheticCssExpectations != null;
-  if (hasLockedExpectations === hasSyntheticExpectations) {
+  if (hasLockedExpectations && hasSyntheticExpectations) {
     throw new Error(
-      'Evidence surfaces require exactly one locked or synthetic expectation source',
+      'Evidence surfaces cannot combine locked and synthetic expectation sources',
     );
   }
   const expectedObservations = hasLockedExpectations
@@ -368,8 +368,9 @@ export function normalizeEvidenceSurfaceDefinition(
     .map((item) => item.id)
     .sort();
   if (
-    caseIds.length !== expectedIds.length ||
-    caseIds.some((id, index) => id !== expectedIds[index])
+    (expectedObservations != null || normalizedSynthetic != null) &&
+    (caseIds.length !== expectedIds.length ||
+      caseIds.some((id, index) => id !== expectedIds[index]))
   ) {
     throw new Error('Evidence-surface cases and expected observations differ');
   }

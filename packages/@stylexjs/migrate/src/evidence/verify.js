@@ -12,7 +12,10 @@ import {
   materializeFullCheckout,
   removeCandidateWorkspace,
 } from '../candidate/workspace';
-import { recordContextVerificationOutcome } from '../context/lifecycle';
+import {
+  inspectContextTask,
+  recordContextVerificationOutcome,
+} from '../context/lifecycle';
 import { withBootstrapEvidenceProviders } from '../bootstrap/evidence';
 import { withGeneratedRuntimeProbeProviders } from '../runtime/evidence';
 import {
@@ -104,14 +107,39 @@ export async function verifyPersistedCandidates({
   });
   let baselineWorkspace: CandidateWorkspace | null = null;
   try {
-    baselineWorkspace = createCandidateWorkspace({
-      repositoryRoot: candidates[0].candidate.repositoryRoot,
-      baseCommit: candidates[0].candidate.baseCommit,
-      allowedPaths: [],
-      requireClean: false,
-      rootDir: workspaceRoot,
+    const evidenceSurfaceCandidates = candidates.filter((candidate) => {
+      const taskId = candidate.candidate.proposer.taskId;
+      return (
+        taskId != null &&
+        inspectContextTask(project, taskId).task.origin.kind ===
+          'evidence-surface'
+      );
     });
-    materializeFullCheckout(baselineWorkspace);
+    const retainedSurfaceCandidates = evidenceSurfaceCandidates.filter(
+      (candidate) => {
+        const taskId = candidate.candidate.proposer.taskId;
+        return (
+          taskId != null &&
+          inspectContextTask(project, taskId).task.origin.baselineKind ===
+            'retained-repository'
+        );
+      },
+    );
+    if (retainedSurfaceCandidates.length > 0) {
+      baselineWorkspace = createVerificationWorkspace({
+        records: retainedSurfaceCandidates,
+        rootDir: workspaceRoot,
+      });
+    } else {
+      baselineWorkspace = createCandidateWorkspace({
+        repositoryRoot: candidates[0].candidate.repositoryRoot,
+        baseCommit: candidates[0].candidate.baseCommit,
+        allowedPaths: [],
+        requireClean: false,
+        rootDir: workspaceRoot,
+      });
+      materializeFullCheckout(baselineWorkspace);
+    }
     const schedule = await runEvidenceSchedule({
       project,
       workspaceRoot: workspace.path,
