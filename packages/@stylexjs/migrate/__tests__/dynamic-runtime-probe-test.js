@@ -168,6 +168,12 @@ const Root = styled('div')\`display: \${p => p.active ? 'block' : 'none'};\`;
         'utf8',
       ),
     ).toContain('require.resolve(name, {paths: moduleSearchPaths})');
+    expect(
+      fs.readFileSync(
+        `${opened.attempt.workspace.path}/.stylex-migrate-probes/runtime-collector.cjs`,
+        'utf8',
+      ),
+    ).toContain("page.on('pageerror'");
     const submitted = submitContextAttempt({
       project,
       taskId: opened.task.id,

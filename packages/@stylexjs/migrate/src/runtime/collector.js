@@ -8,7 +8,7 @@
  */
 
 export const GENERATED_RUNTIME_COLLECTOR_VERSION: string =
-  'stylex-migrate-generated-collector-v2';
+  'stylex-migrate-generated-collector-v3';
 
 export function emitGeneratedRuntimeCollector(): string {
   return String.raw`'use strict';
@@ -145,6 +145,8 @@ async function main() {
         deviceScaleFactor: runtimeCase.viewport.deviceScaleFactor,
       });
       const page = await context.newPage();
+      const pageErrors = [];
+      page.on('pageerror', error => { pageErrors.push(error.stack || error.message); });
       if (config.syntheticCssExpectations != null) {
         const expectedCase = config.syntheticCssExpectations.cases.find(item => item.id === runtimeCase.id);
         if (expectedCase == null) throw new Error('missing synthetic CSS case ' + runtimeCase.id);
@@ -159,11 +161,18 @@ async function main() {
       for (const action of runtimeCase.actions) await applyAction(page, action);
       const observation = {computedStyles: {}, dom: {}, attributes: {}, refs: {}, interactions: {}};
       for (const target of runtimeCase.targets) {
-        const result = await observe(page, target);
-        observation.computedStyles[target.id] = result.computed;
-        if (result.dom != null) observation.dom[target.id] = result.dom;
-        observation.attributes[target.id] = result.attributes;
-        if (result.ref != null) observation.refs[target.id] = result.ref;
+        try {
+          const result = await observe(page, target);
+          observation.computedStyles[target.id] = result.computed;
+          if (result.dom != null) observation.dom[target.id] = result.dom;
+          observation.attributes[target.id] = result.attributes;
+          if (result.ref != null) observation.refs[target.id] = result.ref;
+        } catch (error) {
+          const detail = pageErrors.length === 0
+            ? ''
+            : '\nPage errors:\n' + pageErrors.join('\n---\n');
+          throw new Error('Failed to observe ' + target.id + ': ' + error.message + detail);
+        }
       }
       for (const action of runtimeCase.actions) observation.interactions[action.id] = {completed: true};
       results.push({id: runtimeCase.id, observation});
