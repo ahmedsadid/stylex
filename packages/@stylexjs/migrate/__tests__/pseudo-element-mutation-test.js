@@ -24,7 +24,8 @@ import type {
 
 const PRAGMA = '/** @jsxImportSource @emotion/react */\n';
 const FILENAME = 'PseudoElement.jsx';
-const OBJECT = '{ color: \'black\', \'::before\': { color: \'red\', content: \'"x"\' } }';
+const OBJECT =
+  "{ color: 'black', '::before': { color: 'red', content: '\"x\"' } }";
 const SOURCE = `${PRAGMA}export const App = () => <div css={${OBJECT}} />;\n`;
 const STYLEX_SOURCE = `import * as stylex from '@stylexjs/stylex';
 const styles = stylex.create({ root: { color: 'black', '::before': { color: 'red', content: '"x"' } } });
@@ -115,7 +116,7 @@ const mutations: {
   'target-removed': () =>
     verifyCodeMutation((code) =>
       code.replace(
-        '    \'::before\': {\n      color: \'red\',\n      content: \'"x"\',\n    },\n',
+        "    '::before': {\n      color: 'red',\n      content: '\"x\"',\n    },\n",
         '',
       ),
     ),
@@ -124,8 +125,8 @@ const mutations: {
   'property-renamed': () =>
     verifyCodeMutation((code) =>
       code.replace(
-        '    \'::before\': {\n      color:',
-        '    \'::before\': {\n      backgroundColor:',
+        "    '::before': {\n      color:",
+        "    '::before': {\n      backgroundColor:",
       ),
     ),
   'value-changed': () =>

@@ -52,7 +52,7 @@ function provider(counter: string): CommandProviderConfig {
     argv: [
       process.execPath,
       '-e',
-      'const fs=require(\'fs\');const p=process.argv[1];const n=fs.existsSync(p)?Number(fs.readFileSync(p,\'utf8\')):0;fs.writeFileSync(p,String(n+1));process.stdout.write(\'pass\')',
+      "const fs=require('fs');const p=process.argv[1];const n=fs.existsSync(p)?Number(fs.readFileSync(p,'utf8')):0;fs.writeFileSync(p,String(n+1));process.stdout.write('pass')",
       counter,
     ],
     versionArgv: [process.execPath, '-e', "process.stdout.write('fixture-v1')"],

@@ -380,7 +380,7 @@ export default {
         2,
       )}\n`,
       'yarn.lock': '# lockfile v1\n',
-      'babel.config.js': 'module.exports = {plugins: [\'existing-plugin\']};\n',
+      'babel.config.js': "module.exports = {plugins: ['existing-plugin']};\n",
       'src/App.tsx': 'export const App = () => null;\n',
     });
     project = initializeProject({ repositoryRoot: repo });
