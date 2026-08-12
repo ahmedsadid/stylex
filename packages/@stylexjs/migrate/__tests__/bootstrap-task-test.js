@@ -91,6 +91,11 @@ export default {plugins: [new rspack.DefinePlugin({})]};
             section: 'devDependencies',
             spec: '0.19.0',
           },
+          {
+            name: 'unplugin',
+            section: 'devDependencies',
+            spec: '^2.3.11',
+          },
         ],
         installCommands: [
           [
@@ -109,6 +114,7 @@ export default {plugins: [new rspack.DefinePlugin({})]};
             '--save-exact',
             '--save-dev',
             '@stylexjs/unplugin@0.19.0',
+            'unplugin@^2.3.11',
           ],
         ],
         buildCommand: ['corepack', 'pnpm', 'run', 'build'],
@@ -128,6 +134,7 @@ export default {plugins: [new rspack.DefinePlugin({})]};
     const manifest = JSON.parse(originalManifest);
     manifest.dependencies = { '@stylexjs/stylex': '0.19.0' };
     manifest.devDependencies['@stylexjs/unplugin'] = '0.19.0';
+    manifest.devDependencies.unplugin = '^2.3.11';
     writeFiles(opened.attempt.workspace.path, {
       'package.json': `${JSON.stringify(manifest, null, 2)}\n`,
       'pnpm-lock.yaml': 'lockfileVersion: 9\n# StyleX packages resolved\n',
@@ -187,6 +194,7 @@ export default {
     manifest.dependencies = {
       '@stylexjs/stylex': '0.19.0',
       '@stylexjs/unplugin': '0.19.0',
+      unplugin: '^2.3.11',
     };
     writeFiles(opened.attempt.workspace.path, {
       'package.json': `${JSON.stringify(manifest, null, 2)}\n`,
@@ -224,6 +232,7 @@ export default {plugins: []};
       '@stylexjs/stylex': 'file:/unreviewed/local/stylex',
     };
     manifest.devDependencies['@stylexjs/unplugin'] = '0.19.0';
+    manifest.devDependencies.unplugin = '^2.3.11';
     writeFiles(opened.attempt.workspace.path, {
       'package.json': `${JSON.stringify(manifest, null, 2)}\n`,
       'pnpm-lock.yaml': 'lockfileVersion: 9\n# StyleX packages resolved\n',
@@ -258,6 +267,7 @@ export default {plugins: [stylexPlugin.rspack()]};
     manifest.scripts.unrelated = 'node unexpected.js';
     manifest.dependencies = { '@stylexjs/stylex': '0.19.0' };
     manifest.devDependencies['@stylexjs/unplugin'] = '0.19.0';
+    manifest.devDependencies.unplugin = '^2.3.11';
     writeFiles(opened.attempt.workspace.path, {
       'package.json': `${JSON.stringify(manifest, null, 2)}\n`,
       'pnpm-lock.yaml': 'lockfileVersion: 9\n# StyleX packages resolved\n',

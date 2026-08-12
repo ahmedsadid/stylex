@@ -47,6 +47,7 @@ type DependencyIntent = {
 function dependencyIntents(
   stylexSpec: string,
   integrationSpec: string,
+  unpluginSpec: string,
 ): $ReadOnlyArray<DependencyIntent> {
   return Object.freeze([
     Object.freeze({
@@ -57,6 +58,11 @@ function dependencyIntents(
     Object.freeze({
       name: '@stylexjs/unplugin',
       spec: integrationSpec,
+      section: 'devDependencies',
+    }),
+    Object.freeze({
+      name: 'unplugin',
+      spec: unpluginSpec,
       section: 'devDependencies',
     }),
   ]);
@@ -79,14 +85,16 @@ function installCommands({
   const runtime = dependencies.find(
     (dependency) => dependency.section === 'dependencies',
   );
-  const development = dependencies.find(
+  const development = dependencies.filter(
     (dependency) => dependency.section === 'devDependencies',
   );
-  if (runtime == null || development == null) {
+  if (runtime == null || development.length === 0) {
     throw new Error('Bootstrap dependency intent is incomplete');
   }
   const runtimeSpec = `${runtime.name}@${runtime.spec}`;
-  const developmentSpec = `${development.name}@${development.spec}`;
+  const developmentSpecs = development.map(
+    (dependency) => `${dependency.name}@${dependency.spec}`,
+  );
   if (manager === 'pnpm') {
     const target =
       packageRoot === '' ? ['-w'] : ['--filter', String(packageName)];
@@ -106,7 +114,7 @@ function installCommands({
         'add',
         '--save-exact',
         '--save-dev',
-        developmentSpec,
+        ...developmentSpecs,
       ]),
     ]);
   }
@@ -117,7 +125,13 @@ function installCommands({
         : ['corepack', 'yarn', 'workspace', String(packageName)];
     return Object.freeze([
       Object.freeze([...prefix, 'add', '--exact', runtimeSpec]),
-      Object.freeze([...prefix, 'add', '--exact', '--dev', developmentSpec]),
+      Object.freeze([
+        ...prefix,
+        'add',
+        '--exact',
+        '--dev',
+        ...developmentSpecs,
+      ]),
     ]);
   }
   const target = packageRoot === '' ? [] : ['--workspace', String(packageName)];
@@ -129,7 +143,7 @@ function installCommands({
       ...target,
       '--save-exact',
       '--save-dev',
-      developmentSpec,
+      ...developmentSpecs,
     ]),
   ]);
 }
@@ -264,6 +278,7 @@ export function openBootstrapTask({
   integration = null,
   stylexSpec = VERSION,
   integrationSpec = VERSION,
+  unpluginSpec = '^2.3.11',
   workspaceRoot,
   now = () => new Date().toISOString(),
 }: {
@@ -273,6 +288,7 @@ export function openBootstrapTask({
   +integration?: BuildIntegrationKind | null,
   +stylexSpec?: string,
   +integrationSpec?: string,
+  +unpluginSpec?: string,
   +workspaceRoot?: string,
   +now?: () => string,
 }): ContextOpenResult {
@@ -280,7 +296,9 @@ export function openBootstrapTask({
     stylexSpec === '' ||
     stylexSpec.includes('\0') ||
     integrationSpec === '' ||
-    integrationSpec.includes('\0')
+    integrationSpec.includes('\0') ||
+    unpluginSpec === '' ||
+    unpluginSpec.includes('\0')
   ) {
     throw new Error('Bootstrap package specs must be non-empty literals');
   }
@@ -416,7 +434,11 @@ export function openBootstrapTask({
     };
   }
   const cluster = workUnit({ inspection, changeFiles });
-  const dependencies = dependencyIntents(stylexSpec, integrationSpec);
+  const dependencies = dependencyIntents(
+    stylexSpec,
+    integrationSpec,
+    unpluginSpec,
+  );
   const commands = installCommands({
     manager: packageManager,
     packageName: selectedPackage.name,
