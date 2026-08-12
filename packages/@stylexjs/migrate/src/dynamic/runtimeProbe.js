@@ -166,6 +166,9 @@ class SeedCssAssetPlugin {
   }
 }
 const moduleDirectories = [];
+if (process.env.STYLEX_MIGRATE_MODULE_ROOT) {
+  moduleDirectories.push(path.join(process.env.STYLEX_MIGRATE_MODULE_ROOT, 'node_modules'));
+}
 for (let current = process.cwd(); ; current = path.dirname(current)) {
   moduleDirectories.push(path.join(current, 'node_modules'));
   if (path.dirname(current) === current) break;
@@ -174,7 +177,10 @@ module.exports = {
   mode: 'production', context: process.cwd(), entry: path.join(__dirname, 'dynamic-probe-entry.js'),
   output: {path: path.join(__dirname, 'dynamic-probe-dist'), filename: 'probe.js', clean: true},
   module: {rules: [{test: /\.[jt]sx?$/, exclude: /node_modules/, loader: 'builtin:swc-loader', options: {jsc: {parser: {syntax: 'typescript', tsx: true}, transform: {react: {runtime: 'automatic'}}}}}]},
-  resolve: {modules: moduleDirectories, alias: {sentry: path.join(process.cwd(), 'static/app')}},
+  resolve: {modules: moduleDirectories, alias: {
+    sentry: path.join(process.cwd(), 'static/app'),
+    '@sentry/scraps': path.join(process.cwd(), 'static/app/components/core'),
+  }, extensions: ['.tsx', '.ts', '.jsx', '.js', '.json']},
   plugins: [new SeedCssAssetPlugin(), stylexPlugin.rspack({dev: false, useCSSLayers: true}), new rspackModule.HtmlRspackPlugin({title: 'StyleX dynamic probe'})],
 };
 `;

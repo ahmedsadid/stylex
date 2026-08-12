@@ -18,7 +18,10 @@ const {spawn} = require('node:child_process');
 
 const config = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
 const packageRoot = process.cwd();
-const resolveFromPackage = name => require.resolve(name, {paths: [packageRoot]});
+const moduleSearchRoot = process.env.STYLEX_MIGRATE_MODULE_ROOT;
+const resolveFromPackage = name => require.resolve(name, {
+  paths: [packageRoot, moduleSearchRoot].filter(Boolean),
+});
 const playwright = require(resolveFromPackage(config.playwrightPackage));
 const {version: playwrightVersion} = require(resolveFromPackage(config.playwrightPackage + '/package.json'));
 

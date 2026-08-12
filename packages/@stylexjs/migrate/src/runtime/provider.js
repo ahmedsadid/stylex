@@ -174,13 +174,19 @@ export async function runRuntimeCommandProvider(
           baselineResult = await runEvidenceProcess({
             argv,
             cwd: baselineCwd,
-            environment: environment.values,
+            environment: {
+              ...environment.values,
+              STYLEX_MIGRATE_MODULE_ROOT: context.workspaceRoot,
+            },
             timeoutMs: config.timeoutMs,
           });
           candidateResult = await runEvidenceProcess({
             argv,
             cwd: candidateCwd,
-            environment: environment.values,
+            environment: {
+              ...environment.values,
+              STYLEX_MIGRATE_MODULE_ROOT: context.workspaceRoot,
+            },
             timeoutMs: config.timeoutMs,
           });
           const unavailable = [baselineResult, candidateResult].find(
