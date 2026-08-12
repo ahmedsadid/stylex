@@ -32,7 +32,10 @@ jobs:
           cache-dependency-path: yarn.lock
       - run: corepack prepare yarn@1.22.22 --activate
       - run: yarn install --frozen-lockfile
+      - run: yarn playwright install --with-deps chromium
       - run: yarn test:packages
+        env:
+          STYLEX_MIGRATE_REQUIRE_PLAYWRIGHT: '1'
 
   prettier:
     runs-on: ubuntu-latest

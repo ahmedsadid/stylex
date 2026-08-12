@@ -18,16 +18,30 @@ import { createTempDir, removeTempDir } from './utils/tempRepo';
 
 const collector = path.join(__dirname, 'utils/playwrightRuntimeCollector.js');
 let browserAvailable = false;
+let browserUnavailableReason = 'no Playwright browser executable was found';
 try {
   const { chromium } = require('playwright');
-  browserAvailable = [
+  const candidates = [
     '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
     '/usr/bin/google-chrome',
     '/usr/bin/chromium',
     '/usr/bin/chromium-browser',
     chromium.executablePath(),
-  ].some((candidate) => fs.existsSync(candidate));
-} catch (_error) {}
+  ];
+  browserAvailable = candidates.some((candidate) => fs.existsSync(candidate));
+  browserUnavailableReason = `none of these paths exists: ${candidates.join(', ')}`;
+} catch (error) {
+  browserUnavailableReason =
+    error instanceof Error ? error.message : 'Playwright could not be loaded';
+}
+if (
+  process.env.STYLEX_MIGRATE_REQUIRE_PLAYWRIGHT === '1' &&
+  !browserAvailable
+) {
+  throw new Error(
+    `Playwright is required for this test run, but ${browserUnavailableReason}`,
+  );
+}
 const testWithBrowser = browserAvailable ? test : test.skip;
 
 const SUBJECT: RepositoryEvidenceSubject = Object.freeze({
