@@ -124,11 +124,13 @@ describe('M5 verify and review CLI', () => {
     classification,
     includeStatic,
     file = 'src/A.js',
+    clusterId = 'cluster-a',
   }: {
     +proposer: Proposer,
     +classification: Classification,
     +includeStatic: boolean,
     +file?: string,
+    +clusterId?: string,
   }): string {
     const workspace = createCandidateWorkspace({
       repositoryRoot: repo,
@@ -147,7 +149,7 @@ describe('M5 verify and review CLI', () => {
       workspace,
       snapshot,
       proposer,
-      clusterIds: ['cluster-a'],
+      clusterIds: [clusterId],
       ...(proposer.kind === 'deterministic'
         ? { expectedContent: { [file]: hashString(content) } }
         : {}),
@@ -364,6 +366,31 @@ describe('M5 verify and review CLI', () => {
       verdict: { outcome: 'eligible-for-review' },
     });
 
+    const review = syncCli(repo, ['review', first]);
+    expect(review.code).toBe(0);
+    expect(review.json).toMatchObject({
+      composition: {
+        subjectId: complete.json.subject.id,
+        kind: 'apply-plan',
+        paths: [
+          { file: 'src/A.js', ownership: 'exclusive', candidateIds: [first] },
+          { file: 'src/B.js', ownership: 'exclusive', candidateIds: [second] },
+        ],
+      },
+      candidates: expect.arrayContaining([
+        expect.objectContaining({
+          id: first,
+          uniqueFiles: ['src/A.js'],
+          sharedFiles: [],
+        }),
+        expect.objectContaining({
+          id: second,
+          uniqueFiles: ['src/B.js'],
+          sharedFiles: [],
+        }),
+      ]),
+    });
+
     const subset = await asyncCli(repo, ['verify', first]);
     expect(subset.code).toBe(3);
     expect(subset.json).toMatchObject({
@@ -374,5 +401,70 @@ describe('M5 verify and review CLI', () => {
     expect(subset.json.evidenceBundleId).not.toBe(
       complete.json.evidenceBundleId,
     );
+  });
+
+  test('combined review labels byte-identical shared outputs', async () => {
+    const bridge = persistCandidate({
+      proposer: { kind: 'agent', version: 'bridge-v1' },
+      classification: 'repeatable-contextual',
+      includeStatic: false,
+      file: 'src/A.js',
+      clusterId: 'bridge',
+    });
+    const consumer = persistCandidate({
+      proposer: { kind: 'agent', version: 'consumer-v1' },
+      classification: 'repeatable-contextual',
+      includeStatic: false,
+      file: 'src/A.js',
+      clusterId: 'consumer',
+    });
+    writeConfig(project, {
+      sourceGlobs: ['src/**/*.js'],
+      evidence: {
+        concurrency: 1,
+        outputPreviewBytes: 1024,
+        providers: [
+          {
+            id: 'shared-output-check',
+            kind: 'command',
+            check: 'typecheck',
+            checkVersion: 'fixture-v1',
+            subject: 'apply-plan',
+            cost: 'cheap',
+            argv: [process.execPath, '-e', 'process.exit(0)'],
+            versionArgv: [
+              process.execPath,
+              '-e',
+              "process.stdout.write('fixture-v1')",
+            ],
+            cwd: '.',
+            allowedEnv: ['PATH'],
+            fileGlobs: ['src/**'],
+            limitations: [],
+            timeoutMs: 5000,
+          },
+        ],
+      },
+    });
+    const verified = await asyncCli(repo, ['verify', bridge, consumer]);
+    expect(verified.code).toBe(0);
+    const review = syncCli(repo, ['review', bridge]);
+    expect(review.code).toBe(0);
+    expect(review.json).toMatchObject({
+      composition: {
+        kind: 'apply-plan',
+        paths: [
+          {
+            file: 'src/A.js',
+            ownership: 'shared-identical',
+            candidateIds: [bridge, consumer].sort(),
+          },
+        ],
+      },
+      candidates: expect.arrayContaining([
+        expect.objectContaining({ id: bridge, sharedFiles: ['src/A.js'] }),
+        expect.objectContaining({ id: consumer, sharedFiles: ['src/A.js'] }),
+      ]),
+    });
   });
 });

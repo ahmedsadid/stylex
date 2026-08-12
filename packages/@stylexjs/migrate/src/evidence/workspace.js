@@ -17,6 +17,7 @@ import {
 import { validateCandidatePatch } from '../candidate/patch';
 import type { CandidateWorkspace } from '../candidate/workspace';
 import type { VerificationCandidate } from './candidates';
+import type { FileChange } from '../candidate/patch';
 
 const MODES = new Set(['100644', '100755']);
 
@@ -88,7 +89,10 @@ export function createVerificationWorkspace({
   }
   const repositoryRoot = records[0].candidate.repositoryRoot;
   const baseCommit = records[0].candidate.baseCommit;
-  const owners = new Map<string, string>();
+  const owners = new Map<
+    string,
+    { +candidateId: string, +change: FileChange, +sourceHash: string | null },
+  >();
   for (const record of records) {
     const problem = validateCandidatePatch(record.candidate, record.snapshot);
     if (problem != null) {
@@ -104,12 +108,34 @@ export function createVerificationWorkspace({
     }
     for (const file of record.candidate.touchedFiles) {
       const existing = owners.get(file);
-      if (existing != null) {
+      const change = record.candidate.changes.find(
+        (item) => item.path === file,
+      );
+      if (change == null) {
         throw new Error(
-          `Candidates ${existing} and ${record.candidate.id} both change ${file}`,
+          `Candidate ${record.candidate.id} has no change for ${file}`,
         );
       }
-      owners.set(file, record.candidate.id);
+      const sourceHash = record.snapshot.fileHashes[file] ?? null;
+      if (existing != null) {
+        if (
+          existing.sourceHash !== sourceHash ||
+          existing.change.status !== change.status ||
+          existing.change.contentHash !== change.contentHash ||
+          existing.change.mode !== change.mode ||
+          existing.change.content !== change.content
+        ) {
+          throw new Error(
+            `Candidates ${existing.candidateId} and ${record.candidate.id} conflict on ${file}`,
+          );
+        }
+        continue;
+      }
+      owners.set(file, {
+        candidateId: record.candidate.id,
+        change,
+        sourceHash,
+      });
     }
   }
 
@@ -122,8 +148,11 @@ export function createVerificationWorkspace({
   });
   try {
     materializeFullCheckout(workspace);
+    const materialized = new Set<string>();
     for (const record of records) {
       for (const change of record.candidate.changes) {
+        if (materialized.has(change.path)) continue;
+        materialized.add(change.path);
         const destination = ensureParent(workspace.path, change.path);
         if (change.status === 'deleted') {
           fs.unlinkSync(destination);

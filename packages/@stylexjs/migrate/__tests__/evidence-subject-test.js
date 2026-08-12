@@ -52,6 +52,8 @@ describe('M5 exact repository evidence subjects', () => {
   function candidate(
     file: string,
     contents: string,
+    clusterId?: string,
+    assumptionArtifactHashes: $ReadOnlyArray<string> = [],
   ): { +candidate: CandidatePatch, +snapshot: WorkspaceSnapshot } {
     const workspace = createCandidateWorkspace({
       repositoryRoot: repo,
@@ -60,11 +62,17 @@ describe('M5 exact repository evidence subjects', () => {
     });
     workspaces.push(workspace);
     writeFiles(workspace.path, { [file]: contents });
-    const snapshot = createSnapshot({ repositoryRoot: repo, files: [file] });
+    const snapshot = createSnapshot({
+      repositoryRoot: repo,
+      files: [file],
+      assumptionArtifactHashes,
+    });
     const result = createCandidatePatch({
       workspace,
       snapshot,
       proposer: { kind: 'agent', version: 'test' },
+      clusterIds: clusterId == null ? [] : [clusterId],
+      assumptionArtifactHashes,
     });
     if (!result.ok) {
       throw new Error(result.reason);
@@ -105,11 +113,44 @@ describe('M5 exact repository evidence subjects', () => {
     expect(complete.id).not.toBe(subset.id);
   });
 
-  test('apply-plan subjects refuse competing change ownership', () => {
+  test('apply-plan subjects merge identical shared outputs and site coverage', () => {
+    const first = candidate('src/A.js', 'export const A = 2;\n', 'bridge');
+    const second = candidate('src/A.js', 'export const A = 2;\n', 'consumer');
+    const subject = createApplyPlanEvidenceSubject([
+      { ...first, siteIdsByFile: { 'src/A.js': ['site-first'] } },
+      { ...second, siteIdsByFile: { 'src/A.js': ['site-second'] } },
+    ]);
+    expect(subject.changes).toEqual([
+      expect.objectContaining({
+        path: 'src/A.js',
+        siteIds: ['site-first', 'site-second'],
+      }),
+    ]);
+    expect(subject.candidateIds).toHaveLength(2);
+  });
+
+  test('apply-plan identity changes with a bound assumption', () => {
+    const withoutAssumption = candidate(
+      'src/A.js',
+      'export const A = 2;\n',
+      'probe',
+    );
+    const withAssumption = candidate(
+      'src/A.js',
+      'export const A = 2;\n',
+      'probe',
+      ['a'.repeat(64)],
+    );
+    expect(createApplyPlanEvidenceSubject([withAssumption]).id).not.toBe(
+      createApplyPlanEvidenceSubject([withoutAssumption]).id,
+    );
+  });
+
+  test('apply-plan subjects refuse conflicting change ownership', () => {
     const first = candidate('src/A.js', 'export const A = 2;\n');
     const second = candidate('src/A.js', 'export const A = 3;\n');
     expect(() => createApplyPlanEvidenceSubject([first, second])).toThrow(
-      'both change src/A.js',
+      'conflict on src/A.js',
     );
   });
 });

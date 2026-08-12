@@ -424,6 +424,7 @@ function review(
   +verdict: JsonValue,
   +evidence: JsonValue,
   +candidates: JsonValue,
+  +composition: JsonValue,
 } | null {
   let verdict = loadRepositoryEvidenceVerdict(project, id);
   let bundle = loadRepositoryEvidenceBundle(project, id);
@@ -436,6 +437,17 @@ function review(
     });
     verdict = loadLatestRepositoryEvidenceVerdict(project, subject.id);
     bundle = loadLatestRepositoryEvidenceBundle(project, subject.id);
+    if (verdict == null || bundle == null) {
+      const entry: $FlowFixMe = replayEvents(project).indexes.candidates[id];
+      const combinedSubjectId: mixed = entry?.data?.subjectId;
+      if (typeof combinedSubjectId === 'string') {
+        verdict = loadLatestRepositoryEvidenceVerdict(
+          project,
+          combinedSubjectId,
+        );
+        bundle = loadLatestRepositoryEvidenceBundle(project, combinedSubjectId);
+      }
+    }
   } else if (verdict == null && bundle == null) {
     verdict = loadLatestRepositoryEvidenceVerdict(project, id);
     bundle = loadLatestRepositoryEvidenceBundle(project, id);
@@ -469,6 +481,12 @@ function review(
           (status: $FlowFixMe) => String(status.warning),
         ),
   );
+  const pathOwners = new Map<string, Array<string>>();
+  for (const { candidateId, record } of candidateRecords) {
+    for (const file of record?.candidate.touchedFiles ?? []) {
+      pathOwners.set(file, [...(pathOwners.get(file) ?? []), candidateId]);
+    }
+  }
   return {
     warnings: [
       ...verdict.limitations.filter((limitation) =>
@@ -501,6 +519,12 @@ function review(
             classification: record.classification,
             proposer: record.candidate.proposer,
             files: record.candidate.touchedFiles,
+            uniqueFiles: record.candidate.touchedFiles.filter(
+              (file) => pathOwners.get(file)?.length === 1,
+            ),
+            sharedFiles: record.candidate.touchedFiles.filter(
+              (file) => (pathOwners.get(file)?.length ?? 0) > 1,
+            ),
             decisionArtifactHashes: record.candidate.decisionArtifactHashes,
             assumptionArtifactHashes: record.candidate.assumptionArtifactHashes,
             testAssumptions: candidateAssumptionStatus(
@@ -510,6 +534,18 @@ function review(
             decisionStatus: candidateDecisionStatus(project, record.candidate),
           };
     }) as $FlowFixMe,
+    composition: {
+      subjectId: bundle.subject.id,
+      kind: bundle.subject.kind,
+      paths: [...pathOwners.entries()]
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([file, candidateIds]) => ({
+          file,
+          candidateIds: [...candidateIds].sort(),
+          ownership:
+            candidateIds.length === 1 ? 'exclusive' : 'shared-identical',
+        })),
+    } as $FlowFixMe,
   };
 }
 
@@ -1308,6 +1344,7 @@ export function runCli(
           verdict: result.verdict,
           evidence: result.evidence,
           candidates: result.candidates,
+          composition: result.composition,
         },
         json,
         stdout,

@@ -17,6 +17,7 @@ export type EvidenceChange = {
   +path: string,
   +sourceHash: string | null,
   +targetHash: string | null,
+  +mode?: string,
   +siteIds: $ReadOnlyArray<string>,
 };
 
@@ -84,6 +85,7 @@ function changesFor({
         path: change.path,
         sourceHash: snapshot.fileHashes[change.path] ?? null,
         targetHash: change.contentHash,
+        mode: change.mode,
         siteIds: Object.freeze(
           [...new Set(siteIdsByFile[change.path] ?? [])].sort(),
         ),
@@ -133,8 +135,11 @@ export function createApplyPlanEvidenceSubject(
   }
   const repository = inputs[0].candidate.repositoryRoot;
   const commit = inputs[0].candidate.baseCommit;
-  const changes = [];
-  const owners = new Map<string, string>();
+  const changes: Array<EvidenceChange> = [];
+  const owners = new Map<
+    string,
+    { candidateId: string, change: EvidenceChange },
+  >();
   const decisionArtifactHashes = new Set<string>();
   const assumptionArtifactHashes = new Set<string>();
   for (const input of inputs) {
@@ -155,11 +160,32 @@ export function createApplyPlanEvidenceSubject(
     for (const change of changesFor(input)) {
       const existing = owners.get(change.path);
       if (existing != null) {
-        throw new Error(
-          `apply-plan candidates ${existing} and ${input.candidate.id} both change ${change.path}`,
-        );
+        if (
+          existing.change.sourceHash !== change.sourceHash ||
+          existing.change.targetHash !== change.targetHash ||
+          existing.change.mode !== change.mode
+        ) {
+          throw new Error(
+            `apply-plan candidates ${existing.candidateId} and ${input.candidate.id} conflict on ${change.path}`,
+          );
+        }
+        const merged = Object.freeze({
+          ...existing.change,
+          siteIds: Object.freeze(
+            [
+              ...new Set([...existing.change.siteIds, ...change.siteIds]),
+            ].sort(),
+          ),
+        });
+        existing.change = merged;
+        const index = changes.findIndex((item) => item.path === change.path);
+        changes[index] = merged;
+        continue;
       }
-      owners.set(change.path, input.candidate.id);
+      owners.set(change.path, {
+        candidateId: input.candidate.id,
+        change,
+      });
       changes.push(change);
     }
   }

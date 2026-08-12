@@ -124,6 +124,19 @@ describe('M5 persisted candidates and verification workspaces', () => {
     expect(readFile(repo, 'src/B.js')).toBe('export const B = 1;\n');
   });
 
+  test('verification materializes identical shared outputs once', () => {
+    const first = candidate('src/A.js', 'export const A = 2;\n');
+    const second = candidate('src/A.js', 'export const A = 2;\n');
+    const verification = createVerificationWorkspace({
+      records: [first, second],
+      rootDir: workspaceRoot,
+    });
+    workspaces.push(verification);
+    expect(readFile(verification.path, 'src/A.js')).toBe(
+      'export const A = 2;\n',
+    );
+  });
+
   test('verification expands sparse repositories for real build evidence', () => {
     execFileSync('git', ['sparse-checkout', 'set', 'src'], {
       cwd: repo,
@@ -157,7 +170,7 @@ describe('M5 persisted candidates and verification workspaces', () => {
     ).toThrow('candidate patch hash does not match');
   });
 
-  test('verification refuses competing candidate writers', () => {
+  test('verification refuses conflicting candidate writers', () => {
     const first = candidate('src/A.js', 'export const A = 2;\n');
     const second = candidate('src/A.js', 'export const A = 3;\n');
     expect(() =>
@@ -165,7 +178,7 @@ describe('M5 persisted candidates and verification workspaces', () => {
         records: [first, second],
         rootDir: workspaceRoot,
       }),
-    ).toThrow('both change src/A.js');
+    ).toThrow('conflict on src/A.js');
     expect(fs.readdirSync(workspaceRoot).length).toBe(workspaces.length);
   });
 });
