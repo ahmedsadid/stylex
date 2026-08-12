@@ -84,6 +84,7 @@ import {
 } from './assumption/records';
 import { VERSION } from './version';
 import { inspectRuntimeSurfaces } from './runtime/discover';
+import { inspectThemeTopology } from './theme/topology';
 
 type WriteOutput = (text: string) => mixed;
 
@@ -122,6 +123,7 @@ Commands:
                           validate and persist a theme token-map draft
   theme candidates        list exact styled-theme consumer batches and blockers
   theme inspect <draft>   show approval and active/superseded state
+  theme topology          inspect global hosts, portals, and extra documents
   theme approve <draft> <reviewer> --human-confirm
                           record a human approval; agents must not run this
   theme propose <draft>   freeze a candidate from the active approved map
@@ -855,6 +857,21 @@ export function runCli(
           state: inspection.state,
           activeArtifactHash: inspection.activeArtifactHash,
           bridgeEvidence: inspection.bridgeEvidence,
+        } as $FlowFixMe,
+        json,
+        stdout,
+      );
+      return 0;
+    }
+    if (args[0] === 'theme' && args[1] === 'topology' && args.length === 2) {
+      const project = openProject(cwd);
+      present(
+        {
+          command: 'theme topology',
+          topology: inspectThemeTopology({
+            repositoryRoot: cwd,
+            sourceGlobs: readConfig(project).sourceGlobs,
+          }),
         } as $FlowFixMe,
         json,
         stdout,

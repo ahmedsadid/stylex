@@ -204,6 +204,12 @@ export {
 } from './theme/model';
 export { discoverThemeFacts } from './theme/discover';
 export { inspectThemeBridge } from './theme/bridge';
+export { THEME_TOPOLOGY_MODEL, inspectThemeTopology } from './theme/topology';
+export type {
+  ThemeTopologyInspection,
+  ThemeTopologyKind,
+  ThemeTopologyObservation,
+} from './theme/topology';
 export {
   inspectThemeBridgeCandidate,
   inspectThemeBridgeSources,
