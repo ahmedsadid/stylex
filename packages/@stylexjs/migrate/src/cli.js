@@ -123,8 +123,8 @@ Commands:
   theme approve <draft> <reviewer> --human-confirm
                           record a human approval; agents must not run this
   theme propose <draft>   freeze a candidate from the active approved map
-  theme bridge open <draft> <goal>
-                          open a scoped task that locks the generated theme module
+  theme bridge open <draft> <goal> [assumption...]
+                          open a scoped bridge task with optional test assumptions
   context open <cluster> <goal> [assumption...]
                           open contextual work with optional test assumptions
   context open <task>     open the kernel-owned retry for a failed task
@@ -916,12 +916,13 @@ export function runCli(
       args[0] === 'theme' &&
       args[1] === 'bridge' &&
       args[2] === 'open' &&
-      args.length === 5
+      args.length >= 5
     ) {
       const result = openThemeBridgeTask({
         project: openProject(cwd),
         draftId: args[3],
         goal: args[4],
+        assumptionIds: args.slice(5),
       });
       present(
         result.ok
@@ -934,6 +935,7 @@ export function runCli(
               origin: result.task.origin,
               allowedPaths: result.task.scope.allowedPaths,
               requiredOutputs: result.task.requiredOutputs,
+              assumptionArtifactHashes: result.task.assumptionArtifactHashes,
               warnings: result.task.limitations,
               next: `Edit only the declared bridge boundaries, then run stylex-migrate context submit ${result.task.id} <agent|human> <name> <version> [skill-version].`,
             }

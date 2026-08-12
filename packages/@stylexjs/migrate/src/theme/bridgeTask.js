@@ -19,6 +19,10 @@ import { loadCurrentInventory, loadCurrentPlan } from '../planning/reports';
 import { canonicalJson } from '../state/json';
 import { readConfig } from '../state/project';
 import {
+  assertCurrentTestAssumption,
+  loadTestAssumption,
+} from '../assumption/records';
+import {
   THEME_BRIDGE_LIMITATION,
   THEME_NO_RUNTIME_LIMITATION,
   inspectThemeDecision,
@@ -32,7 +36,7 @@ import type { ProjectState } from '../state/project';
 import type { ThemeDecisionDraft } from './model';
 
 export const THEME_BRIDGE_TASK_PROTOCOL_VERSION: string =
-  'stylex-migrate-theme-bridge-task-v1';
+  'stylex-migrate-theme-bridge-task-v2';
 
 function factTouchesFiles(fact: Fact, files: $ReadOnlySet<string>): boolean {
   return (
@@ -92,12 +96,14 @@ export function openThemeBridgeTask({
   project,
   draftId,
   goal,
+  assumptionIds = [],
   workspaceRoot,
   now = () => new Date().toISOString(),
 }: {
   +project: ProjectState,
   +draftId: string,
   +goal: string,
+  +assumptionIds?: $ReadOnlyArray<string>,
   +workspaceRoot?: string,
   +now?: () => string,
 }): ContextOpenResult {
@@ -162,6 +168,17 @@ export function openThemeBridgeTask({
 
   const config = readConfig(project);
   const configHash = hashString(canonicalJson(config as $FlowFixMe));
+  if (new Set(assumptionIds).size !== assumptionIds.length) {
+    throw new Error('A theme bridge task cannot bind an assumption twice');
+  }
+  const assumptions = assumptionIds.map((id) => {
+    const assumption = loadTestAssumption(project, id);
+    if (assumption == null) {
+      throw new Error(`No test assumption found for ${id}`);
+    }
+    assertCurrentTestAssumption(project, assumption);
+    return assumption;
+  });
   const declaredInputs = [
     ...new Set([
       ...draft.sourceFiles,
@@ -169,6 +186,9 @@ export function openThemeBridgeTask({
       ...bridge.boundaryFiles,
       ...inventory.configInputs,
       draft.targetModule,
+      ...assumptions.flatMap((assumption) =>
+        assumption.declaredInputs.map((input) => input.path),
+      ),
     ]),
   ].sort();
   const snapshot = createSnapshot({
@@ -176,6 +196,7 @@ export function openThemeBridgeTask({
     files: declaredInputs,
     configHash,
     decisionArtifactHashes: [draft.definitionHash],
+    assumptionArtifactHashes: assumptions.map((item) => item.artifactHash),
   });
   const stale = detectStaleFiles(snapshot);
   if (stale.length > 0) {
@@ -249,6 +270,7 @@ export function openThemeBridgeTask({
       },
     ],
     decisionArtifactHashes: [draft.definitionHash],
+    assumptionArtifactHashes: assumptions.map((item) => item.artifactHash),
     requiredChecks: config.evidence.providers.map((provider) => ({
       id: provider.id,
       check: provider.check,
@@ -260,6 +282,10 @@ export function openThemeBridgeTask({
       THEME_NO_RUNTIME_LIMITATION,
       THEME_BRIDGE_LIMITATION,
       'Static bridge wiring does not establish correct variant selection, provider topology, portals, inverted themes, SSR, or hydration.',
+      ...assumptions.flatMap((assumption) => [
+        `WARNING: Test assumption ${assumption.id} is not repository intent or human approval.`,
+        ...assumption.limitations,
+      ]),
       ...(config.evidence.providers.length === 0
         ? [
             'No repository evidence providers are configured; verification will block.',
@@ -270,7 +296,13 @@ export function openThemeBridgeTask({
       'Do not modify the generated theme module.',
       'Do not remove or change the existing Emotion provider behavior.',
       'Do not add a semantic DOM wrapper solely to carry StyleX props without explicit human review.',
-      'Do not mutate documentElement or global DOM state without an explicit repository decision.',
+      ...(assumptions.length === 0
+        ? [
+            'Do not mutate documentElement or global DOM state without an explicit repository decision or bound test assumption.',
+          ]
+        : [
+            'Global DOM mutation is authorized only within the exact bound test-assumption scope; do not present it as production intent.',
+          ]),
       'Stop if variant selection cannot use the same source as the existing Emotion theme.',
       'Stop if a portal, alternate document, inverted theme, SSR path, or hydration path requires an undeclared boundary.',
       'Do not edit project configuration, lockfiles, consumer files, source theme modules, or migration state.',

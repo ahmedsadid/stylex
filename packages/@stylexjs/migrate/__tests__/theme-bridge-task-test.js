@@ -15,6 +15,7 @@ import {
   loadVerificationCandidate,
   openContextRetry,
   openThemeBridgeTask,
+  persistTestAssumption,
   persistThemeDecisionDraft,
   saveInventory,
   scanRepository,
@@ -52,6 +53,7 @@ export const darkTheme = {colors: {foreground: '#eee'}};
 export const Card = styled.div\`color: \${p => p.theme.colors.foreground};\`;
 `,
       'src/App.tsx': originalProvider,
+      'src/portal.tsx': 'export const portalHost = () => document.body;\n',
     });
     workspaceRoot = createTempDir('stylex-migrate-theme-bridge-task-');
     project = initializeProject({ repositoryRoot: repo });
@@ -292,5 +294,52 @@ export const App = ({children, dark}) => {
       }),
     ).toBe(0);
     expect(fs.existsSync(output.workspace)).toBe(false);
+  });
+
+  test('uses a test assumption for a labelled body-host experiment', () => {
+    const inventory = scanRepository({ repositoryRoot: repo });
+    saveInventory(project, inventory);
+    const draft = createDraft();
+    const assumption = persistTestAssumption({
+      project,
+      input: {
+        purpose: 'Exercise body-host theme classes and a body portal.',
+        facts: [
+          {
+            statement: 'document.body is the host for this disposable case.',
+            status: 'inferred',
+            inputFiles: ['src/App.tsx', 'src/portal.tsx'],
+            detail: 'The selected portal renders into document.body.',
+          },
+        ],
+        scope: {
+          files: ['src/App.tsx', 'src/portal.tsx'],
+          cases: ['light-body', 'dark-body', 'light-portal', 'dark-portal'],
+        },
+        rationale: 'The existing portal topology supports the named cases.',
+        alternatives: ['Ask the owner to choose a production host.'],
+        limitations: ['Does not cover secondary documents or nested themes.'],
+      },
+      authorKind: 'agent',
+      authoredBy: 'fixture-agent',
+    });
+    const opened = openThemeBridgeTask({
+      project,
+      draftId: draft.id,
+      goal: 'Add a body-host bridge for only the assumed cases.',
+      assumptionIds: [assumption.id],
+      workspaceRoot,
+    });
+    if (!opened.ok) throw new Error(opened.reasons.join('\n'));
+    expect(opened.task).toMatchObject({
+      decisionArtifactHashes: [draft.definitionHash],
+      assumptionArtifactHashes: [assumption.artifactHash],
+      limitations: expect.arrayContaining([
+        expect.stringContaining('not repository intent or human approval'),
+      ]),
+      stopConditions: expect.arrayContaining([
+        expect.stringContaining('exact bound test-assumption scope'),
+      ]),
+    });
   });
 });
