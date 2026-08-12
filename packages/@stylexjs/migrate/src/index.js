@@ -10,6 +10,24 @@
 export { VERSION } from './version';
 
 export {
+  TEST_ASSUMPTION_PROTOCOL_VERSION,
+  createTestAssumption,
+  validateTestAssumption,
+} from './assumption/model';
+export type {
+  TestAssumption,
+  TestAssumptionDefinition,
+  TestAssumptionFact,
+  TestAssumptionFactStatus,
+  TestAssumptionInput,
+} from './assumption/model';
+export {
+  assertCurrentTestAssumption,
+  loadTestAssumption,
+  persistTestAssumption,
+} from './assumption/records';
+
+export {
   BOOTSTRAP_DISCOVERY_PROTOCOL_VERSION,
   inspectBootstrap,
 } from './bootstrap/discover';

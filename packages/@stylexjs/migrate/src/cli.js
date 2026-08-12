@@ -76,6 +76,11 @@ import {
 } from './dynamic/decisions';
 import { inspectBootstrap } from './bootstrap/discover';
 import { openBootstrapTask } from './bootstrap/task';
+import {
+  assertCurrentTestAssumption,
+  loadTestAssumption,
+  persistTestAssumption,
+} from './assumption/records';
 import { VERSION } from './version';
 
 type WriteOutput = (text: string) => mixed;
@@ -106,6 +111,10 @@ Commands:
                           persist an exact per-prop contextual strategy
   dynamic strategy inspect <draft>
                           show active/superseded strategy state
+  assumption record <json-file> <agent|human> <author>
+                          record a labelled, non-approved test assumption
+  assumption inspect <assumption>
+                          show an assumption and whether its inputs are current
   theme draft <json-file> <author>
                           validate and persist a theme token-map draft
   theme candidates        list exact styled-theme consumer batches and blockers
@@ -963,6 +972,70 @@ export function runCli(
         stdout,
       );
       return 0;
+    }
+    if (args[0] === 'assumption' && args[1] === 'record' && args.length === 5) {
+      const authorKind = args[3];
+      if (authorKind !== 'agent' && authorKind !== 'human') {
+        throw new Error('Test-assumption author must be agent or human');
+      }
+      const project = openProject(cwd);
+      const source = path.resolve(cwd, args[2]);
+      const input = parseJson(fs.readFileSync(source, 'utf8'), source);
+      const assumption = persistTestAssumption({
+        project,
+        input,
+        authorKind,
+        authoredBy: args[4],
+      });
+      present(
+        {
+          command: 'assumption record',
+          state: 'test-only',
+          assumption,
+          warnings: [
+            'WARNING: This is a test assumption, not repository intent or human approval.',
+            ...assumption.limitations,
+          ],
+          next: `Bind ${assumption.id} to a contextual test task.`,
+        } as $FlowFixMe,
+        json,
+        stdout,
+      );
+      return 0;
+    }
+    if (
+      args[0] === 'assumption' &&
+      args[1] === 'inspect' &&
+      args.length === 3
+    ) {
+      const project = openProject(cwd);
+      const assumption = loadTestAssumption(project, args[2]);
+      if (assumption == null) {
+        throw new Error(`No test assumption found for ${args[2]}`);
+      }
+      let state = 'current';
+      let staleReason = null;
+      try {
+        assertCurrentTestAssumption(project, assumption);
+      } catch (error) {
+        state = 'stale';
+        staleReason = error instanceof Error ? error.message : String(error);
+      }
+      present(
+        {
+          command: 'assumption inspect',
+          state,
+          assumption,
+          staleReason,
+          warnings: [
+            'WARNING: This is a test assumption, not repository intent or human approval.',
+            ...assumption.limitations,
+          ],
+        } as $FlowFixMe,
+        json,
+        stdout,
+      );
+      return state === 'current' ? 0 : 3;
     }
     if (args[0] === 'status' && args.length === 1) {
       const project = openProject(cwd);
