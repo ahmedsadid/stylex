@@ -30,6 +30,10 @@ export const THEME_RUNTIME_PROBE_PROTOCOL_VERSION: string =
   'stylex-migrate-theme-runtime-probe-v2';
 const GENERATED_ROOT_SELECTOR = '[data-stylex-migrate-probe="root"]';
 const GENERATED_PORTAL_SELECTOR = '[data-stylex-migrate-probe="portal"]';
+const GENERATED_CONSUMER_ROOT_SELECTOR =
+  '[data-stylex-migrate-probe="root"] > *';
+const GENERATED_CONSUMER_PORTAL_SELECTOR =
+  '[data-stylex-migrate-probe="portal"] > *';
 
 export type ThemeProbeProperty = {
   +sourcePath: string,
@@ -48,6 +52,7 @@ export type ThemeRuntimeProbeInput = {
   +playwrightPackage: 'playwright' | '@playwright/test',
   +nativeSurfaceDisposition: 'none-known' | 'known-insufficient',
   +surface: 'repository' | 'generated-rspack',
+  +generatedConsumer?: { +file: string, +exportName: string },
   +server?: EvidenceSurfaceDefinition['server'],
   +path: string,
   +testedConsumerFiles: $ReadOnlyArray<string>,
@@ -197,10 +202,24 @@ export function createThemeRuntimeProbeDefinition({
   +value: mixed,
 }): EvidenceSurfaceDefinition {
   const definition = input(value);
+  const generatedConsumer = definition.generatedConsumer;
+  if (
+    generatedConsumer != null &&
+    (definition.surface !== 'generated-rspack' ||
+      !object(generatedConsumer) ||
+      typeof generatedConsumer.file !== 'string' ||
+      !/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(generatedConsumer.exportName))
+  ) {
+    throw new Error('Invalid generated theme probe consumer');
+  }
+  const generatedSelectors =
+    generatedConsumer == null
+      ? [GENERATED_ROOT_SELECTOR, GENERATED_PORTAL_SELECTOR]
+      : [GENERATED_CONSUMER_ROOT_SELECTOR, GENERATED_CONSUMER_PORTAL_SELECTOR];
   if (
     definition.surface === 'generated-rspack' &&
-    (definition.targets.root.selector !== GENERATED_ROOT_SELECTOR ||
-      definition.targets.portal.selector !== GENERATED_PORTAL_SELECTOR)
+    (definition.targets.root.selector !== generatedSelectors[0] ||
+      definition.targets.portal.selector !== generatedSelectors[1])
   ) {
     throw new Error(
       'Generated Rspack theme probes require the standard root and portal selectors',
@@ -223,12 +242,23 @@ export function createThemeRuntimeProbeDefinition({
       'Theme runtime probe consumer files must belong to the theme decision',
     );
   }
+  if (
+    generatedConsumer != null &&
+    (!consumers.includes(generatedConsumer.file) || consumers.length !== 1)
+  ) {
+    throw new Error(
+      'Generated consumer probes require exactly the named tested consumer',
+    );
+  }
   if (draft.bridge == null) {
     throw new Error('Theme runtime probes require declared bridge boundaries');
   }
   const changePaths =
     definition.surface === 'generated-rspack'
-      ? [draft.targetModule]
+      ? [
+          draft.targetModule,
+          ...(generatedConsumer == null ? [] : [generatedConsumer.file]),
+        ].sort()
       : [
           ...new Set([
             draft.targetModule,
@@ -335,6 +365,7 @@ export function openThemeRuntimeProbeTask({
         ? emitThemeProbeHarness({
             draft,
             targets: definitionInput.targets,
+            consumer: definitionInput.generatedConsumer ?? null,
             port:
               30000 +
               (Number.parseInt(draft.definitionHash.slice(0, 8), 16) % 20000),

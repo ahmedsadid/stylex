@@ -44,6 +44,7 @@ function styleDeclarations(
 function entrySource(
   draft: ThemeDecisionDraft,
   targets: { +root: ThemeProbeTarget, +portal: ThemeProbeTarget },
+  consumer: { +file: string, +exportName: string } | null,
 ): string {
   const names = new Map(
     draft.tokens.map((token) => [token.sourcePath, token.targetName]),
@@ -64,7 +65,28 @@ function entrySource(
   if (styleKeys.size !== 3) {
     throw new Error('Theme runtime probe exports must be distinct');
   }
-  return `import * as stylex from '@stylexjs/stylex';
+  const consumerImports =
+    consumer == null
+      ? ''
+      : `import * as React from 'react';
+import {createRoot} from 'react-dom/client';
+import {${consumer.exportName} as ProbeConsumer} from '${importSpecifier(THEME_PROBE_ENTRY_PATH, consumer.file)}';
+
+`;
+  const probeBody =
+    consumer == null
+      ? `  const element = document.createElement('div');
+  element.dataset.stylexMigrateProbe = location;
+  element.className = location === 'root'
+    ? stylex.props(styles.root).className
+    : stylex.props(styles.portal).className;
+  element.textContent = location;
+  return element;`
+      : `  const element = document.createElement('div');
+  element.dataset.stylexMigrateProbe = location;
+  createRoot(element).render(React.createElement(ProbeConsumer));
+  return element;`;
+  return `${consumerImports}import * as stylex from '@stylexjs/stylex';
 
 import {
   ${dark} as darkTheme,
@@ -86,13 +108,7 @@ ${styleDeclarations(targets.portal, names)}
 });
 
 function probe(location) {
-  const element = document.createElement('div');
-  element.dataset.stylexMigrateProbe = location;
-  element.className = location === 'root'
-    ? stylex.props(styles.root).className
-    : stylex.props(styles.portal).className;
-  element.textContent = location;
-  return element;
+${probeBody}
 }
 
 const stylesheet = document.createElement('link');
@@ -156,6 +172,19 @@ module.exports = {
     filename: 'probe.js',
     clean: true,
   },
+  module: {
+    rules: [{
+      test: /\.[jt]sx?$/,
+      exclude: /node_modules/,
+      loader: 'builtin:swc-loader',
+      options: {
+        jsc: {
+          parser: {syntax: 'typescript', tsx: true},
+          transform: {react: {runtime: 'automatic'}},
+        },
+      },
+    }],
+  },
   resolve: {modules: moduleDirectories},
   plugins: [
     new SeedCssAssetPlugin(),
@@ -209,16 +238,18 @@ compiler.run((error, stats) => {
 export function emitThemeProbeHarness({
   draft,
   targets,
+  consumer = null,
   port,
 }: {
   +draft: ThemeDecisionDraft,
   +targets: { +root: ThemeProbeTarget, +portal: ThemeProbeTarget },
+  +consumer?: { +file: string, +exportName: string } | null,
   +port: number,
 }): $ReadOnlyArray<EvidenceSurfaceSupportOutput> {
   return Object.freeze([
     {
       path: THEME_PROBE_ENTRY_PATH,
-      contents: Buffer.from(entrySource(draft, targets), 'utf8'),
+      contents: Buffer.from(entrySource(draft, targets, consumer), 'utf8'),
     },
     {
       path: THEME_PROBE_RSPACK_PATH,

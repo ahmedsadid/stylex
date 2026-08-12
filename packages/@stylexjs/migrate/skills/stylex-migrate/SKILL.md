@@ -216,7 +216,10 @@ unknowns or earn `runtime-matched`.
    token values from the exact persisted draft. Submit the immutable surface
    unchanged. A repository surface must be verified with the matching theme
    module, bridge, and tested consumers. A generated Rspack surface exercises
-   only the generated theme module and earns no bridge or consumer claim.
+   only the generated theme module unless it names exactly one
+   `generatedConsumer`; that narrower mode renders the exact exported consumer
+   and may claim only that consumer plus the generated theme module. It never
+   proves the repository bridge or application route.
 4. Stop at approval. Never run `stylex-migrate theme approve`, never pass
    `--human-confirm`, and never describe agent assent as human approval. Resume
    only after a human says they ran the approval command for production-intent

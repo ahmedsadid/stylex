@@ -37,7 +37,9 @@ async function waitForServer(url, timeoutMs, server) {
   const deadline = Date.now() + timeoutMs;
   let lastError = null;
   while (Date.now() < deadline) {
-    if (server.exitCode != null) throw new Error('evidence server exited before becoming ready');
+    if (server.exitCode != null) {
+      throw new Error('evidence server exited before becoming ready');
+    }
     try {
       const response = await fetch(url);
       if (response.ok) return;
@@ -125,6 +127,7 @@ async function main() {
   server.stdout.on('data', chunk => { serverOutput += chunk; });
   server.stderr.on('data', chunk => { serverOutput += chunk; });
   let browser = null;
+  let failed = false;
   try {
     await waitForServer(config.server.url, config.server.timeoutMs, server);
     browser = await playwright.chromium.launch({
@@ -185,12 +188,17 @@ async function main() {
           },
           candidate,
         }));
+  } catch (error) {
+    failed = true;
+    throw error;
   } finally {
     if (browser != null) await browser.close();
     server.kill('SIGTERM');
     if (server.exitCode == null) await Promise.race([new Promise(resolve => server.once('exit', resolve)), sleep(1000)]);
     if (server.exitCode == null) server.kill('SIGKILL');
-    if (process.exitCode && serverOutput) process.stderr.write(serverOutput);
+    if (failed && serverOutput) {
+      process.stderr.write('\n[evidence-server]\n' + serverOutput);
+    }
   }
 }
 main().catch(error => { process.stderr.write((error.stack || error.message) + '\n'); process.exitCode = 1; });

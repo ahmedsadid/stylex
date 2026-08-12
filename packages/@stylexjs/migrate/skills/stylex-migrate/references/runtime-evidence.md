@@ -6,15 +6,15 @@ were observed without an executable surface; it is not configured evidence.
 
 Runtime evidence has three different baseline modes:
 
-1. A retained-repository baseline runs the same argv and allowlisted
-   environment in two detached worktrees: the exact base commit and frozen
-   candidate. This is the current `runtime-command` mode.
+1. A retained-repository baseline runs the same argv and allowlisted environment
+   in two detached worktrees: the exact base commit and frozen candidate. This
+   is the current `runtime-command` mode.
 2. A repository-assertion baseline relies on an existing test/story assertion.
    Report it as repository evidence unless it emits the complete runtime
    protocol.
 3. A generated probe compares named candidate observations with independently
-   locked expected observations. It is not a retained baseline and must never
-   be labelled as one.
+   locked expected observations. It is not a retained baseline and must never be
+   labelled as one.
 
 ## Open a generated probe
 
@@ -37,25 +37,25 @@ repository test.
    evaluation and arbitrary executables are rejected. Expectations have no
    browser metadata because they are values, not a fabricated baseline
    execution.
-3. Run `stylex-migrate runtime probe open <assumption-id> <json-file>
-   "<goal>"`. Read its task and warnings. The kernel generates and locks the
-   collector and config; do not edit either file.
+3. Run `stylex-migrate runtime probe open <assumption-id> <json-file> "<goal>"`.
+   Read its task and warnings. The kernel generates and locks the collector and
+   config; do not edit either file.
 4. Submit the task immediately with `context submit` and inspect its candidate
    diff. The probe candidate changes only `.stylex-migrate-probes` files.
 5. Run one `verify` command containing the probe candidate and all consumer,
    bridge, or dynamic candidates named by `case.changePaths`. The verifier
-   automatically attaches the generated provider to that exact candidate set.
-   It rejects a case that names a path or site absent from the set.
+   automatically attaches the generated provider to that exact candidate set. It
+   rejects a case that names a path or site absent from the set.
 
 The collector starts only the declared local server, loads Playwright lazily
 from the declared package root, exercises every named action, and emits the
 complete runtime protocol. The definition is declarative; it does not permit
 agent-authored JavaScript or shell execution.
 
-The tool does not silently choose representative states. When a developer
-allows inferred test inputs, record them with `stylex-migrate assumption
-record`, inspect the artifact, and bind its ID to the contextual task. A test
-assumption cannot earn approval.
+The tool does not silently choose representative states. When a developer allows
+inferred test inputs, record them with `stylex-migrate assumption record`,
+inspect the artifact, and bind its ID to the contextual task. A test assumption
+cannot earn approval.
 
 Each provider declares case IDs, changed paths, site IDs, theme, interaction,
 and viewport. Its command must print one `stylex-migrate-runtime-v1` JSON report
@@ -63,8 +63,8 @@ to stdout. The report records computed styles, DOM shape, forwarded attributes,
 ref outcomes, interactions, and the renderer/browser environment.
 
 For themes, run `stylex-migrate theme topology` and name root/global hosts,
-same-document portals, secondary documents, and uncovered topology explicitly.
-A body-host probe must include separate light/dark root and portal cases. A
+same-document portals, secondary documents, and uncovered topology explicitly. A
+body-host probe must include separate light/dark root and portal cases. A
 generated portal probe does not prove that a real migrated component renders in
 that portal.
 
@@ -91,6 +91,16 @@ fallback requires the candidate dependency graph to provide StyleX, the StyleX
 Rspack unplugin, Rspack, and Playwright; compose it with the bootstrap candidate
 when the repository did not already provide them.
 
+To render one real, zero-configuration exported consumer in that harness, add
+`generatedConsumer: {file, exportName}`, make `testedConsumerFiles` contain
+exactly that file, and use the locked child selectors
+`[data-stylex-migrate-probe="root"] > *` and
+`[data-stylex-migrate-probe="portal"] > *`. The named export is compiled as TSX
+and mounted with the repository's React runtime. The resulting cases cover that
+consumer and the draft target module. This mode does not synthesize props,
+providers, routing, data, or application context; use a repository surface for
+consumers that require any of those.
+
 The tool requires the persisted draft to contain exact `light` and `dark`
 variants, validates every source path and consumer, and generates
 `theme-light-root`, `theme-light-portal`, `theme-dark-root`, and
@@ -102,10 +112,11 @@ only the exact computed declarations; repository DOM, ref, attribute, and
 interaction contracts require separate cases or repository-native evidence.
 
 For a repository surface, all four cases cover the draft target, bridge, and
-named consumers. For a generated Rspack surface, all four cases cover only the
-draft target module: the isolated harness does not execute the repository
-bridge, consumers, React lifecycle, or application route. Never attach the
-resulting `runtime-matched` claim to those uncovered paths.
+named consumers. A synthetic-only generated surface covers only the draft target
+module. A `generatedConsumer` surface covers the one named consumer and the
+draft target, including React rendering, but still does not execute the
+repository bridge or application route. Never attach the resulting
+`runtime-matched` claim to those uncovered paths.
 
 The test assumption must name all four case IDs and every generated
 `changePath`. Variant actions and selectors remain labelled repository-wiring

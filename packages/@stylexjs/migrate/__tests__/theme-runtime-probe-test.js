@@ -290,6 +290,61 @@ export const Card = styled.div\`color: \${p => p.theme.colors.foreground};\`;
     ).toMatchObject({ ok: true, state: 'awaiting-verification' });
   });
 
+  test('can render one exact exported consumer in the generated harness', () => {
+    const generatedInput = input();
+    generatedInput.surface = 'generated-rspack';
+    generatedInput.generatedConsumer = {
+      file: 'src/Card.tsx',
+      exportName: 'Card',
+    };
+    delete generatedInput.server;
+    generatedInput.targets.root.selector =
+      '[data-stylex-migrate-probe="root"] > *';
+    generatedInput.targets.portal.selector =
+      '[data-stylex-migrate-probe="portal"] > *';
+    const opened = openThemeRuntimeProbeTask({
+      project,
+      draftId: draft.id,
+      assumptionId: assumption.id,
+      value: generatedInput,
+      goal: 'Render one real consumer in the generated probe.',
+      workspaceRoot,
+    });
+    if (!opened.ok) throw new Error(opened.reasons.join('\n'));
+    const entry = fs.readFileSync(
+      path.join(
+        opened.attempt.workspace.path,
+        '.stylex-migrate-probes/theme-probe-entry.js',
+      ),
+      'utf8',
+    );
+    expect(entry).toContain(
+      "import {Card as ProbeConsumer} from '../src/Card.tsx';",
+    );
+    expect(entry).toContain('createRoot(element).render');
+    const rspackConfig = fs.readFileSync(
+      path.join(
+        opened.attempt.workspace.path,
+        '.stylex-migrate-probes/theme-probe-rspack.cjs',
+      ),
+      'utf8',
+    );
+    expect(rspackConfig).toContain("loader: 'builtin:swc-loader'");
+    const config = JSON.parse(
+      fs.readFileSync(
+        path.join(
+          opened.attempt.workspace.path,
+          '.stylex-migrate-probes/runtime-probe.json',
+        ),
+        'utf8',
+      ),
+    );
+    expect(config.cases[0].changePaths).toEqual([
+      'src/Card.tsx',
+      'src/tokens.stylex.ts',
+    ]);
+  });
+
   test('rejects arbitrary selectors for the locked generated harness', () => {
     const generatedInput = input();
     generatedInput.surface = 'generated-rspack';
