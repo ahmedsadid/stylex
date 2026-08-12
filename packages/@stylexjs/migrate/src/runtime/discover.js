@@ -70,6 +70,11 @@ const SCRIPT_PATTERNS: { +[RuntimeSurfaceKind]: RegExp } = {
     /(?:^|\s|\/)(?:vitest|jest|playwright\s+(?:test\s+)?--ct)(?:\s|$)/,
 };
 
+const COMPONENT_RENDER_DEPENDENCY = [
+  /^@playwright\/experimental-ct-/,
+  /^@testing-library\/react$/,
+];
+
 type ManifestObservation = {
   +path: string,
   +status: 'known' | 'resolution-failed',
@@ -182,8 +187,12 @@ export function inspectRuntimeSurfaces({
       const failed = manifests.some(
         (item) => item.status === 'resolution-failed',
       );
+      const hasComponentRenderer = dependencies.some((dependency) =>
+        COMPONENT_RENDER_DEPENDENCY.some((pattern) => pattern.test(dependency)),
+      );
+      const executable = configFiles.length > 0 || packageScripts.length > 0;
       const status: FactStatus =
-        configFiles.length > 0 || packageScripts.length > 0
+        executable && (kind !== 'component-test' || hasComponentRenderer)
           ? 'known'
           : failed
             ? 'resolution-failed'
@@ -192,7 +201,7 @@ export function inspectRuntimeSurfaces({
               : 'unknown';
       const detail =
         status === 'known'
-          ? 'repository-native configuration or executable package script was observed'
+          ? 'repository-native executable surface and required rendering support were observed'
           : status === 'inferred'
             ? 'supporting dependencies were observed, but no executable surface was identified'
             : status === 'resolution-failed'

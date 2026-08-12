@@ -18,7 +18,10 @@ import {
   runEvidenceProcess,
   selectedEvidenceEnvironment,
 } from '../evidence/command';
-import { compareRuntimeReports, normalizeRuntimeReport } from './model';
+import {
+  compareExpectedRuntimeObservations,
+  normalizeRuntimeReport,
+} from './model';
 import type {
   CommandExecution,
   CommandExecutionContext,
@@ -161,9 +164,9 @@ export async function runGeneratedRuntimeProbeProvider(
             : `generated runtime probe exited ${String(candidate.exitCode)}`;
         } else {
           try {
-            comparison = compareRuntimeReports({
+            comparison = compareExpectedRuntimeObservations({
               cases: config.cases,
-              baseline: config.expectedReport,
+              expected: config.expectedObservations,
               candidate: normalizeRuntimeReport(
                 JSON.parse(candidate.stdout.toString('utf8')),
               ),
@@ -189,8 +192,8 @@ export async function runGeneratedRuntimeProbeProvider(
   }
 
   const output = Buffer.concat([
-    Buffer.from('[expected-report]\n'),
-    Buffer.from(canonicalJson(config.expectedReport as $FlowFixMe)),
+    Buffer.from('[expected-observations]\n'),
+    Buffer.from(canonicalJson(config.expectedObservations as $FlowFixMe)),
     Buffer.from('\n[candidate]\n'),
     fullEvidenceOutput(candidate),
   ]);
@@ -201,7 +204,7 @@ export async function runGeneratedRuntimeProbeProvider(
     candidate.exitCode,
   );
   const expectedReportHash = hashString(
-    canonicalJson(config.expectedReport as $FlowFixMe),
+    canonicalJson(config.expectedObservations as $FlowFixMe),
   );
   const stable = {
     id: '',

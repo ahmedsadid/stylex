@@ -62,6 +62,14 @@ function report(color: string): $FlowFixMe {
   };
 }
 
+function expected(color: string): $FlowFixMe {
+  const value = report(color);
+  return {
+    protocolVersion: value.protocolVersion,
+    cases: value.cases,
+  };
+}
+
 function provider(): GeneratedRuntimeProbeProviderConfig {
   return {
     id: 'generated-runtime-fixture',
@@ -87,7 +95,7 @@ function provider(): GeneratedRuntimeProbeProviderConfig {
     limitations: ['generated fixture only'],
     timeoutMs: 5000,
     assumptionArtifactHash: ASSUMPTION,
-    expectedReport: report('rgb(255, 0, 0)'),
+    expectedObservations: expected('rgb(255, 0, 0)'),
     cases: [
       {
         id: 'card-dark',
@@ -151,6 +159,32 @@ describe('generated runtime probe evidence', () => {
       status: 'matched',
       coveredPaths: ['src/Card.jsx'],
       coveredSiteIds: ['site-card'],
+    });
+  });
+
+  test('uses the observed environment instead of requiring a fabricated expected one', async () => {
+    const config = provider();
+    const changed = report('rgb(255, 0, 0)');
+    changed.environment.browserVersion = 'future-browser-version';
+    fs.writeFileSync(
+      path.join(workspace, 'report.json'),
+      JSON.stringify(changed),
+    );
+    expect(
+      (
+        await runGeneratedRuntimeProbeProvider(config, {
+          workspaceRoot: workspace,
+          subject: SUBJECT,
+        })
+      ).evidence,
+    ).toMatchObject({
+      result: 'pass',
+      runtime: {
+        comparison: {
+          result: 'matched',
+          environment: { browserVersion: 'future-browser-version' },
+        },
+      },
     });
   });
 

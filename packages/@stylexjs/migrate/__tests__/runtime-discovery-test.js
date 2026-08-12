@@ -69,4 +69,31 @@ describe('runtime surface discovery', () => {
       },
     });
   });
+
+  test('does not call a generic Jest runner a known rendering surface', () => {
+    repo = createTempRepo({
+      'package.json': JSON.stringify({
+        scripts: { test: 'jest --runInBand' },
+        devDependencies: { jest: '30.4.2' },
+      }),
+      'jest.config.js': 'module.exports = {};\n',
+    });
+    expect(inspectRuntimeSurfaces({ repositoryRoot: repo })).toMatchObject({
+      surfaces: [
+        {
+          kind: 'component-test',
+          status: 'inferred',
+          packageScripts: [
+            {
+              manifest: 'package.json',
+              name: 'test',
+              command: 'jest --runInBand',
+            },
+          ],
+        },
+        { kind: 'playwright', status: 'unknown' },
+        { kind: 'storybook', status: 'unknown' },
+      ],
+    });
+  });
 });

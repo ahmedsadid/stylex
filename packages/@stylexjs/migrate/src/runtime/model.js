@@ -56,6 +56,11 @@ export type RuntimeObservationReport = {
   +cases: $ReadOnlyArray<RuntimeCaseObservation>,
 };
 
+export type RuntimeExpectedObservations = {
+  +protocolVersion: string,
+  +cases: $ReadOnlyArray<RuntimeCaseObservation>,
+};
+
 export type RuntimeDifference = {
   +category: 'computedStyles' | 'dom' | 'attributes' | 'refs' | 'interactions',
   +path: string,
@@ -165,7 +170,6 @@ export function normalizeRuntimeCases(
       !strings(item.changePaths) ||
       item.changePaths.length === 0 ||
       !strings(item.siteIds) ||
-      item.siteIds.length === 0 ||
       typeof item.theme !== 'string' ||
       item.theme === '' ||
       typeof item.interaction !== 'string' ||
@@ -280,6 +284,63 @@ export function normalizeRuntimeReport(value: mixed): RuntimeObservationReport {
     cases: Object.freeze(
       cases.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)),
     ),
+  });
+}
+
+export function normalizeExpectedRuntimeObservations(
+  value: mixed,
+): RuntimeExpectedObservations {
+  const expected: $FlowFixMe = value;
+  if (
+    !object(expected) ||
+    expected.protocolVersion !== RUNTIME_PROTOCOL_VERSION ||
+    !Array.isArray(expected.cases)
+  ) {
+    throw new Error('Invalid expected runtime observations');
+  }
+  const cases = expected.cases.map((item) => {
+    if (
+      !object(item) ||
+      typeof item.id !== 'string' ||
+      !CASE_ID.test(item.id)
+    ) {
+      throw new Error('Invalid expected runtime case observation');
+    }
+    return Object.freeze({
+      id: item.id,
+      observation: normalizeObservation(item.observation),
+    });
+  });
+  if (new Set(cases.map((item) => item.id)).size !== cases.length) {
+    throw new Error('Expected runtime observation case ids must be unique');
+  }
+  return Object.freeze({
+    protocolVersion: RUNTIME_PROTOCOL_VERSION,
+    cases: Object.freeze(
+      cases.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)),
+    ),
+  });
+}
+
+export function compareExpectedRuntimeObservations({
+  cases,
+  expected: inputExpected,
+  candidate: inputCandidate,
+}: {
+  +cases: $ReadOnlyArray<RuntimeCaseDefinition>,
+  +expected: RuntimeExpectedObservations,
+  +candidate: RuntimeObservationReport,
+}): RuntimeComparison {
+  const expected = normalizeExpectedRuntimeObservations(inputExpected);
+  const candidate = normalizeRuntimeReport(inputCandidate);
+  return compareRuntimeReports({
+    cases,
+    baseline: {
+      protocolVersion: RUNTIME_PROTOCOL_VERSION,
+      environment: candidate.environment,
+      cases: expected.cases,
+    },
+    candidate,
   });
 }
 

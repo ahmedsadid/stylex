@@ -8,12 +8,12 @@
  */
 
 import {
+  normalizeExpectedRuntimeObservations,
   normalizeRuntimeCases,
-  normalizeRuntimeReport,
 } from '../runtime/model';
 import type {
   RuntimeCaseDefinition,
-  RuntimeObservationReport,
+  RuntimeExpectedObservations,
 } from '../runtime/model';
 
 export type RepositoryCheck = 'focused-test' | 'typecheck' | 'lint' | 'build';
@@ -79,7 +79,7 @@ export type GeneratedRuntimeProbeProviderConfig = {
   +timeoutMs: number,
   +cases: $ReadOnlyArray<RuntimeCaseDefinition>,
   +assumptionArtifactHash: string,
-  +expectedReport: RuntimeObservationReport,
+  +expectedObservations: RuntimeExpectedObservations,
 };
 
 export type BootstrapRspackProviderConfig = {
@@ -259,7 +259,9 @@ function normalizeProvider(value: mixed): EvidenceProviderConfig {
       ...(provider.kind === 'generated-runtime-probe'
         ? {
             assumptionArtifactHash: provider.assumptionArtifactHash,
-            expectedReport: normalizeRuntimeReport(provider.expectedReport),
+            expectedObservations: normalizeExpectedRuntimeObservations(
+              provider.expectedObservations,
+            ),
           }
         : {}),
     });

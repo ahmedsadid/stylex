@@ -316,6 +316,7 @@ export type {
   RuntimeComparison,
   RuntimeDifference,
   RuntimeEnvironment,
+  RuntimeExpectedObservations,
   RuntimeObservation,
   RuntimeObservationReport,
   RuntimeViewport,
