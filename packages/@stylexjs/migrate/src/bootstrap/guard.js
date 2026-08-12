@@ -264,22 +264,6 @@ function rspackWired(source: string, file: string): boolean {
   return wired;
 }
 
-function requiredDependencies(
-  integration: BootstrapContextTaskOrigin['integration'],
-): $ReadOnlyArray<string> {
-  if (
-    integration === 'rspack' ||
-    integration === 'webpack' ||
-    integration === 'vite'
-  ) {
-    return ['@stylexjs/stylex', '@stylexjs/unplugin'];
-  }
-  if (integration === 'babel') {
-    return ['@stylexjs/stylex', '@stylexjs/babel-plugin'];
-  }
-  return ['@stylexjs/stylex', '@stylexjs/nextjs-plugin'];
-}
-
 export function inspectBootstrapCandidate({
   candidate,
   origin,
@@ -296,13 +280,47 @@ export function inspectBootstrapCandidate({
       : `${origin.packageRoot}/package.json`;
   const manifest = sourceAt(candidate, manifestPath);
   const dependencies = manifest == null ? null : manifestDependencies(manifest);
-  const required = requiredDependencies(origin.integration);
+  const required = origin.dependencies.map((dependency) => dependency.name);
   if (dependencies == null) {
     violations.push(`${manifestPath}: package manifest is missing or invalid.`);
   } else {
     for (const dependency of required) {
       if (!dependencies.has(dependency)) {
         violations.push(`${manifestPath}: missing ${dependency}.`);
+      }
+    }
+    const parsedManifest = manifest == null ? null : manifestObject(manifest);
+    for (const intent of origin.dependencies) {
+      const section = parsedManifest?.[intent.section];
+      const actual =
+        section != null &&
+        !Array.isArray(section) &&
+        typeof section === 'object'
+          ? section[intent.name]
+          : null;
+      if (actual !== intent.spec) {
+        violations.push(
+          `${manifestPath}: ${intent.name} must be ${JSON.stringify(intent.spec)} in ${intent.section}.`,
+        );
+      }
+      for (const otherSection of [
+        'dependencies',
+        'devDependencies',
+        'peerDependencies',
+        'optionalDependencies',
+      ]) {
+        if (otherSection === intent.section) continue;
+        const values = parsedManifest?.[otherSection];
+        if (
+          values != null &&
+          !Array.isArray(values) &&
+          typeof values === 'object' &&
+          typeof values[intent.name] === 'string'
+        ) {
+          violations.push(
+            `${manifestPath}: ${intent.name} is declared outside ${intent.section}.`,
+          );
+        }
       }
     }
   }

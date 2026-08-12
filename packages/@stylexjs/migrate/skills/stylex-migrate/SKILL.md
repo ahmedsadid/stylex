@@ -63,11 +63,12 @@ StyleX build integration.
    `scope.bootstrapPaths` entries authorize the discovered package manifest,
    lockfile, and Rspack config. They do not authorize any other configuration or
    application source.
-4. Use the discovered package manager in the workspace to add
-   `@stylexjs/stylex` and `@stylexjs/unplugin` and update the existing lockfile.
-   Wire the unplugin's `.rspack(...)` adapter into the discovered config while
-   preserving existing plugins and options. Do not add unrelated dependencies,
-   scripts, entry files, or migrations.
+4. Run each exact argv array in `task.origin.installCommands` directly in the
+   workspace without a shell. Do not substitute another version, source,
+   package, package manager, flag, or working tree. Then wire the unplugin's
+   `.rspack(...)` adapter into the discovered config while preserving existing
+   plugins and options. Do not add unrelated dependencies, scripts, entry
+   files, or migrations.
 5. Submit with `stylex-migrate context submit`, then inspect the frozen patch
    and run `stylex-migrate verify <candidate-id>` and
    `stylex-migrate review <candidate-id>`.

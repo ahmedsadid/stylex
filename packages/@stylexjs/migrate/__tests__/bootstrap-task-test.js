@@ -80,6 +80,37 @@ export default {plugins: [new rspack.DefinePlugin({})]};
         packageRoot: '',
         packageManager: 'pnpm',
         integration: 'rspack',
+        dependencies: [
+          {
+            name: '@stylexjs/stylex',
+            section: 'dependencies',
+            spec: '0.19.0',
+          },
+          {
+            name: '@stylexjs/unplugin',
+            section: 'devDependencies',
+            spec: '0.19.0',
+          },
+        ],
+        installCommands: [
+          [
+            'corepack',
+            'pnpm',
+            '-w',
+            'add',
+            '--save-exact',
+            '@stylexjs/stylex@0.19.0',
+          ],
+          [
+            'corepack',
+            'pnpm',
+            '-w',
+            'add',
+            '--save-exact',
+            '--save-dev',
+            '@stylexjs/unplugin@0.19.0',
+          ],
+        ],
       },
       scope: {
         allowedPaths: ['package.json', 'pnpm-lock.yaml', 'rspack.config.ts'],
@@ -94,8 +125,8 @@ export default {plugins: [new rspack.DefinePlugin({})]};
     });
 
     const manifest = JSON.parse(originalManifest);
-    manifest.dependencies = { '@stylexjs/stylex': '^0.19.0' };
-    manifest.devDependencies['@stylexjs/unplugin'] = '^0.19.0';
+    manifest.dependencies = { '@stylexjs/stylex': '0.19.0' };
+    manifest.devDependencies['@stylexjs/unplugin'] = '0.19.0';
     writeFiles(opened.attempt.workspace.path, {
       'package.json': `${JSON.stringify(manifest, null, 2)}\n`,
       'pnpm-lock.yaml': 'lockfileVersion: 9\n# StyleX packages resolved\n',
@@ -153,8 +184,8 @@ export default {
     if (!opened.ok) throw new Error(opened.reasons.join('\n'));
     const manifest = JSON.parse(originalManifest);
     manifest.dependencies = {
-      '@stylexjs/stylex': '^0.19.0',
-      '@stylexjs/unplugin': '^0.19.0',
+      '@stylexjs/stylex': '0.19.0',
+      '@stylexjs/unplugin': '0.19.0',
     };
     writeFiles(opened.attempt.workspace.path, {
       'package.json': `${JSON.stringify(manifest, null, 2)}\n`,
@@ -180,6 +211,41 @@ export default {plugins: []};
     });
   });
 
+  test('rejects a dependency source that differs from task intent', () => {
+    const opened = openBootstrapTask({
+      project,
+      goal: 'Attempt to substitute a dependency source.',
+      workspaceRoot,
+    });
+    if (!opened.ok) throw new Error(opened.reasons.join('\n'));
+    const manifest = JSON.parse(originalManifest);
+    manifest.dependencies = {
+      '@stylexjs/stylex': 'file:/unreviewed/local/stylex',
+    };
+    manifest.devDependencies['@stylexjs/unplugin'] = '0.19.0';
+    writeFiles(opened.attempt.workspace.path, {
+      'package.json': `${JSON.stringify(manifest, null, 2)}\n`,
+      'pnpm-lock.yaml': 'lockfileVersion: 9\n# StyleX packages resolved\n',
+      'rspack.config.ts': `import stylexPlugin from '@stylexjs/unplugin';
+export default {plugins: [stylexPlugin.rspack()]};
+`,
+    });
+
+    expect(
+      submitContextAttempt({
+        project,
+        taskId: opened.task.id,
+        proposerKind: 'agent',
+        proposerVersion: 'fixture-v1',
+      }),
+    ).toMatchObject({
+      ok: false,
+      reasons: expect.arrayContaining([
+        expect.stringContaining('@stylexjs/stylex must be "0.19.0"'),
+      ]),
+    });
+  });
+
   test('rejects unrelated manifest and Rspack configuration edits', () => {
     const opened = openBootstrapTask({
       project,
@@ -189,8 +255,8 @@ export default {plugins: []};
     if (!opened.ok) throw new Error(opened.reasons.join('\n'));
     const manifest = JSON.parse(originalManifest);
     manifest.scripts.unrelated = 'node unexpected.js';
-    manifest.dependencies = { '@stylexjs/stylex': '^0.19.0' };
-    manifest.devDependencies['@stylexjs/unplugin'] = '^0.19.0';
+    manifest.dependencies = { '@stylexjs/stylex': '0.19.0' };
+    manifest.devDependencies['@stylexjs/unplugin'] = '0.19.0';
     writeFiles(opened.attempt.workspace.path, {
       'package.json': `${JSON.stringify(manifest, null, 2)}\n`,
       'pnpm-lock.yaml': 'lockfileVersion: 9\n# StyleX packages resolved\n',

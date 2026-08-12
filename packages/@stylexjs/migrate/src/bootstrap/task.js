@@ -19,6 +19,7 @@ import { loadCurrentInventory } from '../planning/reports';
 import { canonicalJson } from '../state/json';
 import { readConfig } from '../state/project';
 import { inspectBootstrap } from './discover';
+import { VERSION } from '../version';
 import {
   bootstrapRspackProviderId,
   RSPACK_SENTINEL_CHECK_VERSION,
@@ -35,7 +36,102 @@ import type {
 } from './discover';
 
 export const BOOTSTRAP_TASK_PROTOCOL_VERSION: string =
-  'stylex-migrate-bootstrap-task-v1';
+  'stylex-migrate-bootstrap-task-v2';
+
+type DependencyIntent = {
+  +name: string,
+  +spec: string,
+  +section: 'dependencies' | 'devDependencies',
+};
+
+function dependencyIntents(
+  packageSpec: string,
+): $ReadOnlyArray<DependencyIntent> {
+  return Object.freeze([
+    Object.freeze({
+      name: '@stylexjs/stylex',
+      spec: packageSpec,
+      section: 'dependencies',
+    }),
+    Object.freeze({
+      name: '@stylexjs/unplugin',
+      spec: packageSpec,
+      section: 'devDependencies',
+    }),
+  ]);
+}
+
+function installCommands({
+  manager,
+  packageName,
+  packageRoot,
+  dependencies,
+}: {
+  +manager: 'pnpm' | 'yarn' | 'npm',
+  +packageName: string | null,
+  +packageRoot: string,
+  +dependencies: $ReadOnlyArray<DependencyIntent>,
+}): $ReadOnlyArray<$ReadOnlyArray<string>> {
+  if (packageRoot !== '' && packageName == null) {
+    throw new Error('A nested bootstrap package requires a package name');
+  }
+  const runtime = dependencies.find(
+    (dependency) => dependency.section === 'dependencies',
+  );
+  const development = dependencies.find(
+    (dependency) => dependency.section === 'devDependencies',
+  );
+  if (runtime == null || development == null) {
+    throw new Error('Bootstrap dependency intent is incomplete');
+  }
+  const runtimeSpec = `${runtime.name}@${runtime.spec}`;
+  const developmentSpec = `${development.name}@${development.spec}`;
+  if (manager === 'pnpm') {
+    const target =
+      packageRoot === '' ? ['-w'] : ['--filter', String(packageName)];
+    return Object.freeze([
+      Object.freeze([
+        'corepack',
+        'pnpm',
+        ...target,
+        'add',
+        '--save-exact',
+        runtimeSpec,
+      ]),
+      Object.freeze([
+        'corepack',
+        'pnpm',
+        ...target,
+        'add',
+        '--save-exact',
+        '--save-dev',
+        developmentSpec,
+      ]),
+    ]);
+  }
+  if (manager === 'yarn') {
+    const prefix =
+      packageRoot === ''
+        ? ['corepack', 'yarn']
+        : ['corepack', 'yarn', 'workspace', String(packageName)];
+    return Object.freeze([
+      Object.freeze([...prefix, 'add', '--exact', runtimeSpec]),
+      Object.freeze([...prefix, 'add', '--exact', '--dev', developmentSpec]),
+    ]);
+  }
+  const target = packageRoot === '' ? [] : ['--workspace', String(packageName)];
+  return Object.freeze([
+    Object.freeze(['npm', 'install', ...target, '--save-exact', runtimeSpec]),
+    Object.freeze([
+      'npm',
+      'install',
+      ...target,
+      '--save-exact',
+      '--save-dev',
+      developmentSpec,
+    ]),
+  ]);
+}
 
 function expectedLockfile(manager: 'pnpm' | 'yarn' | 'npm'): string {
   if (manager === 'pnpm') return 'pnpm-lock.yaml';
@@ -112,6 +208,7 @@ export function openBootstrapTask({
   goal,
   packageRoot = null,
   integration = null,
+  packageSpec = VERSION,
   workspaceRoot,
   now = () => new Date().toISOString(),
 }: {
@@ -119,9 +216,13 @@ export function openBootstrapTask({
   +goal: string,
   +packageRoot?: string | null,
   +integration?: BuildIntegrationKind | null,
+  +packageSpec?: string,
   +workspaceRoot?: string,
   +now?: () => string,
 }): ContextOpenResult {
+  if (packageSpec === '' || packageSpec.includes('\0')) {
+    throw new Error('Bootstrap package spec must be a non-empty literal');
+  }
   const inventory = loadCurrentInventory(project);
   if (inventory == null) {
     return {
@@ -241,6 +342,13 @@ export function openBootstrapTask({
     };
   }
   const cluster = workUnit({ inspection, changeFiles });
+  const dependencies = dependencyIntents(packageSpec);
+  const commands = installCommands({
+    manager: packageManager,
+    packageName: selectedPackage.name,
+    packageRoot: selectedPackage.root,
+    dependencies,
+  });
   const task = createContextTaskCapsule({
     goal,
     origin: {
@@ -249,6 +357,8 @@ export function openBootstrapTask({
       packageRoot: selectedPackage.root,
       packageManager,
       integration: selectedIntegration.kind,
+      dependencies,
+      installCommands: commands,
     },
     inventoryId: inventory.id,
     planId: null,
@@ -299,7 +409,7 @@ export function openBootstrapTask({
     ],
     stopConditions: [
       'Use only the discovered package manager and exact authorized package, lockfile, and build-config paths.',
-      'Add only StyleX runtime and build-integration dependencies required by this task.',
+      'Run only the exact dependency install argv recorded in the bootstrap origin.',
       'Do not modify application source, tests, scripts unrelated to StyleX integration, or migration state.',
       'Do not claim success from a build exit code without confirming emitted StyleX CSS.',
     ],

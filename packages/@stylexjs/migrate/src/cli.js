@@ -76,6 +76,7 @@ import {
 } from './dynamic/decisions';
 import { inspectBootstrap } from './bootstrap/discover';
 import { openBootstrapTask } from './bootstrap/task';
+import { VERSION } from './version';
 
 type WriteOutput = (text: string) => mixed;
 
@@ -97,7 +98,7 @@ Commands:
   styled propose <cluster>
                           freeze a checked closed-intrinsic styled candidate
   bootstrap inspect       inspect package manager, package, and build wiring
-  bootstrap open <goal> [package-root]
+  bootstrap open <goal> [package-root] [package-spec]
                           open a bounded StyleX installation/config task
   candidate diff <candidate>
                           print the exact frozen patch without applying it
@@ -601,14 +602,13 @@ export function runCli(
     if (
       args[0] === 'bootstrap' &&
       args[1] === 'open' &&
-      (args.length === 3 || args.length === 4)
+      (args.length === 3 || args.length === 4 || args.length === 5)
     ) {
       const result = openBootstrapTask({
         project: openProject(cwd),
         goal: args[2],
-        ...(args[3] == null
-          ? {}
-          : { packageRoot: args[3] === '.' ? '' : args[3] }),
+        packageRoot: args[3] == null ? null : args[3] === '.' ? '' : args[3],
+        packageSpec: args[4] ?? VERSION,
       });
       present(
         result.ok
@@ -619,11 +619,15 @@ export function runCli(
               attemptId: result.attempt.id,
               workspace: result.attempt.workspace.path,
               origin: result.task.origin,
+              installCommands:
+                result.task.origin.kind === 'bootstrap'
+                  ? result.task.origin.installCommands
+                  : [],
               allowedPaths: result.task.scope.allowedPaths,
               requiredChecks: result.task.requiredChecks,
               warnings: result.task.limitations,
               stopConditions: result.task.stopConditions,
-              next: `Update only the authorized dependency, lockfile, and Rspack config bytes in the workspace, then run stylex-migrate context submit ${result.task.id} <agent|human> <name> <version> [skill-version].`,
+              next: `Run the exact installCommands in the workspace, update only the authorized Rspack config bytes, then run stylex-migrate context submit ${result.task.id} <agent|human> <name> <version> [skill-version].`,
             }
           : {
               command: 'bootstrap open',

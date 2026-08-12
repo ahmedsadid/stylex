@@ -141,6 +141,28 @@ describe('M7 contextual task capsules', () => {
         packageRoot: '',
         packageManager: 'pnpm',
         integration: 'rspack',
+        dependencies: [
+          {
+            name: '@stylexjs/stylex',
+            spec: '0.19.0',
+            section: 'dependencies',
+          },
+          {
+            name: '@stylexjs/unplugin',
+            spec: '0.19.0',
+            section: 'devDependencies',
+          },
+        ],
+        installCommands: [
+          [
+            'corepack',
+            'pnpm',
+            '-w',
+            'add',
+            '--save-exact',
+            '@stylexjs/stylex@0.19.0',
+          ],
+        ],
       },
       cluster: {
         ...base.cluster,
@@ -162,6 +184,28 @@ describe('M7 contextual task capsules', () => {
       packageRoot: '',
       packageManager: 'pnpm',
       integration: 'rspack',
+      dependencies: [
+        {
+          name: '@stylexjs/stylex',
+          section: 'dependencies',
+          spec: '0.19.0',
+        },
+        {
+          name: '@stylexjs/unplugin',
+          section: 'devDependencies',
+          spec: '0.19.0',
+        },
+      ],
+      installCommands: [
+        [
+          'corepack',
+          'pnpm',
+          '-w',
+          'add',
+          '--save-exact',
+          '@stylexjs/stylex@0.19.0',
+        ],
+      ],
     });
     expect(capsule.scope.bootstrapPaths).toEqual(paths);
 
@@ -183,6 +227,14 @@ describe('M7 contextual task capsules', () => {
           packageRoot: '',
           packageManager: 'pnpm',
           integration: 'rspack',
+          dependencies: [
+            {
+              name: '@stylexjs/stylex',
+              spec: '0.19.0',
+              section: 'dependencies',
+            },
+          ],
+          installCommands: [['corepack', 'pnpm', 'add']],
         },
         scope: {
           ...base.scope,

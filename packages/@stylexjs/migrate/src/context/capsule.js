@@ -12,7 +12,7 @@ import { matchesGlob } from '../candidate/scope';
 import { canonicalJson, immutableJson } from '../state/json';
 import type { Cluster, Fact } from '../inventory/model';
 
-export const CONTEXT_PROTOCOL_VERSION: string = 'stylex-migrate-context-v3';
+export const CONTEXT_PROTOCOL_VERSION: string = 'stylex-migrate-context-v4';
 export const CONTEXT_MAX_ATTEMPTS: number = 2;
 
 export type BootstrapContextTaskOrigin = {
@@ -21,6 +21,12 @@ export type BootstrapContextTaskOrigin = {
   +packageRoot: string,
   +packageManager: 'pnpm' | 'yarn' | 'npm',
   +integration: 'rspack' | 'webpack' | 'vite' | 'babel' | 'next-swc',
+  +dependencies: $ReadOnlyArray<{
+    +name: string,
+    +spec: string,
+    +section: 'dependencies' | 'devDependencies',
+  }>,
+  +installCommands: $ReadOnlyArray<$ReadOnlyArray<string>>,
 };
 
 export type ContextTaskOrigin =
@@ -194,6 +200,8 @@ function normalizeOrigin(
     return Object.freeze({ ...origin });
   }
   if (origin.kind === 'bootstrap') {
+    const dependencies = origin.dependencies;
+    const installCommands = origin.installCommands;
     if (
       origin.inspectionId === '' ||
       origin.packageRoot.includes('\0') ||
@@ -202,11 +210,51 @@ function normalizeOrigin(
       !['pnpm', 'yarn', 'npm'].includes(origin.packageManager) ||
       !['rspack', 'webpack', 'vite', 'babel', 'next-swc'].includes(
         origin.integration,
+      ) ||
+      !Array.isArray(dependencies) ||
+      dependencies.length === 0 ||
+      dependencies.some(
+        (dependency) =>
+          dependency == null ||
+          typeof dependency !== 'object' ||
+          typeof dependency.name !== 'string' ||
+          dependency.name === '' ||
+          dependency.name.includes('\0') ||
+          typeof dependency.spec !== 'string' ||
+          dependency.spec === '' ||
+          dependency.spec.includes('\0') ||
+          (dependency.section !== 'dependencies' &&
+            dependency.section !== 'devDependencies'),
+      ) ||
+      new Set(dependencies.map((dependency) => dependency.name)).size !==
+        dependencies.length ||
+      !Array.isArray(installCommands) ||
+      installCommands.length === 0 ||
+      installCommands.some(
+        (argv) =>
+          !Array.isArray(argv) ||
+          argv.length === 0 ||
+          argv.some(
+            (argument) =>
+              typeof argument !== 'string' ||
+              argument === '' ||
+              argument.includes('\0'),
+          ),
       )
     ) {
       throw new Error('Invalid bootstrap task origin');
     }
-    return Object.freeze({ ...origin });
+    return Object.freeze({
+      ...origin,
+      dependencies: Object.freeze(
+        [...dependencies]
+          .sort((a, b) => a.name.localeCompare(b.name))
+          .map((dependency) => Object.freeze({ ...dependency })),
+      ),
+      installCommands: Object.freeze(
+        installCommands.map((argv) => Object.freeze([...argv])),
+      ),
+    });
   }
   if (
     origin.kind !== 'theme-bridge' ||
