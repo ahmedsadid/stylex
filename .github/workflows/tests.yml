@@ -33,6 +33,25 @@ jobs:
       - run: corepack prepare yarn@1.22.22 --activate
       - run: yarn install --frozen-lockfile
       - run: yarn test:packages
+        env:
+          STYLEX_MIGRATE_SKIP_PLAYWRIGHT: '1'
+
+  migrate-playwright:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22.x'
+          cache: 'yarn'
+          cache-dependency-path: yarn.lock
+      - run: corepack prepare yarn@1.22.22 --activate
+      - run: yarn install --frozen-lockfile
+      - run: yarn playwright install --with-deps chromium
+      - run: yarn workspace @stylexjs/migrate test runtime-playwright-test.js generated-collector-playwright-test.js --runInBand
+        env:
+          STYLEX_MIGRATE_REQUIRE_PLAYWRIGHT: '1'
+          STYLEX_MIGRATE_REQUIRE_MANAGED_PLAYWRIGHT: '1'
 
   prettier:
     runs-on: ubuntu-latest

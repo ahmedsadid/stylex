@@ -1,0 +1,9 @@
+/** @jsxImportSource @emotion/react */
+export const Media = () => (
+  <div
+    css={{
+      color: 'black',
+      '@media (min-width: 800px)': { color: 'blue', opacity: 0.5 },
+    }}
+  />
+);

@@ -1,0 +1,4 @@
+/** @jsxImportSource @emotion/react */
+import { css as emotionCss } from '@emotion/react';
+
+export const RenderLocal = () => <div css={emotionCss({ color: 'red' })} />;

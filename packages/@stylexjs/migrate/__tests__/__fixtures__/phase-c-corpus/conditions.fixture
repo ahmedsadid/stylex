@@ -1,0 +1,10 @@
+/** @jsxImportSource @emotion/react */
+export const Conditions = () => (
+  <button
+    css={{
+      color: 'black',
+      ':hover': { color: 'blue' },
+      ':focus': { color: 'purple' },
+    }}
+  />
+);

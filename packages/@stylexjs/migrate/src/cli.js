@@ -1,0 +1,1586 @@
+#!/usr/bin/env node
+/**
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
+ *
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
+ *
+ * @flow strict
+ */
+
+import {
+  STATE_DIRECTORY,
+  initializeProject,
+  openProject,
+  readConfig,
+  writeConfig,
+} from './state/project';
+import fs from 'fs';
+import path from 'path';
+import { rebuildIndexes, replayEvents } from './state/events';
+import { cleanupProject, migrateProject } from './state/maintenance';
+import { redact, redactText } from './state/redact';
+import { scanRepository } from './inventory/scan';
+import { inventoryReadiness } from './inventory/readiness';
+import { createPlan } from './planning/plan';
+import {
+  inventoryCounts,
+  loadCurrentInventory,
+  loadCurrentPlan,
+  loadPlan,
+  saveInventory,
+  savePlan,
+} from './planning/reports';
+import type { JsonValue } from './state/json';
+import { parseJson } from './state/json';
+import type { Inventory, Plan } from './inventory/model';
+import type { ProjectState } from './state/project';
+import { loadVerificationCandidate } from './evidence/candidates';
+import { createCandidateEvidenceSubject } from './evidence/subject';
+import {
+  loadLatestRepositoryEvidenceBundle,
+  loadRepositoryEvidenceBundle,
+} from './evidence/bundle';
+import {
+  loadLatestRepositoryEvidenceVerdict,
+  loadRepositoryEvidenceVerdict,
+} from './evidence/verdict';
+import { verifyPersistedCandidates } from './evidence/verify';
+import {
+  abandonContextTask,
+  inspectContextTask,
+  openContextRetry,
+  openContextTask,
+  submitContextAttempt,
+} from './context/lifecycle';
+import {
+  approvePersistedThemeDecision,
+  assertActiveThemeCandidateDecisions,
+  assertCurrentThemeExperimentCandidate,
+  inspectThemeDecision,
+  loadThemeDecisionDraft,
+  persistThemeDecisionDraft,
+} from './theme/decisions';
+import {
+  proposeThemeDecisionCandidate,
+  proposeThemeExperimentCandidate,
+} from './theme/candidate';
+import { openThemeBridgeTask } from './theme/bridgeTask';
+import { resolveThemeDecisionDefinition } from './theme/resolve';
+import { scaffoldThemeDecisionDefinition } from './theme/scaffold';
+import { themeConsumerCandidates } from './theme/candidates';
+import { proposeMechanicalCandidate } from './mechanical/candidate';
+import { proposeStyledCandidate } from './styled/candidate';
+import type { CandidatePatch } from './candidate/patch';
+import { THEME_DECISION_PROTOCOL_VERSION } from './theme/model';
+import type { ThemeDecisionDraft } from './theme/model';
+import {
+  inspectDynamicStrategy,
+  persistDynamicStrategyDraft,
+} from './dynamic/decisions';
+import { inspectBootstrap } from './bootstrap/discover';
+import { openBootstrapTask } from './bootstrap/task';
+import {
+  assertCurrentTestAssumption,
+  loadTestAssumption,
+  loadTestAssumptionByArtifactHash,
+  persistTestAssumption,
+} from './assumption/records';
+import { VERSION } from './version';
+import { inspectRuntimeSurfaces } from './runtime/discover';
+import { openEvidenceSurfaceTask } from './runtime/evidenceSurfaceTask';
+import { inspectThemeTopology } from './theme/topology';
+import { openThemeRuntimeProbeTask } from './theme/runtimeProbe';
+import { openDynamicRuntimeProbeTask } from './dynamic/runtimeProbe';
+
+type WriteOutput = (text: string) => mixed;
+
+type CliOptions = {
+  +cwd?: string,
+  +writeStdout?: WriteOutput,
+  +writeStderr?: WriteOutput,
+};
+
+const HELP = `Usage: stylex-migrate <command> [options]
+
+Commands:
+  init                    initialize local project state
+  scan                    inventory configured source files
+  readiness               summarize styled, theme, and css-prop shapes
+  plan                    form migration clusters from the latest inventory
+  mechanical propose <cluster>
+                          freeze a checked candidate from a mechanical cluster
+  styled propose <cluster>
+                          freeze a checked closed-intrinsic styled candidate
+  bootstrap inspect       inspect package manager, package, and build wiring
+  bootstrap open <goal> [package-root] [stylex-spec] [integration-spec] [unplugin-spec] [integration-kind]
+                          open a bounded StyleX installation/config task
+  candidate diff <candidate>
+                          print the exact frozen patch without applying it
+  dynamic strategy draft <json-file> <agent|human> <author>
+                          persist an exact per-prop contextual strategy
+  dynamic strategy inspect <draft>
+                          show active/superseded strategy state
+  dynamic probe open <strategy> <assumption> <json-file> <goal>
+                          generate a retained before/after component probe
+  assumption record <json-file> <agent|human> <author>
+                          record a labelled, non-approved test assumption
+  assumption inspect <assumption>
+                          show an assumption and whether its inputs are current
+  runtime inspect         find repository-native rendering/test surfaces
+  runtime probe open <assumption> <json-file> <goal>
+                          open a locked generated Playwright evidence surface
+  theme probe open <draft> <assumption> <json-file> <goal>
+                          generate the standard light/dark root/portal probe
+  theme draft <json-file> <author>
+                          validate and persist a theme token-map draft
+  theme candidates        list exact styled-theme consumer batches and blockers
+  theme inspect <draft>   show approval and active/superseded state
+  theme topology          inspect global hosts, portals, and extra documents
+  theme approve <draft> <reviewer> --human-confirm
+                          record a human approval; agents must not run this
+  theme propose <draft>   freeze a candidate from the active approved map
+  theme experiment <draft> <assumption>
+                          freeze a test-only candidate without human approval
+  theme bridge open <draft> <goal> [assumption...]
+                          open a scoped bridge task with optional test assumptions
+  context open <cluster> <goal> [assumption...]
+                          open contextual work with optional test assumptions
+  context open <task>     open the kernel-owned retry for a failed task
+  context inspect <task>  show the immutable capsule and current task state
+  context submit <task> <agent|human> <name> <version> [skill-version]
+                          freeze workspace bytes and submit through the kernel
+  context abandon <task>  abandon an open workspace
+  verify <candidate...>   run checks against exact persisted candidate bytes
+  review <id>             show a verdict, coverage, claims, and limitations
+  config show             show normalized project configuration
+  config set <json-file>  validate and store project configuration
+  status                  summarize inventory, plan, and replayed state
+  explain <id>            explain an inventory, candidate, evidence, or verdict id
+  state rebuild           rebuild indexes from append-only events
+  schema migrate          migrate local state, with a backup
+  cleanup                 find unused local artifacts
+
+Options:
+  --json                  emit stable JSON
+  --dry-run               describe a schema migration without changing files
+  --confirm               allow cleanup to delete listed unused files
+  --human-confirm         attest that a named human reviewed the theme map
+`;
+
+function present(value: JsonValue, json: boolean, stdout: WriteOutput): void {
+  const safe = redact(value);
+  if (json) {
+    stdout(`${JSON.stringify(safe)}\n`);
+  } else {
+    stdout(`${JSON.stringify(safe, null, 2)}\n`);
+  }
+}
+
+function presentCandidateDiff(
+  candidate: CandidatePatch,
+  json: boolean,
+  stdout: WriteOutput,
+): void {
+  // This command is an explicit source export. Redacting it would change the
+  // candidate bytes and make the output unsuitable for review or application.
+  if (json) {
+    stdout(
+      `${JSON.stringify({
+        command: 'candidate diff',
+        candidateId: candidate.id,
+        patchHash: candidate.patchHash,
+        files: candidate.touchedFiles,
+        patchText: candidate.patchText,
+      })}\n`,
+    );
+  } else {
+    stdout(candidate.patchText);
+  }
+}
+
+function reviewableThemeDraft(draft: ThemeDecisionDraft): JsonValue {
+  const { tokens, ...detail } = draft;
+  // Structured output redacts fields named "token" because command payloads
+  // may contain credentials. Theme token maps are the object under review, so
+  // expose them under a domain-specific key without weakening global redaction.
+  return { ...detail, mappings: tokens } as $FlowFixMe;
+}
+
+function counts(indexes: $FlowFixMe): { [string]: JsonValue } {
+  const output: { [string]: JsonValue } = {};
+  for (const name of Object.keys(indexes).sort()) {
+    output[name] = Object.keys(indexes[name]).length;
+  }
+  return output;
+}
+
+function planSummary(
+  plan: Plan,
+  inventory: Inventory | null,
+): { +[string]: JsonValue } {
+  return {
+    id: plan.id,
+    inventoryId: plan.inventoryId,
+    stale: inventory == null || plan.inventoryId !== inventory.id,
+    clusters: plan.clusters.length,
+    conflicts: plan.conflicts.length,
+    diagnostics: plan.diagnosticCount,
+    counts: plan.counts as $FlowFixMe,
+  };
+}
+
+function explain(
+  project: ProjectState,
+  id: string,
+): { +kind: string, +detail: JsonValue } | null {
+  const inventory = loadCurrentInventory(project);
+  const currentPlan = loadCurrentPlan(project);
+  if (currentPlan?.id === id) {
+    return { kind: 'plan', detail: currentPlan as $FlowFixMe };
+  }
+  const cluster = currentPlan?.clusters.find((item) => item.id === id);
+  if (cluster != null) {
+    return {
+      kind: 'cluster',
+      detail: {
+        cluster: cluster as $FlowFixMe,
+        sites: (inventory?.sites.filter((site) =>
+          cluster.siteIds.includes(site.id),
+        ) ?? []) as $FlowFixMe,
+        facts: (inventory?.facts.filter((fact) =>
+          cluster.factIds.includes(fact.id),
+        ) ?? []) as $FlowFixMe,
+      },
+    };
+  }
+  const site = inventory?.sites.find((item) => item.id === id);
+  if (site != null) {
+    return {
+      kind: 'site',
+      detail: {
+        site: site as $FlowFixMe,
+        facts: (inventory?.facts.filter((fact) =>
+          site.factIds.includes(fact.id),
+        ) ?? []) as $FlowFixMe,
+        clusters: (currentPlan?.clusters.filter((item) =>
+          item.siteIds.includes(site.id),
+        ) ?? []) as $FlowFixMe,
+      },
+    };
+  }
+  const fact = inventory?.facts.find((item) => item.id === id);
+  if (fact != null) {
+    return { kind: 'fact', detail: fact as $FlowFixMe };
+  }
+  if (inventory?.id === id) {
+    return { kind: 'inventory', detail: inventory as $FlowFixMe };
+  }
+  if (id.startsWith('theme-draft-')) {
+    const draft = loadThemeDecisionDraft(project, id);
+    if (draft != null) {
+      return {
+        kind: 'theme-decision',
+        detail: inspectThemeDecision(project, id) as $FlowFixMe,
+      };
+    }
+  }
+  if (/^[a-f0-9]{16}$/.test(id)) {
+    const candidate = loadVerificationCandidate(project, id);
+    if (candidate != null) {
+      const subject = createCandidateEvidenceSubject({
+        candidate: candidate.candidate,
+        snapshot: candidate.snapshot,
+        siteIdsByFile: candidate.siteIdsByFile,
+      });
+      return {
+        kind: 'candidate',
+        detail: {
+          id: candidate.candidate.id,
+          subjectId: subject.id,
+          classification: candidate.classification,
+          proposer: candidate.candidate.proposer as $FlowFixMe,
+          decisionArtifactHashes: candidate.candidate.decisionArtifactHashes,
+          assumptionArtifactHashes:
+            candidate.candidate.assumptionArtifactHashes,
+          testAssumptions: candidateAssumptionStatus(
+            project,
+            candidate.candidate,
+          ) as $FlowFixMe,
+          decisionStatus: candidateDecisionStatus(
+            project,
+            candidate.candidate,
+          ) as $FlowFixMe,
+          files: candidate.candidate.touchedFiles,
+          clusters: candidate.candidate.clusterIds,
+          latestVerdict: loadLatestRepositoryEvidenceVerdict(
+            project,
+            subject.id,
+          ) as $FlowFixMe,
+        },
+      };
+    }
+    const verdict = loadRepositoryEvidenceVerdict(project, id);
+    if (verdict != null) {
+      return { kind: 'verdict', detail: verdict as $FlowFixMe };
+    }
+    const bundle = loadRepositoryEvidenceBundle(project, id);
+    if (bundle != null) {
+      return { kind: 'evidence-bundle', detail: bundle as $FlowFixMe };
+    }
+    const latestVerdict = loadLatestRepositoryEvidenceVerdict(project, id);
+    if (latestVerdict != null) {
+      return {
+        kind: 'evidence-subject',
+        detail: {
+          subjectId: id,
+          verdict: latestVerdict as $FlowFixMe,
+          evidence: loadLatestRepositoryEvidenceBundle(
+            project,
+            id,
+          ) as $FlowFixMe,
+        },
+      };
+    }
+    const storedPlan = loadPlan(project, id);
+    if (storedPlan != null) {
+      return { kind: 'plan', detail: storedPlan as $FlowFixMe };
+    }
+  }
+  return null;
+}
+
+function candidateDecisionStatus(
+  project: ProjectState,
+  candidate: CandidatePatch,
+): { +status: string, +reason: string | null } {
+  if (candidate.decisionArtifactHashes.length === 0) {
+    return { status: 'not-applicable', reason: null };
+  }
+  if (candidate.proposer.version === 'theme-experiment-v1') {
+    try {
+      assertCurrentThemeExperimentCandidate(project, candidate);
+      return {
+        status: 'test-assumption',
+        reason:
+          'This theme map is bound to a current disposable test assumption, not human approval.',
+      };
+    } catch (error) {
+      return {
+        status: 'stale',
+        reason: error instanceof Error ? error.message : String(error),
+      };
+    }
+  }
+  if (
+    candidate.proposer.protocolVersion !== THEME_DECISION_PROTOCOL_VERSION &&
+    candidate.proposer.version !== 'theme-decision-v1'
+  ) {
+    return {
+      status: 'bound-input',
+      reason:
+        'The contextual candidate binds decision input hashes but does not represent an active human-approved theme map.',
+    };
+  }
+  try {
+    assertActiveThemeCandidateDecisions(project, candidate);
+    return { status: 'active', reason: null };
+  } catch (error) {
+    return {
+      status: 'stale',
+      reason: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+function candidateAssumptionStatus(
+  project: ProjectState,
+  candidate: CandidatePatch,
+): $ReadOnlyArray<JsonValue> {
+  return Object.freeze(
+    candidate.assumptionArtifactHashes.map((artifactHash) => {
+      const assumption = loadTestAssumptionByArtifactHash(
+        project,
+        artifactHash,
+      );
+      if (assumption == null) {
+        return {
+          artifactHash,
+          state: 'missing',
+          warning:
+            'WARNING: A bound test assumption is missing. It was never owner approval.',
+        };
+      }
+      try {
+        assertCurrentTestAssumption(project, assumption);
+        return {
+          id: assumption.id,
+          artifactHash,
+          state: 'current',
+          purpose: assumption.purpose,
+          authorKind: assumption.authorKind,
+          authoredBy: assumption.authoredBy,
+          scope: assumption.scope,
+          limitations: assumption.limitations,
+          warning:
+            'WARNING: This is a test assumption, not repository intent or human approval.',
+        };
+      } catch (error) {
+        return {
+          id: assumption.id,
+          artifactHash,
+          state: 'stale',
+          purpose: assumption.purpose,
+          reason: error instanceof Error ? error.message : String(error),
+          warning:
+            'WARNING: This stale test assumption is not repository intent or human approval.',
+        };
+      }
+    }),
+  );
+}
+
+function review(
+  project: ProjectState,
+  id: string,
+): {
+  +warnings: JsonValue,
+  +verdict: JsonValue,
+  +evidence: JsonValue,
+  +candidates: JsonValue,
+  +composition: JsonValue,
+} | null {
+  let verdict = loadRepositoryEvidenceVerdict(project, id);
+  let bundle = loadRepositoryEvidenceBundle(project, id);
+  const candidate = loadVerificationCandidate(project, id);
+  if (candidate != null) {
+    const subject = createCandidateEvidenceSubject({
+      candidate: candidate.candidate,
+      snapshot: candidate.snapshot,
+      siteIdsByFile: candidate.siteIdsByFile,
+    });
+    verdict = loadLatestRepositoryEvidenceVerdict(project, subject.id);
+    bundle = loadLatestRepositoryEvidenceBundle(project, subject.id);
+    if (verdict == null || bundle == null) {
+      const entry: $FlowFixMe = replayEvents(project).indexes.candidates[id];
+      const combinedSubjectId: mixed = entry?.data?.subjectId;
+      if (typeof combinedSubjectId === 'string') {
+        verdict = loadLatestRepositoryEvidenceVerdict(
+          project,
+          combinedSubjectId,
+        );
+        bundle = loadLatestRepositoryEvidenceBundle(project, combinedSubjectId);
+      }
+    }
+  } else if (verdict == null && bundle == null) {
+    verdict = loadLatestRepositoryEvidenceVerdict(project, id);
+    bundle = loadLatestRepositoryEvidenceBundle(project, id);
+  }
+  if (verdict != null && bundle == null) {
+    bundle = loadRepositoryEvidenceBundle(project, verdict.evidenceBundleId);
+  }
+  if (bundle != null && verdict == null) {
+    verdict = loadLatestRepositoryEvidenceVerdict(project, bundle.subject.id);
+  }
+  if (verdict == null || bundle == null) {
+    return null;
+  }
+  const candidateRecords = bundle.candidateIds.map((candidateId) => ({
+    candidateId,
+    record: loadVerificationCandidate(project, candidateId),
+  }));
+  const decisionWarnings = candidateRecords
+    .map(({ record }) =>
+      record == null
+        ? null
+        : candidateDecisionStatus(project, record.candidate),
+    )
+    .flatMap((status) =>
+      status?.status === 'stale' ? [`WARNING: ${String(status.reason)}`] : [],
+    );
+  const assumptionWarnings = candidateRecords.flatMap(({ record }) =>
+    record == null
+      ? ([] as Array<string>)
+      : candidateAssumptionStatus(project, record.candidate).map(
+          (status: $FlowFixMe) => String(status.warning),
+        ),
+  );
+  const pathOwners = new Map<string, Array<string>>();
+  for (const { candidateId, record } of candidateRecords) {
+    for (const file of record?.candidate.touchedFiles ?? []) {
+      pathOwners.set(file, [...(pathOwners.get(file) ?? []), candidateId]);
+    }
+  }
+  return {
+    warnings: [
+      ...verdict.limitations.filter((limitation) =>
+        limitation.startsWith('WARNING:'),
+      ),
+      ...decisionWarnings,
+      ...assumptionWarnings,
+    ] as $FlowFixMe,
+    verdict: verdict as $FlowFixMe,
+    evidence: {
+      id: bundle.id,
+      subject: bundle.subject as $FlowFixMe,
+      coverage: bundle.coverage as $FlowFixMe,
+      runtimeCoverage: bundle.runtimeCoverage as $FlowFixMe,
+      repositoryChecks: bundle.repositoryEntries.map((entry) => ({
+        provider: entry.providerId,
+        check: entry.evidence.check,
+        result: entry.evidence.result,
+        detail: entry.evidence.detail ?? null,
+        outputPreview: entry.evidence.outputPreview,
+        outputArtifact: entry.outputArtifact,
+      })) as $FlowFixMe,
+      skippedProviderIds: bundle.skippedProviderIds,
+    },
+    candidates: candidateRecords.map(({ candidateId, record }) => {
+      return record == null
+        ? { id: candidateId, missing: true }
+        : {
+            id: candidateId,
+            classification: record.classification,
+            proposer: record.candidate.proposer,
+            files: record.candidate.touchedFiles,
+            uniqueFiles: record.candidate.touchedFiles.filter(
+              (file) => pathOwners.get(file)?.length === 1,
+            ),
+            sharedFiles: record.candidate.touchedFiles.filter(
+              (file) => (pathOwners.get(file)?.length ?? 0) > 1,
+            ),
+            decisionArtifactHashes: record.candidate.decisionArtifactHashes,
+            assumptionArtifactHashes: record.candidate.assumptionArtifactHashes,
+            testAssumptions: candidateAssumptionStatus(
+              project,
+              record.candidate,
+            ),
+            decisionStatus: candidateDecisionStatus(project, record.candidate),
+          };
+    }) as $FlowFixMe,
+    composition: {
+      subjectId: bundle.subject.id,
+      kind: bundle.subject.kind,
+      paths: [...pathOwners.entries()]
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([file, candidateIds]) => ({
+          file,
+          candidateIds: [...candidateIds].sort(),
+          ownership:
+            candidateIds.length === 1 ? 'exclusive' : 'shared-identical',
+        })),
+    } as $FlowFixMe,
+  };
+}
+
+export function runCli(
+  argv: $ReadOnlyArray<string>,
+  options?: CliOptions,
+): number {
+  const cwd = options?.cwd ?? process.cwd();
+  const stdout = options?.writeStdout ?? ((text) => process.stdout.write(text));
+  const stderr = options?.writeStderr ?? ((text) => process.stderr.write(text));
+  const json = argv.includes('--json');
+  const args = argv.filter((argument) => !argument.startsWith('--'));
+  try {
+    if (args.length === 0 || args[0] === 'help') {
+      stdout(HELP);
+      return 0;
+    }
+    if (args[0] === 'init' && args.length === 1) {
+      const project = initializeProject({ repositoryRoot: cwd });
+      present(
+        {
+          command: 'init',
+          stateDirectory: STATE_DIRECTORY,
+          schemaVersion: project.schemaVersion,
+        },
+        json,
+        stdout,
+      );
+      return 0;
+    }
+    if (args[0] === 'scan' && args.length === 1) {
+      const project = openProject(cwd);
+      const inventory = scanRepository({
+        repositoryRoot: project.repositoryRoot,
+        sourceGlobs: readConfig(project).sourceGlobs,
+      });
+      saveInventory(project, inventory);
+      present(
+        {
+          command: 'scan',
+          inventoryId: inventory.id,
+          counts: inventoryCounts(inventory),
+          readiness: inventoryReadiness(inventory, { sampleLimit: 0 }),
+        },
+        json,
+        stdout,
+      );
+      return 0;
+    }
+    if (args[0] === 'readiness' && args.length === 1) {
+      const project = openProject(cwd);
+      const inventory = loadCurrentInventory(project);
+      if (inventory == null) {
+        throw new Error('No inventory found; run stylex-migrate scan first');
+      }
+      present(
+        {
+          command: 'readiness',
+          inventoryId: inventory.id,
+          readiness: inventoryReadiness(inventory),
+        },
+        json,
+        stdout,
+      );
+      return 0;
+    }
+    if (args[0] === 'plan' && args.length === 1) {
+      const project = openProject(cwd);
+      const inventory = loadCurrentInventory(project);
+      if (inventory == null) {
+        throw new Error('No inventory found; run stylex-migrate scan first');
+      }
+      const plan = createPlan({ inventory });
+      savePlan(project, plan);
+      present(
+        { ...planSummary(plan, inventory), command: 'plan' } as $FlowFixMe,
+        json,
+        stdout,
+      );
+      return 0;
+    }
+    if (
+      args[0] === 'mechanical' &&
+      args[1] === 'propose' &&
+      args.length === 3
+    ) {
+      const result = proposeMechanicalCandidate({
+        project: openProject(cwd),
+        clusterId: args[2],
+      });
+      present(
+        result.ok
+          ? {
+              command: 'mechanical propose',
+              state: 'frozen',
+              candidateId: result.record.candidate.id,
+              clusterId: result.clusterId,
+              changedFiles: result.record.candidate.touchedFiles,
+              models: result.models,
+              limitations: result.limitations,
+              next:
+                `Inspect with stylex-migrate candidate diff ${result.record.candidate.id}, ` +
+                `then run stylex-migrate verify ${result.record.candidate.id}.`,
+            }
+          : {
+              command: 'mechanical propose',
+              state: 'refused',
+              reason: result.reason,
+              file: result.file,
+              evidence: result.evidence,
+            },
+        json,
+        stdout,
+      );
+      return result.ok ? 0 : 3;
+    }
+    if (args[0] === 'styled' && args[1] === 'propose' && args.length === 3) {
+      const result = proposeStyledCandidate({
+        project: openProject(cwd),
+        clusterId: args[2],
+      });
+      present(
+        result.ok
+          ? {
+              command: 'styled propose',
+              state: 'frozen',
+              candidateId: result.record.candidate.id,
+              clusterId: result.clusterId,
+              changedFiles: result.record.candidate.touchedFiles,
+              model: result.model,
+              limitations: result.limitations,
+              next:
+                `Inspect with stylex-migrate candidate diff ${result.record.candidate.id}, ` +
+                `then configure repository checks and run stylex-migrate verify ${result.record.candidate.id}.`,
+            }
+          : {
+              command: 'styled propose',
+              state: 'refused',
+              reason: result.reason,
+              file: result.file,
+              evidence: result.evidence,
+            },
+        json,
+        stdout,
+      );
+      return result.ok ? 0 : 3;
+    }
+    if (args[0] === 'bootstrap' && args[1] === 'inspect' && args.length === 2) {
+      const project = openProject(cwd);
+      const inventory = loadCurrentInventory(project);
+      if (inventory == null) {
+        throw new Error(
+          'Run stylex-migrate scan before inspecting repository bootstrap requirements',
+        );
+      }
+      const inspection = inspectBootstrap({
+        repositoryRoot: project.repositoryRoot,
+        sourceFiles: inventory.files.map((file) => file.path),
+      });
+      present(
+        {
+          command: 'bootstrap inspect',
+          inspection: inspection as $FlowFixMe,
+          next: inspection.integrations.some(
+            (integration) =>
+              (integration.kind === 'rspack' || integration.kind === 'babel') &&
+              !integration.stylexConfigured,
+          )
+            ? 'Run stylex-migrate bootstrap open with the exact package root and integration kind when discovery is ambiguous.'
+            : null,
+        },
+        json,
+        stdout,
+      );
+      return 0;
+    }
+    if (
+      args[0] === 'bootstrap' &&
+      args[1] === 'open' &&
+      (args.length === 3 ||
+        args.length === 4 ||
+        args.length === 5 ||
+        args.length === 6 ||
+        args.length === 7 ||
+        args.length === 8)
+    ) {
+      const result = openBootstrapTask({
+        project: openProject(cwd),
+        goal: args[2],
+        packageRoot: args[3] == null ? null : args[3] === '.' ? '' : args[3],
+        integration: args[7] == null ? null : (args[7] as $FlowFixMe),
+        stylexSpec: args[4] ?? VERSION,
+        integrationSpec: args[5] ?? args[4] ?? VERSION,
+        unpluginSpec: args[6] ?? '^2.3.11',
+      });
+      present(
+        result.ok
+          ? {
+              command: 'bootstrap open',
+              state: result.state,
+              taskId: result.task.id,
+              attemptId: result.attempt.id,
+              workspace: result.attempt.workspace.path,
+              origin: result.task.origin,
+              installCommands:
+                result.task.origin.kind === 'bootstrap'
+                  ? result.task.origin.installCommands
+                  : [],
+              buildCommand:
+                result.task.origin.kind === 'bootstrap'
+                  ? result.task.origin.buildCommand
+                  : [],
+              allowedPaths: result.task.scope.allowedPaths,
+              requiredChecks: result.task.requiredChecks,
+              warnings: result.task.limitations,
+              stopConditions: result.task.stopConditions,
+              next: `Run the exact installCommands in the workspace, update only the authorized ${result.task.origin.kind === 'bootstrap' ? result.task.origin.integration : 'build'} config bytes, then run stylex-migrate context submit ${result.task.id} <agent|human> <name> <version> [skill-version].`,
+            }
+          : {
+              command: 'bootstrap open',
+              state: result.state,
+              reasons: result.reasons,
+            },
+        json,
+        stdout,
+      );
+      return result.ok ? 0 : 3;
+    }
+    if (args[0] === 'candidate' && args[1] === 'diff' && args.length === 3) {
+      const record = loadVerificationCandidate(openProject(cwd), args[2]);
+      if (record == null) {
+        const message = `No persisted candidate found for ${args[2]}`;
+        if (json) {
+          present({ error: message, id: args[2] }, true, stdout);
+        } else {
+          stderr(`${message}\n`);
+        }
+        return 2;
+      }
+      presentCandidateDiff(record.candidate, json, stdout);
+      return 0;
+    }
+    if (args[0] === 'theme' && args[1] === 'candidates' && args.length === 2) {
+      const inventory = loadCurrentInventory(openProject(cwd));
+      if (inventory == null) {
+        throw new Error(
+          'Run stylex-migrate scan before listing theme candidates',
+        );
+      }
+      present(
+        {
+          command: 'theme candidates',
+          ...themeConsumerCandidates(inventory),
+        } as $FlowFixMe,
+        json,
+        stdout,
+      );
+      return 0;
+    }
+    if (
+      args[0] === 'dynamic' &&
+      args[1] === 'strategy' &&
+      args[2] === 'draft' &&
+      args.length === 6
+    ) {
+      const source = path.resolve(cwd, args[3]);
+      const authorKind = args[4];
+      if (authorKind !== 'agent' && authorKind !== 'human') {
+        throw new Error('Dynamic strategy author kind must be agent or human');
+      }
+      const draft = persistDynamicStrategyDraft({
+        project: openProject(cwd),
+        definition: parseJson(fs.readFileSync(source, 'utf8'), source),
+        authorKind,
+        authoredBy: args[5],
+      });
+      present(
+        {
+          command: 'dynamic strategy draft',
+          state: 'active',
+          draft: draft as $FlowFixMe,
+          warnings: [
+            'A dynamic strategy is a content-addressed migration input, not semantic proof or human approval.',
+          ],
+          next: `Run stylex-migrate context open ${draft.clusterId} "<goal>".`,
+        },
+        json,
+        stdout,
+      );
+      return 0;
+    }
+    if (
+      args[0] === 'dynamic' &&
+      args[1] === 'probe' &&
+      args[2] === 'open' &&
+      args.length === 7
+    ) {
+      const source = path.resolve(cwd, args[5]);
+      const result = openDynamicRuntimeProbeTask({
+        project: openProject(cwd),
+        strategyId: args[3],
+        assumptionId: args[4],
+        value: parseJson(fs.readFileSync(source, 'utf8'), source),
+        goal: args[6],
+      });
+      present(
+        result.ok
+          ? {
+              command: 'dynamic probe open',
+              state: result.state,
+              taskId: result.task.id,
+              attemptId: result.attempt.id,
+              workspace: result.attempt.workspace.path,
+              requiredOutputs: result.task.requiredOutputs,
+              warnings: result.task.limitations,
+              next: `Submit the immutable surface with stylex-migrate context submit ${result.task.id} <agent|human> <name> <version> [skill-version].`,
+            }
+          : {
+              command: 'dynamic probe open',
+              state: result.state,
+              reasons: result.reasons,
+            },
+        json,
+        stdout,
+      );
+      return result.ok ? 0 : 3;
+    }
+    if (
+      args[0] === 'dynamic' &&
+      args[1] === 'strategy' &&
+      args[2] === 'inspect' &&
+      args.length === 4
+    ) {
+      const inspection = inspectDynamicStrategy(openProject(cwd), args[3]);
+      present(
+        {
+          command: 'dynamic strategy inspect',
+          state: inspection.state,
+          activeDefinitionHash: inspection.activeDefinitionHash,
+          draft: inspection.draft as $FlowFixMe,
+          warnings: [
+            'The strategy records a selected approach and evidence requirements; it does not resolve the dynamic fact unknowns.',
+          ],
+        },
+        json,
+        stdout,
+      );
+      return 0;
+    }
+    if (args[0] === 'theme' && args[1] === 'draft' && args.length === 4) {
+      const project = openProject(cwd);
+      const source = path.resolve(cwd, args[2]);
+      const inventory = loadCurrentInventory(project);
+      if (inventory == null) {
+        throw new Error(
+          'Run stylex-migrate scan before drafting a theme decision',
+        );
+      }
+      const definition = resolveThemeDecisionDefinition({
+        repositoryRoot: project.repositoryRoot,
+        definition: scaffoldThemeDecisionDefinition({
+          inventory,
+          definition: parseJson(fs.readFileSync(source, 'utf8'), source),
+        }),
+      });
+      const draft = persistThemeDecisionDraft({
+        project,
+        definition,
+        draftedBy: args[3],
+      });
+      present(
+        {
+          command: 'theme draft',
+          state: 'drafted',
+          draft: reviewableThemeDraft(draft),
+          next: `A human must inspect this map, then run stylex-migrate theme approve ${draft.id} <reviewer> --human-confirm.`,
+        },
+        json,
+        stdout,
+      );
+      return 0;
+    }
+    if (args[0] === 'theme' && args[1] === 'inspect' && args.length === 3) {
+      const inspection = inspectThemeDecision(openProject(cwd), args[2]);
+      present(
+        {
+          command: 'theme inspect',
+          draft: reviewableThemeDraft(inspection.draft),
+          approval: inspection.approval as $FlowFixMe,
+          state: inspection.state,
+          activeArtifactHash: inspection.activeArtifactHash,
+          bridgeEvidence: inspection.bridgeEvidence,
+        } as $FlowFixMe,
+        json,
+        stdout,
+      );
+      return 0;
+    }
+    if (args[0] === 'theme' && args[1] === 'topology' && args.length === 2) {
+      const project = openProject(cwd);
+      present(
+        {
+          command: 'theme topology',
+          topology: inspectThemeTopology({
+            repositoryRoot: cwd,
+            sourceGlobs: readConfig(project).sourceGlobs,
+          }),
+        } as $FlowFixMe,
+        json,
+        stdout,
+      );
+      return 0;
+    }
+    if (args[0] === 'theme' && args[1] === 'approve' && args.length === 4) {
+      if (!argv.includes('--human-confirm')) {
+        throw new Error(
+          'Theme approval requires --human-confirm from the named human reviewer. Agents must not approve their own drafts.',
+        );
+      }
+      const project = openProject(cwd);
+      const approval = approvePersistedThemeDecision({
+        project,
+        draftId: args[2],
+        actor: 'human',
+        approvedBy: args[3],
+      });
+      present(
+        {
+          command: 'theme approve',
+          state: 'active',
+          approval: approval as $FlowFixMe,
+          warnings: approval.limitations,
+          next: `Run stylex-migrate theme propose ${args[2]} to create an immutable candidate.`,
+        },
+        json,
+        stdout,
+      );
+      return 0;
+    }
+    if (args[0] === 'theme' && args[1] === 'propose' && args.length === 3) {
+      const result = proposeThemeDecisionCandidate({
+        project: openProject(cwd),
+        draftId: args[2],
+      });
+      present(
+        result.ok
+          ? {
+              command: 'theme propose',
+              state: 'frozen',
+              candidateId: result.record.candidate.id,
+              draftId: result.draftId,
+              approvalArtifactHash: result.approvalArtifactHash,
+              changedFiles: result.record.candidate.touchedFiles,
+              next: `Run stylex-migrate verify ${result.record.candidate.id}.`,
+            }
+          : {
+              command: 'theme propose',
+              state: 'refused',
+              reason: result.reason,
+              file: result.file,
+            },
+        json,
+        stdout,
+      );
+      return result.ok ? 0 : 3;
+    }
+    if (args[0] === 'theme' && args[1] === 'experiment' && args.length === 4) {
+      const result = proposeThemeExperimentCandidate({
+        project: openProject(cwd),
+        draftId: args[2],
+        assumptionId: args[3],
+      });
+      present(
+        result.ok
+          ? {
+              command: 'theme experiment',
+              state: 'frozen',
+              candidateId: result.record.candidate.id,
+              draftId: result.draftId,
+              assumptionArtifactHash: result.assumptionArtifactHash,
+              changedFiles: result.record.candidate.touchedFiles,
+              warning:
+                'WARNING: This candidate is a disposable test assumption, not repository intent or human approval.',
+              next: `Run stylex-migrate verify ${result.record.candidate.id}.`,
+            }
+          : {
+              command: 'theme experiment',
+              state: 'refused',
+              reason: result.reason,
+              file: result.file,
+            },
+        json,
+        stdout,
+      );
+      return result.ok ? 0 : 3;
+    }
+    if (
+      args[0] === 'theme' &&
+      args[1] === 'bridge' &&
+      args[2] === 'open' &&
+      args.length >= 5
+    ) {
+      const result = openThemeBridgeTask({
+        project: openProject(cwd),
+        draftId: args[3],
+        goal: args[4],
+        assumptionIds: args.slice(5),
+      });
+      present(
+        result.ok
+          ? {
+              command: 'theme bridge open',
+              state: result.state,
+              taskId: result.task.id,
+              attemptId: result.attempt.id,
+              workspace: result.attempt.workspace.path,
+              origin: result.task.origin,
+              allowedPaths: result.task.scope.allowedPaths,
+              requiredOutputs: result.task.requiredOutputs,
+              assumptionArtifactHashes: result.task.assumptionArtifactHashes,
+              warnings: result.task.limitations,
+              next: `Edit only the declared bridge boundaries, then run stylex-migrate context submit ${result.task.id} <agent|human> <name> <version> [skill-version].`,
+            }
+          : {
+              command: 'theme bridge open',
+              state: result.state,
+              reasons: result.reasons,
+            },
+        json,
+        stdout,
+      );
+      return result.ok ? 0 : 3;
+    }
+    if (args[0] === 'context' && args[1] === 'open') {
+      const project = openProject(cwd);
+      const result =
+        args.length === 3
+          ? openContextRetry({ project, taskId: args[2] })
+          : args.length >= 4
+            ? openContextTask({
+                project,
+                clusterId: args[2],
+                goal: args[3],
+                assumptionIds: args.slice(4),
+              })
+            : null;
+      if (result == null) {
+        stderr(redactText(`Unknown command.\n${HELP}`));
+        return 64;
+      }
+      present(
+        result.ok
+          ? {
+              command: 'context open',
+              state: result.state,
+              taskId: result.task.id,
+              attemptId: result.attempt.id,
+              workspace: result.attempt.workspace.path,
+              task: result.task as $FlowFixMe,
+              attempt: result.attempt as $FlowFixMe,
+              assumptionArtifactHashes: result.task.assumptionArtifactHashes,
+            }
+          : {
+              command: 'context open',
+              state: result.state,
+              reasons: result.reasons,
+            },
+        json,
+        stdout,
+      );
+      return result.ok ? 0 : 3;
+    }
+    if (args[0] === 'context' && args[1] === 'inspect' && args.length === 3) {
+      const result = inspectContextTask(openProject(cwd), args[2]);
+      present(
+        {
+          command: 'context inspect',
+          taskId: result.task.id,
+          state: result.state,
+          stateData: result.stateData,
+          task: result.task as $FlowFixMe,
+          attempt: result.attempt as $FlowFixMe,
+        },
+        json,
+        stdout,
+      );
+      return 0;
+    }
+    if (
+      args[0] === 'context' &&
+      args[1] === 'submit' &&
+      (args.length === 6 || args.length === 7)
+    ) {
+      const proposerKind = args[3];
+      if (proposerKind !== 'agent' && proposerKind !== 'human') {
+        throw new Error('Context proposer kind must be agent or human');
+      }
+      const result = submitContextAttempt({
+        project: openProject(cwd),
+        taskId: args[2],
+        proposerKind,
+        proposerName: args[4],
+        proposerVersion: args[5],
+        ...(args[6] == null ? {} : { skillVersion: args[6] }),
+      });
+      present(
+        { command: 'context submit', ...result } as $FlowFixMe,
+        json,
+        stdout,
+      );
+      return result.ok ? 0 : result.state === 'blocked' ? 3 : 4;
+    }
+    if (args[0] === 'context' && args[1] === 'abandon' && args.length === 3) {
+      const result = abandonContextTask({
+        project: openProject(cwd),
+        taskId: args[2],
+      });
+      present(
+        {
+          command: 'context abandon',
+          taskId: result.task.id,
+          state: result.state,
+        },
+        json,
+        stdout,
+      );
+      return 0;
+    }
+    if (args[0] === 'assumption' && args[1] === 'record' && args.length === 5) {
+      const authorKind = args[3];
+      if (authorKind !== 'agent' && authorKind !== 'human') {
+        throw new Error('Test-assumption author must be agent or human');
+      }
+      const project = openProject(cwd);
+      const source = path.resolve(cwd, args[2]);
+      const input = parseJson(fs.readFileSync(source, 'utf8'), source);
+      const assumption = persistTestAssumption({
+        project,
+        input,
+        authorKind,
+        authoredBy: args[4],
+      });
+      present(
+        {
+          command: 'assumption record',
+          state: 'test-only',
+          assumption,
+          warnings: [
+            'WARNING: This is a test assumption, not repository intent or human approval.',
+            ...assumption.limitations,
+          ],
+          next: `Bind ${assumption.id} to a contextual test task.`,
+        } as $FlowFixMe,
+        json,
+        stdout,
+      );
+      return 0;
+    }
+    if (
+      args[0] === 'assumption' &&
+      args[1] === 'inspect' &&
+      args.length === 3
+    ) {
+      const project = openProject(cwd);
+      const assumption = loadTestAssumption(project, args[2]);
+      if (assumption == null) {
+        throw new Error(`No test assumption found for ${args[2]}`);
+      }
+      let state = 'current';
+      let staleReason = null;
+      try {
+        assertCurrentTestAssumption(project, assumption);
+      } catch (error) {
+        state = 'stale';
+        staleReason = error instanceof Error ? error.message : String(error);
+      }
+      present(
+        {
+          command: 'assumption inspect',
+          state,
+          assumption,
+          staleReason,
+          warnings: [
+            'WARNING: This is a test assumption, not repository intent or human approval.',
+            ...assumption.limitations,
+          ],
+        } as $FlowFixMe,
+        json,
+        stdout,
+      );
+      return state === 'current' ? 0 : 3;
+    }
+    if (args[0] === 'runtime' && args[1] === 'inspect' && args.length === 2) {
+      present(
+        {
+          command: 'runtime inspect',
+          discovery: inspectRuntimeSurfaces({ repositoryRoot: cwd }),
+        } as $FlowFixMe,
+        json,
+        stdout,
+      );
+      return 0;
+    }
+    if (
+      args[0] === 'theme' &&
+      args[1] === 'probe' &&
+      args[2] === 'open' &&
+      args.length === 7
+    ) {
+      const project = openProject(cwd);
+      const source = path.resolve(cwd, args[5]);
+      const value = parseJson(fs.readFileSync(source, 'utf8'), source);
+      const result = openThemeRuntimeProbeTask({
+        project,
+        draftId: args[3],
+        assumptionId: args[4],
+        value,
+        goal: args[6],
+      });
+      present(
+        result.ok
+          ? {
+              command: 'theme probe open',
+              state: result.state,
+              taskId: result.task.id,
+              attemptId: result.attempt.id,
+              workspace: result.attempt.workspace.path,
+              cases:
+                result.task.origin.kind === 'evidence-surface'
+                  ? result.task.origin.cases.map((item) => item.id)
+                  : [],
+              warnings: result.task.limitations.filter((item) =>
+                item.startsWith('WARNING:'),
+              ),
+              next: `Submit the immutable four-case surface with stylex-migrate context submit ${result.task.id} <agent|human> <name> <version> [skill-version], then verify it with the exact theme/bridge/consumer candidates named by its cases.`,
+            }
+          : {
+              command: 'theme probe open',
+              state: result.state,
+              reasons: result.reasons,
+            },
+        json,
+        stdout,
+      );
+      return result.ok ? 0 : result.state === 'needs-owner-decision' ? 3 : 2;
+    }
+    if (
+      args[0] === 'runtime' &&
+      args[1] === 'probe' &&
+      args[2] === 'open' &&
+      args.length === 6
+    ) {
+      const project = openProject(cwd);
+      const source = path.resolve(cwd, args[4]);
+      const input = parseJson(fs.readFileSync(source, 'utf8'), source);
+      const result = openEvidenceSurfaceTask({
+        project,
+        assumptionId: args[3],
+        input,
+        goal: args[5],
+      });
+      present(
+        result.ok
+          ? {
+              command: 'runtime probe open',
+              state: result.state,
+              taskId: result.task.id,
+              attemptId: result.attempt.id,
+              workspace: result.attempt.workspace.path,
+              origin: result.task.origin,
+              allowedPaths: result.task.scope.allowedPaths,
+              requiredOutputs: result.task.requiredOutputs,
+              warnings: result.task.limitations.filter((item) =>
+                item.startsWith('WARNING:'),
+              ),
+              next: `Submit this immutable evidence surface with stylex-migrate context submit ${result.task.id} <agent|human> <name> <version> [skill-version], then verify it together with the migration candidates named by its runtime cases.`,
+            }
+          : {
+              command: 'runtime probe open',
+              state: result.state,
+              reasons: result.reasons,
+            },
+        json,
+        stdout,
+      );
+      return result.ok ? 0 : result.state === 'needs-owner-decision' ? 3 : 2;
+    }
+    if (args[0] === 'status' && args.length === 1) {
+      const project = openProject(cwd);
+      const replay = replayEvents(project);
+      const inventory = loadCurrentInventory(project);
+      const plan = loadCurrentPlan(project);
+      present(
+        {
+          command: 'status',
+          schemaVersion: project.schemaVersion,
+          eventCount: replay.lastSequence,
+          counts: counts(replay.indexes),
+          inventory:
+            inventory == null
+              ? null
+              : {
+                  id: inventory.id,
+                  counts: inventoryCounts(inventory),
+                  readiness: inventoryReadiness(inventory, {
+                    sampleLimit: 0,
+                  }),
+                },
+          plan: plan == null ? null : planSummary(plan, inventory),
+        },
+        json,
+        stdout,
+      );
+      return 0;
+    }
+    if (args[0] === 'config' && args[1] === 'show' && args.length === 2) {
+      present(
+        {
+          command: 'config show',
+          config: readConfig(openProject(cwd)) as $FlowFixMe,
+        },
+        json,
+        stdout,
+      );
+      return 0;
+    }
+    if (args[0] === 'config' && args[1] === 'set' && args.length === 3) {
+      const project = openProject(cwd);
+      const source = path.resolve(cwd, args[2]);
+      const config = parseJson(fs.readFileSync(source, 'utf8'), source);
+      if (
+        config == null ||
+        Array.isArray(config) ||
+        typeof config !== 'object'
+      ) {
+        throw new Error('Project configuration input must be a JSON object');
+      }
+      writeConfig(project, config as $FlowFixMe);
+      present(
+        {
+          command: 'config set',
+          config: readConfig(project) as $FlowFixMe,
+        },
+        json,
+        stdout,
+      );
+      return 0;
+    }
+    if (args[0] === 'review' && args.length === 2) {
+      const result = review(openProject(cwd), args[1]);
+      if (result == null) {
+        const message = `No evidence review found for ${args[1]}`;
+        if (json) {
+          present({ error: message, id: args[1] }, true, stdout);
+        } else {
+          stderr(`${message}\n`);
+        }
+        return 2;
+      }
+      present(
+        {
+          command: 'review',
+          id: args[1],
+          warnings: result.warnings,
+          verdict: result.verdict,
+          evidence: result.evidence,
+          candidates: result.candidates,
+          composition: result.composition,
+        },
+        json,
+        stdout,
+      );
+      return 0;
+    }
+    if (args[0] === 'explain' && args.length === 2) {
+      const result = explain(openProject(cwd), args[1]);
+      if (result == null) {
+        const message = `No migration entity found for ${args[1]}`;
+        if (json) {
+          present({ error: message, id: args[1] }, true, stdout);
+        } else {
+          stderr(`${message}\n`);
+        }
+        return 2;
+      }
+      present(
+        {
+          command: 'explain',
+          id: args[1],
+          kind: result.kind,
+          detail: result.detail,
+        },
+        json,
+        stdout,
+      );
+      return 0;
+    }
+    if (args[0] === 'state' && args[1] === 'rebuild' && args.length === 2) {
+      const replay = rebuildIndexes(openProject(cwd));
+      present(
+        {
+          command: 'state rebuild',
+          eventCount: replay.lastSequence,
+          counts: counts(replay.indexes),
+        },
+        json,
+        stdout,
+      );
+      return 0;
+    }
+    if (args[0] === 'schema' && args[1] === 'migrate' && args.length === 2) {
+      const result = migrateProject({
+        repositoryRoot: cwd,
+        dryRun: argv.includes('--dry-run'),
+      });
+      present(
+        { command: 'schema migrate', ...result } as $FlowFixMe,
+        json,
+        stdout,
+      );
+      return 0;
+    }
+    if (args[0] === 'cleanup' && args.length === 1) {
+      const result = cleanupProject({
+        project: openProject(cwd),
+        confirm: argv.includes('--confirm'),
+      });
+      present({ command: 'cleanup', ...result } as $FlowFixMe, json, stdout);
+      return 0;
+    }
+    stderr(redactText(`Unknown command.\n${HELP}`));
+    return 64;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (json) {
+      present({ error: redactText(message) }, true, stdout);
+    } else {
+      stderr(`${redactText(message)}\n`);
+    }
+    return 1;
+  }
+}
+
+export async function runCliAsync(
+  argv: $ReadOnlyArray<string>,
+  options?: CliOptions,
+): Promise<number> {
+  const args = argv.filter((argument) => !argument.startsWith('--'));
+  if (args[0] !== 'verify') {
+    return runCli(argv, options);
+  }
+  const cwd = options?.cwd ?? process.cwd();
+  const stdout = options?.writeStdout ?? ((text) => process.stdout.write(text));
+  const stderr = options?.writeStderr ?? ((text) => process.stderr.write(text));
+  const json = argv.includes('--json');
+  try {
+    if (args.length < 2) {
+      stderr(redactText(`Unknown command.\n${HELP}`));
+      return 64;
+    }
+    const result = await verifyPersistedCandidates({
+      project: openProject(cwd),
+      candidateIds: args.slice(1),
+    });
+    present(
+      {
+        command: 'verify',
+        subject: result.subject as $FlowFixMe,
+        schedule: {
+          id: result.schedule.schedule.id,
+          estimatedCommandRuns: result.schedule.schedule.estimatedCommandRuns,
+          estimatedDurationMs: result.schedule.schedule.estimatedDurationMs,
+          actualDurationMs: result.schedule.actualDurationMs,
+          checks: result.schedule.entries.map((entry) => ({
+            provider: entry.providerId,
+            result: entry.evidence.result,
+            cacheHit: entry.cacheHit,
+            durationMs: entry.evidence.durationMs,
+            outputArtifact: entry.outputArtifact,
+          })),
+          skippedProviderIds: result.schedule.skippedProviderIds,
+        } as $FlowFixMe,
+        coverage: result.coverage as $FlowFixMe,
+        runtimeCoverage: result.runtimeCoverage as $FlowFixMe,
+        warnings: result.verdict.limitations.filter((limitation) =>
+          limitation.startsWith('WARNING:'),
+        ) as $FlowFixMe,
+        evidenceBundleId: result.bundle.id,
+        verdict: result.verdict as $FlowFixMe,
+      },
+      json,
+      stdout,
+    );
+    return result.verdict.outcome === 'rejected'
+      ? 4
+      : result.verdict.outcome === 'blocked'
+        ? 3
+        : 0;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (json) {
+      present({ error: redactText(message) }, true, stdout);
+    } else {
+      stderr(`${redactText(message)}\n`);
+    }
+    return 1;
+  }
+}
+
+if (require.main === module) {
+  runCliAsync(process.argv.slice(2)).then((code) => {
+    process.exitCode = code;
+  });
+}

@@ -13,10 +13,71 @@ const path = require('node:path');
 
 const { unplugin } = require('../src');
 const { unpluginFactory } = require('../src/core');
+const { attachWebpackHooks } = require('../src/webpack');
 const { Features, browserslistToTargets } = require('lightningcss');
 const browserslist = require('browserslist');
 
 describe('@stylexjs/unplugin', () => {
+  test.each(['webpack', 'rspack'])(
+    'injects collected CSS through the %s compilation hook',
+    (framework) => {
+      let processAssets;
+      let updatedAsset;
+      const resetState = jest.fn();
+      const compilation = {
+        hooks: {
+          processAssets: {
+            tap(_options, callback) {
+              processAssets = callback;
+            },
+          },
+        },
+        warnings: [],
+        getAsset() {
+          return { source: { source: () => '/* existing */' } };
+        },
+        updateAsset(name, source) {
+          updatedAsset = { name, content: source.source().toString() };
+        },
+      };
+      const compiler = {
+        [framework]: {
+          Compilation: { PROCESS_ASSETS_STAGE_SUMMARIZE: 1 },
+          sources: {
+            RawSource: class RawSource {
+              constructor(content) {
+                this.content = content;
+              }
+              source() {
+                return this.content;
+              }
+            },
+          },
+        },
+        hooks: {
+          thisCompilation: {
+            tap(_name, callback) {
+              callback(compilation);
+            },
+          },
+        },
+      };
+      const plugin = attachWebpackHooks({
+        __stylexCollectCss: () => '.x1 { color: red; }',
+        __stylexResetState: resetState,
+      });
+
+      plugin[framework](compiler);
+      processAssets({ 'app.css': {} });
+
+      expect(resetState).toHaveBeenCalledTimes(1);
+      expect(updatedAsset).toEqual({
+        name: 'app.css',
+        content: '/* existing */\n.x1 { color: red; }',
+      });
+    },
+  );
+
   test('ignores files without StyleX imports', async () => {
     const plugin = unplugin.raw({});
     if (typeof plugin.buildStart === 'function') {
