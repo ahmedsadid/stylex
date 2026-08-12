@@ -9,7 +9,9 @@ from normal planning. A `theme-bridge` origin is a first-class workflow bound to
 one exact theme draft; it does not pretend to be a persisted plan cluster. A
 `bootstrap` origin binds one inspected package manager, package root, build
 integration, and exact configuration surface without pretending configuration
-edits are ordinary migration edits.
+edits are ordinary migration edits. An `evidence-surface` origin binds one test
+assumption, exact runtime cases/expectations, and two immutable generated probe
+files; it is test scaffolding, not application migration or owner intent.
 
 ## Authority
 
@@ -79,6 +81,10 @@ The only exception is a kernel-created `bootstrap` task: its exact
 config. Wildcards and any other configuration path remain forbidden. This
 exception authorizes proposal bytes in the external worktree, not direct writes
 to the source checkout and not application or commit authority.
+
+An `evidence-surface` task may add only its exact generated collector and config
+paths. Both are required outputs; the proposer edits neither. Its provider runs
+only when that candidate participates in the exact verified candidate set.
 
 The source checkout may contain unrelated dirt. Never copy it into the task.
 Declared task inputs are already bound to HEAD and a dirty declared input blocks

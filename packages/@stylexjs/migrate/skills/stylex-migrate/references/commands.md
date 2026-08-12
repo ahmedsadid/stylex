@@ -18,6 +18,7 @@ stylex-migrate dynamic strategy inspect <draft-id>
 stylex-migrate assumption record <json-file> <agent|human> <author>
 stylex-migrate assumption inspect <assumption-id>
 stylex-migrate runtime inspect
+stylex-migrate runtime probe open <assumption-id> <json-file> "<goal>"
 stylex-migrate theme topology
 stylex-migrate context open <cluster-id> "<goal>" [assumption-id...]
 stylex-migrate context open <task-id>
@@ -102,6 +103,13 @@ component-test surfaces as `known`, dependency-only possibilities as
 `inferred`, and absence as `unknown`. `theme topology` records direct global
 hosts, class mutations, portals, secondary windows, and secondary-document
 access. Neither command supplies runtime proof.
+
+`runtime probe open` creates an immutable `evidence-surface` task from a strict
+declarative definition and a bound test assumption. It generates the collector
+and config rather than accepting an agent-authored script. Submit it unchanged,
+then verify the resulting candidate together with every migration candidate
+named by its runtime cases. The generated provider is attached automatically to
+that exact candidate set.
 
 `context submit` freezes the worktree diff, validates its actual paths, stores a
 content-addressed candidate, removes the external worktree, and returns the

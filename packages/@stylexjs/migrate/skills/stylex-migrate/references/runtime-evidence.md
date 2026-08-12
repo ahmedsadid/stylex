@@ -14,8 +14,40 @@ Runtime evidence has three different baseline modes:
    protocol.
 3. A generated probe compares named candidate observations with independently
    locked expected observations. It is not a retained baseline and must never
-   be labelled as one. Do not hand-build this mode until the task/kernel exposes
-   a generated-probe contract.
+   be labelled as one.
+
+## Open a generated probe
+
+Use this only when `runtime inspect` finds no `known` native surface capable of
+the named case. If a known surface exists but cannot exercise the case, set
+`nativeSurfaceDisposition` to `known-insufficient` and state the exact reason;
+otherwise use `none-known`. Do not use that field to avoid integrating a usable
+repository test.
+
+1. Record and inspect a test assumption whose `scope.files` contains every
+   migration path the cases will cover and whose `scope.cases` contains every
+   case ID.
+2. Create a temporary definition outside the source checkout with protocol
+   `stylex-migrate-evidence-surface-v1`. Declare the package root, resolvable
+   Playwright package, local HTTP server argv/cwd/URL, cases, selectors,
+   actions, target properties/attributes, exact expected observations,
+   rationale, and limitations. Commands are argv arrays; never use a shell
+   string. Expectations have no browser metadata because they are values, not a
+   fabricated baseline execution.
+3. Run `stylex-migrate runtime probe open <assumption-id> <json-file>
+   "<goal>"`. Read its task and warnings. The kernel generates and locks the
+   collector and config; do not edit either file.
+4. Submit the task immediately with `context submit` and inspect its candidate
+   diff. The probe candidate changes only `.stylex-migrate-probes` files.
+5. Run one `verify` command containing the probe candidate and all consumer,
+   bridge, or dynamic candidates named by `case.changePaths`. The verifier
+   automatically attaches the generated provider to that exact candidate set.
+   It rejects a case that names a path or site absent from the set.
+
+The collector starts only the declared local server, loads Playwright lazily
+from the declared package root, exercises every named action, and emits the
+complete runtime protocol. The definition is declarative; it does not permit
+agent-authored JavaScript or shell execution.
 
 The tool does not silently choose representative states. When a developer
 allows inferred test inputs, record them with `stylex-migrate assumption

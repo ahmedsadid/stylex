@@ -52,7 +52,9 @@ different lane.
 Before choosing runtime evidence for theme or dynamic work, run
 `stylex-migrate runtime inspect`. Prefer a repository-native surface whose
 status is `known`. `inferred` means supporting packages exist but no executable
-surface was established; do not invent an argv from that. Run
+rendering surface was established; do not invent an argv from that. When no
+known surface can exercise the exact named behavior, follow the generated-probe
+workflow in [runtime-evidence.md](references/runtime-evidence.md). Run
 `stylex-migrate theme topology` before proposing a root/global theme host. Its
 observations may justify a labelled test assumption, but they are syntactic
 facts rather than topology approval.
@@ -156,6 +158,11 @@ StyleX build integration.
      `stylex-migrate context open <task-id>` and address the recorded failure.
    - `needs-owner-decision`: stop and report the decision or evidence required.
    - `blocked`: stop. Do not create another attempt outside the protocol.
+
+An `evidence-surface` task is different: both allowed files are generated and
+immutable, so make no edits. Submit it immediately. Verify its candidate
+together with every migration candidate named by its runtime cases; verifying
+the surface alone cannot establish coverage of unchanged application paths.
 
 For a `styled-dynamic-intrinsic` cluster, first follow the dynamic strategy
 workflow in

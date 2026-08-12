@@ -35,6 +35,7 @@ describe('M7 vendor-neutral skill package', () => {
     expect(skill).toContain('stylex-migrate bootstrap inspect');
     expect(skill).toContain('scope.bootstrapPaths');
     expect(skill).toContain('stylex-migrate runtime inspect');
+    expect(skill).toContain('evidence-surface');
     expect(skill).toContain('stylex-migrate theme topology');
     expect(skill).toContain('stylex-migrate assumption record');
     expect(skill).toContain('classList.add');
@@ -57,18 +58,22 @@ describe('M7 vendor-neutral skill package', () => {
     expect(commands).toContain('stylex-migrate bootstrap open');
     expect(commands).toContain('assumption inspect');
     expect(commands).toContain('runtime inspect');
+    expect(commands).toContain('runtime probe open');
     const runtime = fs.readFileSync(
       path.join(SKILL_ROOT, 'references', 'runtime-evidence.md'),
       'utf8',
     );
     expect(runtime).toContain('generated probe');
     expect(runtime).toContain('not a retained baseline');
+    expect(runtime).toContain('nativeSurfaceDisposition');
+    expect(runtime).toContain('verify` command containing the probe candidate');
     const protocol = fs.readFileSync(
       path.join(SKILL_ROOT, 'references', 'protocol.md'),
       'utf8',
     );
     expect(protocol).toContain('`bootstrap` origin');
     expect(protocol).toContain('`scope.bootstrapPaths`');
+    expect(protocol).toContain('`evidence-surface` origin');
     for (const reference of [
       'protocol.md',
       'commands.md',
