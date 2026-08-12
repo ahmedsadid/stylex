@@ -11,6 +11,7 @@ import fs from 'fs';
 import path from 'path';
 import {
   createCandidateWorkspace,
+  materializeFullCheckout,
   removeCandidateWorkspace,
 } from '../candidate/workspace';
 import { validateCandidatePatch } from '../candidate/patch';
@@ -120,6 +121,7 @@ export function createVerificationWorkspace({
     rootDir,
   });
   try {
+    materializeFullCheckout(workspace);
     for (const record of records) {
       for (const change of record.candidate.changes) {
         const destination = ensureParent(workspace.path, change.path);

@@ -9,6 +9,7 @@
 
 import fs from 'fs';
 import path from 'path';
+import { execFileSync } from 'child_process';
 import {
   createCandidatePatch,
   createCandidateWorkspace,
@@ -44,6 +45,7 @@ describe('M5 persisted candidates and verification workspaces', () => {
     repo = createTempRepo({
       'src/A.js': 'export const A = 1;\n',
       'src/B.js': 'export const B = 1;\n',
+      'build/tool.js': 'export const build = true;\n',
     });
     project = initializeProject({ repositoryRoot: repo });
     workspaceRoot = createTempDir('stylex-migrate-verification-');
@@ -120,6 +122,27 @@ describe('M5 persisted candidates and verification workspaces', () => {
     );
     expect(readFile(repo, 'src/A.js')).toBe('export const A = 1;\n');
     expect(readFile(repo, 'src/B.js')).toBe('export const B = 1;\n');
+  });
+
+  test('verification expands sparse repositories for real build evidence', () => {
+    execFileSync('git', ['sparse-checkout', 'set', 'src'], {
+      cwd: repo,
+      stdio: 'pipe',
+    });
+    expect(fs.existsSync(path.join(repo, 'build/tool.js'))).toBe(false);
+    const record = candidate('src/A.js', 'export const A = 2;\n');
+    const verification = createVerificationWorkspace({
+      records: [record],
+      rootDir: workspaceRoot,
+    });
+    workspaces.push(verification);
+
+    expect(readFile(verification.path, 'build/tool.js')).toBe(
+      'export const build = true;\n',
+    );
+    expect(readFile(verification.path, 'src/A.js')).toBe(
+      'export const A = 2;\n',
+    );
   });
 
   test('persisted candidate identity is checked again when loaded', () => {

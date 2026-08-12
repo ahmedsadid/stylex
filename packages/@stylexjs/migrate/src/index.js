@@ -418,6 +418,7 @@ export type { Actor, MigrationState } from './kernel/state';
 export {
   assertCleanWorktree,
   createCandidateWorkspace,
+  materializeFullCheckout,
   removeCandidateWorkspace,
 } from './candidate/workspace';
 export type { CandidateWorkspace } from './candidate/workspace';

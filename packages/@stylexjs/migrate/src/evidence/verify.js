@@ -9,6 +9,7 @@
 
 import {
   createCandidateWorkspace,
+  materializeFullCheckout,
   removeCandidateWorkspace,
 } from '../candidate/workspace';
 import { recordContextVerificationOutcome } from '../context/lifecycle';
@@ -99,6 +100,7 @@ export async function verifyPersistedCandidates({
       requireClean: false,
       rootDir: workspaceRoot,
     });
+    materializeFullCheckout(baselineWorkspace);
     const schedule = await runEvidenceSchedule({
       project,
       workspaceRoot: workspace.path,

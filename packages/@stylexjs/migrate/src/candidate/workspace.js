@@ -95,3 +95,8 @@ export function removeCandidateWorkspace(workspace: CandidateWorkspace): void {
     git(workspace.repositoryRoot, ['worktree', 'prune']);
   }
 }
+
+/** Materialize every tracked path in a disposable worktree used for evidence. */
+export function materializeFullCheckout(workspace: CandidateWorkspace): void {
+  git(workspace.path, ['sparse-checkout', 'disable']);
+}
