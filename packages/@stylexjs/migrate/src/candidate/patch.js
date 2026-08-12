@@ -11,6 +11,7 @@ import {
   git,
   gitBuffer,
   extendSnapshot,
+  snapshotAssumptionArtifactHashes,
   snapshotDecisionArtifactHashes,
   snapshotHash,
 } from '../kernel/snapshot';
@@ -74,6 +75,7 @@ export type CandidatePatch = {
   +patchHash: string,
   +patchText: string,
   +decisionArtifactHashes: $ReadOnlyArray<string>,
+  +assumptionArtifactHashes: $ReadOnlyArray<string>,
 };
 
 export type CandidateResult =
@@ -94,12 +96,14 @@ function candidateIdentity({
   clusterIds,
   proposer,
   decisionArtifactHashes,
+  assumptionArtifactHashes,
 }: {
   +baseSnapshotHash: string,
   +patchHash: string,
   +clusterIds: $ReadOnlyArray<string>,
   +proposer: Proposer,
   +decisionArtifactHashes: $ReadOnlyArray<string>,
+  +assumptionArtifactHashes: $ReadOnlyArray<string>,
 }): string {
   return shortHash(
     hashString(
@@ -109,6 +113,7 @@ function candidateIdentity({
         clusterIds,
         proposer,
         decisionArtifactHashes,
+        assumptionArtifactHashes,
       }),
     ),
   );
@@ -221,6 +226,7 @@ export function createCandidatePatch({
   clusterIds = [],
   proposer,
   decisionArtifactHashes = [],
+  assumptionArtifactHashes = [],
   expectedContent,
 }: {
   +workspace: CandidateWorkspace,
@@ -228,6 +234,7 @@ export function createCandidatePatch({
   +clusterIds?: $ReadOnlyArray<string>,
   +proposer: Proposer,
   +decisionArtifactHashes?: $ReadOnlyArray<string>,
+  +assumptionArtifactHashes?: $ReadOnlyArray<string>,
   // Repository-relative path to the content hash a verified proposal produced.
   // Supplying it closes the gap between "these bytes were checked" and "these
   // bytes are staged": without it, a candidate can carry evidence for code that
@@ -247,6 +254,23 @@ export function createCandidatePatch({
       ok: false,
       reason:
         'candidate decision artifacts are not bound to the supplied snapshot',
+      paths: [],
+    };
+  }
+  const stableAssumptions = Object.freeze(
+    [...new Set(assumptionArtifactHashes)].sort(),
+  );
+  const snapshotAssumptions = snapshotAssumptionArtifactHashes(snapshot);
+  if (
+    stableAssumptions.length !== snapshotAssumptions.length ||
+    stableAssumptions.some(
+      (value, index) => value !== snapshotAssumptions[index],
+    )
+  ) {
+    return {
+      ok: false,
+      reason:
+        'candidate test assumptions are not bound to the supplied snapshot',
       paths: [],
     };
   }
@@ -415,6 +439,7 @@ export function createCandidatePatch({
       clusterIds: stableClusterIds,
       proposer: stableProposer,
       decisionArtifactHashes: stableDecisions,
+      assumptionArtifactHashes: stableAssumptions,
     }),
     clusterIds: stableClusterIds,
     baseSnapshotHash,
@@ -426,6 +451,7 @@ export function createCandidatePatch({
     patchHash,
     patchText,
     decisionArtifactHashes: stableDecisions,
+    assumptionArtifactHashes: stableAssumptions,
   });
 
   return Object.freeze({ ok: true, candidate, snapshot: extended });
@@ -468,6 +494,15 @@ export function validateCandidatePatch(
   ) {
     return 'candidate decision artifacts are not bound to its snapshot';
   }
+  const snapshotAssumptions = snapshotAssumptionArtifactHashes(snapshot);
+  if (
+    candidate.assumptionArtifactHashes.length !== snapshotAssumptions.length ||
+    candidate.assumptionArtifactHashes.some(
+      (value, index) => value !== snapshotAssumptions[index],
+    )
+  ) {
+    return 'candidate test assumptions are not bound to its snapshot';
+  }
   if (
     candidate.proposer.version === '' ||
     (candidate.proposer.skillVersion != null &&
@@ -478,6 +513,7 @@ export function validateCandidatePatch(
   for (const values of [
     candidate.clusterIds,
     candidate.decisionArtifactHashes,
+    candidate.assumptionArtifactHashes,
   ]) {
     if (
       new Set(values).size !== values.length ||
@@ -517,6 +553,7 @@ export function validateCandidatePatch(
     clusterIds: candidate.clusterIds,
     proposer: candidate.proposer,
     decisionArtifactHashes: candidate.decisionArtifactHashes,
+    assumptionArtifactHashes: candidate.assumptionArtifactHashes,
   });
   return id === candidate.id
     ? null

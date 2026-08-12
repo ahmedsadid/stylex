@@ -79,6 +79,7 @@ import { openBootstrapTask } from './bootstrap/task';
 import {
   assertCurrentTestAssumption,
   loadTestAssumption,
+  loadTestAssumptionByArtifactHash,
   persistTestAssumption,
 } from './assumption/records';
 import { VERSION } from './version';
@@ -124,8 +125,8 @@ Commands:
   theme propose <draft>   freeze a candidate from the active approved map
   theme bridge open <draft> <goal>
                           open a scoped task that locks the generated theme module
-  context open <cluster> <goal>
-                          open a contextual workspace from a planned cluster
+  context open <cluster> <goal> [assumption...]
+                          open contextual work with optional test assumptions
   context open <task>     open the kernel-owned retry for a failed task
   context inspect <task>  show the immutable capsule and current task state
   context submit <task> <agent|human> <name> <version> [skill-version]
@@ -281,6 +282,12 @@ function explain(
           classification: candidate.classification,
           proposer: candidate.candidate.proposer as $FlowFixMe,
           decisionArtifactHashes: candidate.candidate.decisionArtifactHashes,
+          assumptionArtifactHashes:
+            candidate.candidate.assumptionArtifactHashes,
+          testAssumptions: candidateAssumptionStatus(
+            project,
+            candidate.candidate,
+          ) as $FlowFixMe,
           decisionStatus: candidateDecisionStatus(
             project,
             candidate.candidate,
@@ -352,6 +359,53 @@ function candidateDecisionStatus(
   }
 }
 
+function candidateAssumptionStatus(
+  project: ProjectState,
+  candidate: CandidatePatch,
+): $ReadOnlyArray<JsonValue> {
+  return Object.freeze(
+    candidate.assumptionArtifactHashes.map((artifactHash) => {
+      const assumption = loadTestAssumptionByArtifactHash(
+        project,
+        artifactHash,
+      );
+      if (assumption == null) {
+        return {
+          artifactHash,
+          state: 'missing',
+          warning:
+            'WARNING: A bound test assumption is missing. It was never owner approval.',
+        };
+      }
+      try {
+        assertCurrentTestAssumption(project, assumption);
+        return {
+          id: assumption.id,
+          artifactHash,
+          state: 'current',
+          purpose: assumption.purpose,
+          authorKind: assumption.authorKind,
+          authoredBy: assumption.authoredBy,
+          scope: assumption.scope,
+          limitations: assumption.limitations,
+          warning:
+            'WARNING: This is a test assumption, not repository intent or human approval.',
+        };
+      } catch (error) {
+        return {
+          id: assumption.id,
+          artifactHash,
+          state: 'stale',
+          purpose: assumption.purpose,
+          reason: error instanceof Error ? error.message : String(error),
+          warning:
+            'WARNING: This stale test assumption is not repository intent or human approval.',
+        };
+      }
+    }),
+  );
+}
+
 function review(
   project: ProjectState,
   id: string,
@@ -398,12 +452,20 @@ function review(
     .flatMap((status) =>
       status?.status === 'stale' ? [`WARNING: ${String(status.reason)}`] : [],
     );
+  const assumptionWarnings = candidateRecords.flatMap(({ record }) =>
+    record == null
+      ? ([] as Array<string>)
+      : candidateAssumptionStatus(project, record.candidate).map(
+          (status: $FlowFixMe) => String(status.warning),
+        ),
+  );
   return {
     warnings: [
       ...verdict.limitations.filter((limitation) =>
         limitation.startsWith('WARNING:'),
       ),
       ...decisionWarnings,
+      ...assumptionWarnings,
     ] as $FlowFixMe,
     verdict: verdict as $FlowFixMe,
     evidence: {
@@ -430,6 +492,11 @@ function review(
             proposer: record.candidate.proposer,
             files: record.candidate.touchedFiles,
             decisionArtifactHashes: record.candidate.decisionArtifactHashes,
+            assumptionArtifactHashes: record.candidate.assumptionArtifactHashes,
+            testAssumptions: candidateAssumptionStatus(
+              project,
+              record.candidate,
+            ),
             decisionStatus: candidateDecisionStatus(project, record.candidate),
           };
     }) as $FlowFixMe,
@@ -885,11 +952,12 @@ export function runCli(
       const result =
         args.length === 3
           ? openContextRetry({ project, taskId: args[2] })
-          : args.length === 4
+          : args.length >= 4
             ? openContextTask({
                 project,
                 clusterId: args[2],
                 goal: args[3],
+                assumptionIds: args.slice(4),
               })
             : null;
       if (result == null) {
@@ -906,6 +974,7 @@ export function runCli(
               workspace: result.attempt.workspace.path,
               task: result.task as $FlowFixMe,
               attempt: result.attempt as $FlowFixMe,
+              assumptionArtifactHashes: result.task.assumptionArtifactHashes,
             }
           : {
               command: 'context open',

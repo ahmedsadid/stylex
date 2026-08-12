@@ -45,9 +45,12 @@ export type WorkspaceSnapshot = {
   // optional only so candidates persisted before the decision protocol remain
   // readable; new decision-backed snapshots always carry it.
   +decisionArtifactHashes?: $ReadOnlyArray<string>,
+  // Test assumptions are deliberately separate from owner decisions. They may
+  // authorize named disposable checks but can never satisfy approval policy.
+  +assumptionArtifactHashes?: $ReadOnlyArray<string>,
 };
 
-function canonicalDecisionArtifactHashes(
+function canonicalArtifactHashes(
   values: $ReadOnlyArray<string> = [],
 ): $ReadOnlyArray<string> {
   if (values.some((value) => typeof value !== 'string' || value === '')) {
@@ -59,17 +62,34 @@ function canonicalDecisionArtifactHashes(
 export function snapshotDecisionArtifactHashes(
   snapshot: WorkspaceSnapshot,
 ): $ReadOnlyArray<string> {
-  return canonicalDecisionArtifactHashes(snapshot.decisionArtifactHashes);
+  return canonicalArtifactHashes(snapshot.decisionArtifactHashes);
+}
+
+export function snapshotAssumptionArtifactHashes(
+  snapshot: WorkspaceSnapshot,
+): $ReadOnlyArray<string> {
+  return canonicalArtifactHashes(snapshot.assumptionArtifactHashes);
 }
 
 export function bindSnapshotDecisionArtifacts(
   snapshot: WorkspaceSnapshot,
   decisionArtifactHashes: $ReadOnlyArray<string>,
 ): WorkspaceSnapshot {
-  const stable = canonicalDecisionArtifactHashes(decisionArtifactHashes);
+  const stable = canonicalArtifactHashes(decisionArtifactHashes);
   return Object.freeze({
     ...snapshot,
     decisionArtifactHashes: stable,
+  });
+}
+
+export function bindSnapshotAssumptionArtifacts(
+  snapshot: WorkspaceSnapshot,
+  assumptionArtifactHashes: $ReadOnlyArray<string>,
+): WorkspaceSnapshot {
+  const stable = canonicalArtifactHashes(assumptionArtifactHashes);
+  return Object.freeze({
+    ...snapshot,
+    assumptionArtifactHashes: stable,
   });
 }
 
@@ -231,11 +251,13 @@ export function createSnapshot({
   files,
   configHash,
   decisionArtifactHashes = [],
+  assumptionArtifactHashes = [],
 }: {
   +repositoryRoot: string,
   +files: $ReadOnlyArray<string>,
   +configHash?: string,
   +decisionArtifactHashes?: $ReadOnlyArray<string>,
+  +assumptionArtifactHashes?: $ReadOnlyArray<string>,
 }): WorkspaceSnapshot {
   const root = canonicalRoot(repositoryRoot);
   const gitCommit = gitCommitOf(root);
@@ -245,7 +267,8 @@ export function createSnapshot({
     fileHashes[file] = commitHashAt(root, gitCommit, file);
     fileModes[file] = commitModeAt(root, gitCommit, file);
   }
-  const decisions = canonicalDecisionArtifactHashes(decisionArtifactHashes);
+  const decisions = canonicalArtifactHashes(decisionArtifactHashes);
+  const assumptions = canonicalArtifactHashes(assumptionArtifactHashes);
   return Object.freeze({
     repositoryRoot: root,
     gitCommit,
@@ -253,8 +276,9 @@ export function createSnapshot({
     configHash: configHash ?? hashString(''),
     fileHashes: Object.freeze(fileHashes),
     fileModes: Object.freeze(fileModes),
-    ...(decisions.length === 0 ? {} : { decisionArtifactHashes: decisions }),
-  });
+    decisionArtifactHashes: decisions,
+    assumptionArtifactHashes: assumptions,
+  } as WorkspaceSnapshot);
 }
 
 /**
@@ -309,6 +333,10 @@ export function snapshotHash(snapshot: WorkspaceSnapshot): string {
   const decisions = snapshotDecisionArtifactHashes(snapshot);
   if (decisions.length > 0) {
     fields.push('decision-artifacts', ...decisions);
+  }
+  const assumptions = snapshotAssumptionArtifactHashes(snapshot);
+  if (assumptions.length > 0) {
+    fields.push('test-assumption-artifacts', ...assumptions);
   }
   for (const file of paths) {
     fields.push(

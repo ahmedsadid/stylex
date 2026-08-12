@@ -12,10 +12,13 @@ import path from 'path';
 import {
   abandonContextTask,
   createPlan,
+  createCandidateEvidenceSubject,
   initializeProject,
   inspectContextTask,
+  loadVerificationCandidate,
   openContextRetry,
   openContextTask,
+  persistTestAssumption,
   persistDynamicStrategyDraft,
   saveInventory,
   savePlan,
@@ -119,6 +122,72 @@ export const Contextual = () => <Button {...stylex.props(styles.root)} />;
     expect(inspectContextTask(project, opened.task.id)).toMatchObject({
       state: 'awaiting-verification',
       stateData: { candidateId: submitted.ok ? submitted.candidateId : null },
+    });
+  });
+
+  test('binds test assumptions separately through task, candidate, and evidence identities', () => {
+    const assumption = persistTestAssumption({
+      project,
+      input: {
+        purpose: 'Exercise a named contextual rendering case.',
+        facts: [
+          {
+            statement: 'The fixture case renders Contextual with value red.',
+            status: 'inferred',
+            inputFiles: ['src/Contextual.jsx'],
+            detail: 'The test harness will provide that bounded value.',
+          },
+        ],
+        scope: {
+          files: ['src/Contextual.jsx'],
+          cases: ['contextual-red'],
+        },
+        rationale: 'This is sufficient for one disposable test case.',
+        alternatives: ['Ask the owner for the production value domain.'],
+        limitations: ['Does not establish the production value domain.'],
+      },
+      authorKind: 'agent',
+      authoredBy: 'fixture-agent',
+    });
+    const opened = openContextTask({
+      project,
+      clusterId,
+      goal: 'Convert only for the named assumed test case.',
+      assumptionIds: [assumption.id],
+      workspaceRoot,
+    });
+    if (!opened.ok) throw new Error(opened.reasons.join('\n'));
+    expect(opened.task.assumptionArtifactHashes).toEqual([
+      assumption.artifactHash,
+    ]);
+    expect(opened.task.decisionArtifactHashes).toEqual([]);
+    expect(opened.task.limitations.join('\n')).toContain(
+      'not repository intent or human approval',
+    );
+    writeFiles(opened.attempt.workspace.path, {
+      'src/Contextual.jsx': 'export const Contextual = () => <Button />;\n',
+    });
+    const submitted = submitContextAttempt({
+      project,
+      taskId: opened.task.id,
+      proposerKind: 'agent',
+      proposerVersion: 'fixture-v1',
+    });
+    if (!submitted.ok) throw new Error(submitted.reasons.join('\n'));
+    const candidate = loadVerificationCandidate(project, submitted.candidateId);
+    expect(candidate?.candidate).toMatchObject({
+      decisionArtifactHashes: [],
+      assumptionArtifactHashes: [assumption.artifactHash],
+    });
+    if (candidate == null) throw new Error('Candidate was not persisted');
+    expect(
+      createCandidateEvidenceSubject({
+        candidate: candidate.candidate,
+        snapshot: candidate.snapshot,
+      }),
+    ).toMatchObject({
+      decisionArtifactHashes: [],
+      assumptionArtifactHashes: [assumption.artifactHash],
     });
   });
 

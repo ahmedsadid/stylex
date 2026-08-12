@@ -27,6 +27,7 @@ export type CandidateEvidenceSubject = {
   +candidateIds: $ReadOnlyArray<string>,
   +changes: $ReadOnlyArray<EvidenceChange>,
   +decisionArtifactHashes?: $ReadOnlyArray<string>,
+  +assumptionArtifactHashes?: $ReadOnlyArray<string>,
 };
 
 export type ApplyPlanEvidenceSubject = {
@@ -35,6 +36,7 @@ export type ApplyPlanEvidenceSubject = {
   +candidateIds: $ReadOnlyArray<string>,
   +changes: $ReadOnlyArray<EvidenceChange>,
   +decisionArtifactHashes?: $ReadOnlyArray<string>,
+  +assumptionArtifactHashes?: $ReadOnlyArray<string>,
 };
 
 export type RepositoryEvidenceSubject =
@@ -95,18 +97,21 @@ export function createCandidateEvidenceSubject(
 ): CandidateEvidenceSubject {
   const changes = changesFor(input);
   const decisionArtifactHashes = input.candidate.decisionArtifactHashes;
+  const assumptionArtifactHashes = input.candidate.assumptionArtifactHashes;
   const stable: $ReadOnly<{
     kind: 'candidate',
     candidateId: string,
     candidateIds: $ReadOnlyArray<string>,
     changes: $ReadOnlyArray<EvidenceChange>,
     decisionArtifactHashes?: $ReadOnlyArray<string>,
+    assumptionArtifactHashes?: $ReadOnlyArray<string>,
   }> = {
     kind: 'candidate',
     candidateId: input.candidate.id,
     candidateIds: Object.freeze([input.candidate.id]),
     changes,
-    ...(decisionArtifactHashes.length === 0 ? {} : { decisionArtifactHashes }),
+    decisionArtifactHashes,
+    assumptionArtifactHashes,
   };
   return Object.freeze({
     ...stable,
@@ -131,6 +136,7 @@ export function createApplyPlanEvidenceSubject(
   const changes = [];
   const owners = new Map<string, string>();
   const decisionArtifactHashes = new Set<string>();
+  const assumptionArtifactHashes = new Set<string>();
   for (const input of inputs) {
     if (
       input.candidate.repositoryRoot !== repository ||
@@ -142,6 +148,9 @@ export function createApplyPlanEvidenceSubject(
     }
     input.candidate.decisionArtifactHashes.forEach((hash) =>
       decisionArtifactHashes.add(hash),
+    );
+    input.candidate.assumptionArtifactHashes.forEach((hash) =>
+      assumptionArtifactHashes.add(hash),
     );
     for (const change of changesFor(input)) {
       const existing = owners.get(change.path);
@@ -160,17 +169,15 @@ export function createApplyPlanEvidenceSubject(
     candidateIds: $ReadOnlyArray<string>,
     changes: $ReadOnlyArray<EvidenceChange>,
     decisionArtifactHashes?: $ReadOnlyArray<string>,
+    assumptionArtifactHashes?: $ReadOnlyArray<string>,
   }> = {
     kind: 'apply-plan',
     candidateIds: Object.freeze(candidateIds),
     changes: Object.freeze(changes),
-    ...(decisionArtifactHashes.size === 0
-      ? {}
-      : {
-          decisionArtifactHashes: Object.freeze(
-            [...decisionArtifactHashes].sort(),
-          ),
-        }),
+    decisionArtifactHashes: Object.freeze([...decisionArtifactHashes].sort()),
+    assumptionArtifactHashes: Object.freeze(
+      [...assumptionArtifactHashes].sort(),
+    ),
   };
   return Object.freeze({
     ...stable,

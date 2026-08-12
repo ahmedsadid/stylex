@@ -24,6 +24,7 @@ export type {
 export {
   assertCurrentTestAssumption,
   loadTestAssumption,
+  loadTestAssumptionByArtifactHash,
   persistTestAssumption,
 } from './assumption/records';
 
@@ -412,6 +413,7 @@ export {
 } from './kernel/hash';
 
 export {
+  bindSnapshotAssumptionArtifacts,
   bindSnapshotDecisionArtifacts,
   canonicalRoot,
   createSnapshot,
@@ -421,6 +423,7 @@ export {
   gitCommitOf,
   isWorktreeClean,
   snapshotDecisionArtifactHashes,
+  snapshotAssumptionArtifactHashes,
   snapshotHash,
 } from './kernel/snapshot';
 export type { WorkspaceSnapshot } from './kernel/snapshot';

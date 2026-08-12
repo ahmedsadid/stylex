@@ -66,6 +66,7 @@ function parseCandidate(
     !strings(record.candidate.touchedFiles) ||
     !strings(record.candidate.clusterIds) ||
     !strings(record.candidate.decisionArtifactHashes) ||
+    !strings(record.candidate.assumptionArtifactHashes) ||
     !object(record.candidate.proposer) ||
     !object(record.snapshot.fileHashes) ||
     !object(record.snapshot.fileModes) ||

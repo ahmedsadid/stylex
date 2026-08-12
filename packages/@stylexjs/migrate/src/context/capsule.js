@@ -12,7 +12,7 @@ import { matchesGlob } from '../candidate/scope';
 import { canonicalJson, immutableJson } from '../state/json';
 import type { Cluster, Fact } from '../inventory/model';
 
-export const CONTEXT_PROTOCOL_VERSION: string = 'stylex-migrate-context-v4';
+export const CONTEXT_PROTOCOL_VERSION: string = 'stylex-migrate-context-v5';
 export const CONTEXT_MAX_ATTEMPTS: number = 2;
 
 export type BootstrapContextTaskOrigin = {
@@ -98,6 +98,7 @@ export type ContextTaskCapsule = {
   +scope: ContextScope,
   +requiredOutputs: $ReadOnlyArray<ContextRequiredOutput>,
   +decisionArtifactHashes: $ReadOnlyArray<string>,
+  +assumptionArtifactHashes: $ReadOnlyArray<string>,
   +requiredChecks: $ReadOnlyArray<ContextRequiredCheck>,
   +limitations: $ReadOnlyArray<string>,
   +stopConditions: $ReadOnlyArray<string>,
@@ -118,6 +119,7 @@ type ContextTaskDefinition = {
   +scope: ContextScope,
   +requiredOutputs: $ReadOnlyArray<ContextRequiredOutput>,
   +decisionArtifactHashes: $ReadOnlyArray<string>,
+  +assumptionArtifactHashes: $ReadOnlyArray<string>,
   +requiredChecks: $ReadOnlyArray<ContextRequiredCheck>,
   +limitations: $ReadOnlyArray<string>,
   +stopConditions: $ReadOnlyArray<string>,
@@ -323,6 +325,7 @@ export function createContextTaskCapsule({
   scope,
   requiredOutputs = [],
   decisionArtifactHashes = [],
+  assumptionArtifactHashes = [],
   requiredChecks,
   limitations,
   stopConditions,
@@ -342,6 +345,7 @@ export function createContextTaskCapsule({
   +scope: ContextScope,
   +requiredOutputs?: $ReadOnlyArray<ContextRequiredOutput>,
   +decisionArtifactHashes?: $ReadOnlyArray<string>,
+  +assumptionArtifactHashes?: $ReadOnlyArray<string>,
   +requiredChecks: $ReadOnlyArray<ContextRequiredCheck>,
   +limitations: $ReadOnlyArray<string>,
   +stopConditions: $ReadOnlyArray<string>,
@@ -404,6 +408,7 @@ export function createContextTaskCapsule({
     scope: stableScope,
     requiredOutputs: normalizeRequiredOutputs(requiredOutputs, stableScope),
     decisionArtifactHashes: sortedStrings(decisionArtifactHashes),
+    assumptionArtifactHashes: sortedStrings(assumptionArtifactHashes),
     requiredChecks: Object.freeze(stableChecks),
     limitations: sortedStrings(limitations),
     stopConditions: sortedStrings(stopConditions),

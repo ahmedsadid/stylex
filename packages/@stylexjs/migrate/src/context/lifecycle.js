@@ -47,6 +47,11 @@ import {
 } from '../dynamic/decisions';
 import { inspectDynamicStrategyCandidate } from '../dynamic/guard';
 import { inspectBootstrapCandidate } from '../bootstrap/guard';
+import {
+  assertCurrentTestAssumption,
+  loadTestAssumption,
+  loadTestAssumptionByArtifactHash,
+} from '../assumption/records';
 import { createFact } from '../inventory/model';
 import {
   CONTEXT_MAX_ATTEMPTS,
@@ -569,12 +574,14 @@ export function openContextTask({
   project,
   clusterId,
   goal,
+  assumptionIds = [],
   workspaceRoot,
   now = () => new Date().toISOString(),
 }: {
   +project: ProjectState,
   +clusterId: string,
   +goal: string,
+  +assumptionIds?: $ReadOnlyArray<string>,
   +workspaceRoot?: string,
   +now?: () => string,
 }): ContextOpenResult {
@@ -602,15 +609,33 @@ export function openContextTask({
     return routed;
   }
 
+  const assumptions = assumptionIds.map((id) => {
+    const assumption = loadTestAssumption(project, id);
+    if (assumption == null) {
+      throw new Error(`No test assumption found for ${id}`);
+    }
+    assertCurrentTestAssumption(project, assumption);
+    return assumption;
+  });
+  if (new Set(assumptionIds).size !== assumptionIds.length) {
+    throw new Error('A contextual task cannot bind an assumption twice');
+  }
   const config = readConfig(project);
   const configHash = hashString(canonicalJson(config as $FlowFixMe));
   const taskInputFiles = [
-    ...new Set([...cluster.declaredInputs, ...inventory.configInputs]),
+    ...new Set([
+      ...cluster.declaredInputs,
+      ...inventory.configInputs,
+      ...assumptions.flatMap((assumption) =>
+        assumption.declaredInputs.map((input) => input.path),
+      ),
+    ]),
   ].sort();
   const snapshot = createSnapshot({
     repositoryRoot: project.repositoryRoot,
     files: taskInputFiles,
     configHash,
+    assumptionArtifactHashes: assumptions.map((item) => item.artifactHash),
   });
   const stale = detectStaleFiles(snapshot);
   if (stale.length > 0) {
@@ -745,7 +770,12 @@ export function openContextTask({
     })),
     decisionArtifactHashes:
       dynamicStrategy == null ? [] : [dynamicStrategy.definitionHash],
+    assumptionArtifactHashes: assumptions.map((item) => item.artifactHash),
     limitations: [
+      ...assumptions.flatMap((assumption) => [
+        `WARNING: Test assumption ${assumption.id} is not repository intent or human approval.`,
+        ...assumption.limitations,
+      ]),
       'M7 does not compare runtime rendering or interaction behavior.',
       ...(dynamicStyledTask
         ? [
@@ -1105,6 +1135,13 @@ export function submitContextAttempt({
     throw new Error('Contextual attempts require an agent or human proposer');
   }
   const record = loadTaskRecord(project, taskId);
+  for (const artifactHash of record.task.assumptionArtifactHashes) {
+    const assumption = loadTestAssumptionByArtifactHash(project, artifactHash);
+    if (assumption == null) {
+      throw new Error(`Missing bound test assumption ${artifactHash}`);
+    }
+    assertCurrentTestAssumption(project, assumption);
+  }
   const entry = taskIndex(project, taskId);
   if (entry == null || entry.state !== 'open') {
     throw new Error(`Contextual task ${taskId} is not open`);
@@ -1139,6 +1176,7 @@ export function submitContextAttempt({
     clusterIds: [record.task.cluster.id],
     proposer,
     decisionArtifactHashes: record.task.decisionArtifactHashes,
+    assumptionArtifactHashes: record.task.assumptionArtifactHashes,
   });
   if (!result.ok || result.candidate.changes.length === 0) {
     const reasons = result.ok

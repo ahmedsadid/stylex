@@ -8,6 +8,7 @@
  */
 
 import { createSnapshot, detectStaleFiles } from '../kernel/snapshot';
+import { shortHash } from '../kernel/hash';
 import { loadCurrentInventory } from '../planning/reports';
 import { readRecord, writeRecord } from '../state/project';
 import {
@@ -45,6 +46,23 @@ export function loadTestAssumption(
     if (missing(error)) return null;
     throw error;
   }
+}
+
+export function loadTestAssumptionByArtifactHash(
+  project: ProjectState,
+  artifactHash: string,
+): TestAssumption | null {
+  if (!/^[a-f0-9]{64}$/.test(artifactHash)) {
+    throw new Error('Invalid test-assumption artifact hash');
+  }
+  const assumption = loadTestAssumption(
+    project,
+    `test-assumption-${shortHash(artifactHash)}`,
+  );
+  if (assumption != null && assumption.artifactHash !== artifactHash) {
+    throw new Error('Test-assumption artifact identity collision');
+  }
+  return assumption;
 }
 
 export function assertCurrentTestAssumption(
