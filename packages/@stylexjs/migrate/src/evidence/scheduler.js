@@ -322,10 +322,16 @@ export async function runEvidenceSchedule({
       skipped.push(...tierItems.map((item) => item.providerId));
       continue;
     }
-    const tierEntries = await parallelMap(
-      tierItems,
-      config.concurrency,
-      async (item) => {
+    const setupItems = tierItems.filter(
+      (item) => selected.get(item.providerId)?.kind === 'bootstrap-rspack',
+    );
+    const comparisonItems = tierItems.filter(
+      (item) => selected.get(item.providerId)?.kind !== 'bootstrap-rspack',
+    );
+    const runItems = async (
+      items: $ReadOnlyArray<EvidenceScheduleItem>,
+    ): Promise<$ReadOnlyArray<EvidenceRunEntry>> =>
+      parallelMap(items, config.concurrency, async (item) => {
         const provider = selected.get(item.providerId);
         if (provider == null) {
           throw new Error(`Schedule lost provider ${item.providerId}`);
@@ -383,10 +389,17 @@ export async function runEvidenceSchedule({
           evidence: execution.evidence,
           outputArtifact,
         });
-      },
-    );
-    entries.push(...tierEntries);
-    stop = tierEntries.some((entry) => entry.evidence.result === 'fail');
+      });
+    const setupEntries = await runItems(setupItems);
+    entries.push(...setupEntries);
+    if (setupEntries.some((entry) => entry.evidence.result !== 'pass')) {
+      skipped.push(...comparisonItems.map((item) => item.providerId));
+      stop = true;
+      continue;
+    }
+    const comparisonEntries = await runItems(comparisonItems);
+    entries.push(...comparisonEntries);
+    stop = comparisonEntries.some((entry) => entry.evidence.result === 'fail');
   }
 
   return Object.freeze({

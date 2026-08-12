@@ -72,6 +72,11 @@ export function createCandidateWorkspace({
     `candidate-${crypto.randomBytes(8).toString('hex')}`,
   );
   git(repositoryRoot, ['worktree', 'add', '--detach', workspacePath, commit]);
+  // Worktrees inherit sparse-checkout configuration from the source
+  // repository. Candidate allowlists are enforced by the kernel, while an
+  // inherited sparse index can reject authorized new paths (notably generated
+  // dot-directories) before that validation runs.
+  git(workspacePath, ['sparse-checkout', 'disable']);
   return Object.freeze({
     path: workspacePath,
     repositoryRoot,

@@ -496,6 +496,26 @@ describe('the candidate boundary', () => {
     ).toThrow('uncommitted changes');
   });
 
+  test('candidate workspaces disable inherited sparse checkout for authorized new paths', () => {
+    execFileSync('git', ['sparse-checkout', 'set', 'src'], { cwd: repo });
+    const workspace = openWorkspace(['.stylex-migrate-probes/probe.cjs']);
+    writeFiles(workspace.path, {
+      '.stylex-migrate-probes/probe.cjs': 'module.exports = true;\n',
+    });
+    const result = createCandidatePatch({
+      workspace,
+      snapshot: createSnapshot({
+        repositoryRoot: repo,
+        files: ['.stylex-migrate-probes/probe.cjs'],
+      }),
+      proposer: PROPOSER,
+    });
+    expect(result).toMatchObject({
+      ok: true,
+      candidate: { touchedFiles: ['.stylex-migrate-probes/probe.cjs'] },
+    });
+  });
+
   describe('binding a candidate to one repository at one commit', () => {
     test('a candidate cannot be written into a different repository', () => {
       const other = createTempRepo(INITIAL);
