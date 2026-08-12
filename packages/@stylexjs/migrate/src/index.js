@@ -285,6 +285,15 @@ export {
 } from './dynamic/guard';
 export type { DynamicStrategyGuardResult } from './dynamic/guard';
 export { runRuntimeCommandProvider } from './runtime/provider';
+export {
+  RUNTIME_SURFACE_DISCOVERY_VERSION,
+  inspectRuntimeSurfaces,
+} from './runtime/discover';
+export type {
+  RuntimeSurfaceDiscovery,
+  RuntimeSurfaceInspection,
+  RuntimeSurfaceKind,
+} from './runtime/discover';
 export { aggregateRuntimeCoverage } from './runtime/coverage';
 export type {
   RuntimeCaseCoverageEntry,

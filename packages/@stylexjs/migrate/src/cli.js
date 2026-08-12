@@ -83,6 +83,7 @@ import {
   persistTestAssumption,
 } from './assumption/records';
 import { VERSION } from './version';
+import { inspectRuntimeSurfaces } from './runtime/discover';
 
 type WriteOutput = (text: string) => mixed;
 
@@ -116,6 +117,7 @@ Commands:
                           record a labelled, non-approved test assumption
   assumption inspect <assumption>
                           show an assumption and whether its inputs are current
+  runtime inspect         find repository-native rendering/test surfaces
   theme draft <json-file> <author>
                           validate and persist a theme token-map draft
   theme candidates        list exact styled-theme consumer batches and blockers
@@ -1107,6 +1109,17 @@ export function runCli(
         stdout,
       );
       return state === 'current' ? 0 : 3;
+    }
+    if (args[0] === 'runtime' && args[1] === 'inspect' && args.length === 2) {
+      present(
+        {
+          command: 'runtime inspect',
+          discovery: inspectRuntimeSurfaces({ repositoryRoot: cwd }),
+        } as $FlowFixMe,
+        json,
+        stdout,
+      );
+      return 0;
     }
     if (args[0] === 'status' && args.length === 1) {
       const project = openProject(cwd);
