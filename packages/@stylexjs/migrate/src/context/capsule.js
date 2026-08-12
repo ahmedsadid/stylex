@@ -11,8 +11,12 @@ import { hashString, shortHash } from '../kernel/hash';
 import { matchesGlob } from '../candidate/scope';
 import { canonicalJson, immutableJson } from '../state/json';
 import type { Cluster, Fact } from '../inventory/model';
+import type {
+  RuntimeCaseDefinition,
+  RuntimeExpectedObservations,
+} from '../runtime/model';
 
-export const CONTEXT_PROTOCOL_VERSION: string = 'stylex-migrate-context-v5';
+export const CONTEXT_PROTOCOL_VERSION: string = 'stylex-migrate-context-v6';
 export const CONTEXT_MAX_ATTEMPTS: number = 2;
 
 export type BootstrapContextTaskOrigin = {
@@ -47,12 +51,27 @@ export type ContextTaskOrigin =
       +definitionHash: string,
       +clusterId: string,
     }
+  | {
+      +kind: 'evidence-surface',
+      +protocolVersion: string,
+      +assumptionArtifactHash: string,
+      +runtimeInterface: 'playwright',
+      +packageRoot: string,
+      +collectorPath: string,
+      +configPath: string,
+      +expectedObservations: RuntimeExpectedObservations,
+      +cases: $ReadOnlyArray<RuntimeCaseDefinition>,
+      +limitations: $ReadOnlyArray<string>,
+    }
   | BootstrapContextTaskOrigin;
 
 export type ContextRequiredOutput = {
   +path: string,
   +targetHash: string,
-  +role: 'generated-theme-module',
+  +role:
+    | 'generated-theme-module'
+    | 'runtime-probe-collector'
+    | 'runtime-probe-config',
   +mutable: false,
 };
 
@@ -202,6 +221,23 @@ function normalizeOrigin(
     }
     return Object.freeze({ ...origin });
   }
+  if (origin.kind === 'evidence-surface') {
+    if (
+      origin.protocolVersion === '' ||
+      !/^[a-f0-9]{64}$/.test(origin.assumptionArtifactHash) ||
+      origin.runtimeInterface !== 'playwright' ||
+      (origin.packageRoot !== '.' && !safeRelativePath(origin.packageRoot)) ||
+      !safeRelativePath(origin.collectorPath) ||
+      !safeRelativePath(origin.configPath) ||
+      origin.collectorPath === origin.configPath ||
+      !Array.isArray(origin.cases) ||
+      origin.cases.length === 0 ||
+      !Array.isArray(origin.limitations)
+    ) {
+      throw new Error('Invalid evidence-surface task origin');
+    }
+    return immutableJson(origin) as $FlowFixMe;
+  }
   if (origin.kind === 'bootstrap') {
     const dependencies = origin.dependencies;
     const installCommands = origin.installCommands;
@@ -290,7 +326,11 @@ function normalizeRequiredOutputs(
       output.path === '' ||
       !safeRelativePath(output.path) ||
       output.targetHash === '' ||
-      output.role !== 'generated-theme-module' ||
+      ![
+        'generated-theme-module',
+        'runtime-probe-collector',
+        'runtime-probe-config',
+      ].includes(output.role) ||
       output.mutable !== false ||
       !scope.allowedPaths.includes(output.path) ||
       scope.protectedPaths.some((pattern) =>

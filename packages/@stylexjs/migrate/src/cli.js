@@ -84,6 +84,7 @@ import {
 } from './assumption/records';
 import { VERSION } from './version';
 import { inspectRuntimeSurfaces } from './runtime/discover';
+import { openEvidenceSurfaceTask } from './runtime/evidenceSurfaceTask';
 import { inspectThemeTopology } from './theme/topology';
 
 type WriteOutput = (text: string) => mixed;
@@ -119,6 +120,8 @@ Commands:
   assumption inspect <assumption>
                           show an assumption and whether its inputs are current
   runtime inspect         find repository-native rendering/test surfaces
+  runtime probe open <assumption> <json-file> <goal>
+                          open a locked generated Playwright evidence surface
   theme draft <json-file> <author>
                           validate and persist a theme token-map draft
   theme candidates        list exact styled-theme consumer batches and blockers
@@ -1137,6 +1140,47 @@ export function runCli(
         stdout,
       );
       return 0;
+    }
+    if (
+      args[0] === 'runtime' &&
+      args[1] === 'probe' &&
+      args[2] === 'open' &&
+      args.length === 6
+    ) {
+      const project = openProject(cwd);
+      const source = path.resolve(cwd, args[4]);
+      const input = parseJson(fs.readFileSync(source, 'utf8'), source);
+      const result = openEvidenceSurfaceTask({
+        project,
+        assumptionId: args[3],
+        input,
+        goal: args[5],
+      });
+      present(
+        result.ok
+          ? {
+              command: 'runtime probe open',
+              state: result.state,
+              taskId: result.task.id,
+              attemptId: result.attempt.id,
+              workspace: result.attempt.workspace.path,
+              origin: result.task.origin,
+              allowedPaths: result.task.scope.allowedPaths,
+              requiredOutputs: result.task.requiredOutputs,
+              warnings: result.task.limitations.filter((item) =>
+                item.startsWith('WARNING:'),
+              ),
+              next: `Submit this immutable evidence surface with stylex-migrate context submit ${result.task.id} <agent|human> <name> <version> [skill-version], then verify it together with the migration candidates named by its runtime cases.`,
+            }
+          : {
+              command: 'runtime probe open',
+              state: result.state,
+              reasons: result.reasons,
+            },
+        json,
+        stdout,
+      );
+      return result.ok ? 0 : result.state === 'needs-owner-decision' ? 3 : 2;
     }
     if (args[0] === 'status' && args.length === 1) {
       const project = openProject(cwd);

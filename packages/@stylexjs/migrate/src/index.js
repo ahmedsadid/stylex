@@ -303,6 +303,25 @@ export type {
   RuntimeSurfaceKind,
 } from './runtime/discover';
 export { aggregateRuntimeCoverage } from './runtime/coverage';
+export {
+  EVIDENCE_SURFACE_PROTOCOL_VERSION,
+  normalizeEvidenceSurfaceDefinition,
+} from './runtime/evidenceSurfaceModel';
+export type {
+  EvidenceSurfaceDefinition,
+  RuntimeProbeAction,
+  RuntimeProbeCase,
+  RuntimeProbeTarget,
+} from './runtime/evidenceSurfaceModel';
+export {
+  EVIDENCE_SURFACE_TASK_VERSION,
+  openEvidenceSurfaceTask,
+} from './runtime/evidenceSurfaceTask';
+export {
+  GENERATED_RUNTIME_COLLECTOR_VERSION,
+  emitGeneratedRuntimeCollector,
+} from './runtime/collector';
+export { withGeneratedRuntimeProbeProviders } from './runtime/evidence';
 export type {
   RuntimeCaseCoverageEntry,
   RuntimeCaseCoverageStatus,

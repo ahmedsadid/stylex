@@ -14,6 +14,7 @@ import {
 } from '../candidate/workspace';
 import { recordContextVerificationOutcome } from '../context/lifecycle';
 import { withBootstrapEvidenceProviders } from '../bootstrap/evidence';
+import { withGeneratedRuntimeProbeProviders } from '../runtime/evidence';
 import { assertActiveThemeCandidateDecisions } from '../theme/decisions';
 import { appendStateEvent } from '../state/events';
 import { readConfig } from '../state/project';
@@ -81,11 +82,17 @@ export async function verifyPersistedCandidates({
     subjectInputs.length === 1
       ? createCandidateEvidenceSubject(subjectInputs[0])
       : createApplyPlanEvidenceSubject(subjectInputs);
-  const config = withBootstrapEvidenceProviders({
+  const bootstrapConfig = withBootstrapEvidenceProviders({
     project,
     candidates,
     subject: subject.kind,
     config: readConfig(project).evidence,
+  });
+  const config = withGeneratedRuntimeProbeProviders({
+    project,
+    candidates,
+    subject: subject.kind,
+    config: bootstrapConfig,
   });
   const workspace = createVerificationWorkspace({
     records: candidates,
