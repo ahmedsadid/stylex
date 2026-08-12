@@ -104,11 +104,31 @@ export type BootstrapRspackProviderConfig = {
   +timeoutMs: number,
 };
 
+export type BootstrapBabelProviderConfig = {
+  +id: string,
+  +kind: 'bootstrap-babel',
+  +check: 'build',
+  +checkVersion: string,
+  +subject: EvidenceSubjectKind,
+  +cost: EvidenceCost,
+  +packageManager: 'pnpm' | 'yarn' | 'npm',
+  +packageRoot: string,
+  +buildCommand: $ReadOnlyArray<string>,
+  +argv: $ReadOnlyArray<string>,
+  +versionArgv: $ReadOnlyArray<string>,
+  +cwd: string,
+  +allowedEnv: $ReadOnlyArray<string>,
+  +fileGlobs: $ReadOnlyArray<string>,
+  +limitations: $ReadOnlyArray<string>,
+  +timeoutMs: number,
+};
+
 export type EvidenceProviderConfig =
   | CommandProviderConfig
   | RuntimeCommandProviderConfig
   | GeneratedRuntimeProbeProviderConfig
-  | BootstrapRspackProviderConfig;
+  | BootstrapRspackProviderConfig
+  | BootstrapBabelProviderConfig;
 
 export type EvidenceConfig = {
   +concurrency: number,
@@ -209,10 +229,13 @@ function commonFields(provider: $FlowFixMe): $FlowFixMe {
   };
 }
 
-function bootstrapFields(provider: $FlowFixMe): $FlowFixMe {
+function bootstrapFields(
+  provider: $FlowFixMe,
+  integration: string,
+): $FlowFixMe {
   return commonFields({
     ...provider,
-    argv: ['stylex-migrate', 'internal', 'bootstrap-rspack'],
+    argv: ['stylex-migrate', 'internal', `bootstrap-${integration}`],
     versionArgv: ['stylex-migrate', '--version'],
   });
 }
@@ -222,10 +245,17 @@ function normalizeProvider(value: mixed): EvidenceProviderConfig {
   if (
     !object(provider) ||
     !validCommonProvider(
-      provider.kind === 'bootstrap-rspack'
+      provider.kind === 'bootstrap-rspack' ||
+        provider.kind === 'bootstrap-babel'
         ? {
             ...provider,
-            argv: ['stylex-migrate', 'internal', 'bootstrap-rspack'],
+            argv: [
+              'stylex-migrate',
+              'internal',
+              provider.kind === 'bootstrap-babel'
+                ? 'bootstrap-babel'
+                : 'bootstrap-rspack',
+            ],
             versionArgv: ['stylex-migrate', '--version'],
           }
         : provider,
@@ -283,7 +313,8 @@ function normalizeProvider(value: mixed): EvidenceProviderConfig {
     });
   }
   if (
-    provider.kind === 'bootstrap-rspack' &&
+    (provider.kind === 'bootstrap-rspack' ||
+      provider.kind === 'bootstrap-babel') &&
     provider.check === 'build' &&
     (provider.packageManager === 'pnpm' ||
       provider.packageManager === 'yarn' ||
@@ -292,8 +323,11 @@ function normalizeProvider(value: mixed): EvidenceProviderConfig {
     nonEmptyStrings(provider.buildCommand)
   ) {
     return Object.freeze({
-      ...bootstrapFields(provider),
-      kind: 'bootstrap-rspack',
+      ...bootstrapFields(
+        provider,
+        provider.kind === 'bootstrap-babel' ? 'babel' : 'rspack',
+      ),
+      kind: provider.kind,
       check: 'build',
       packageManager: provider.packageManager,
       packageRoot: provider.packageRoot,
@@ -306,7 +340,11 @@ function normalizeProvider(value: mixed): EvidenceProviderConfig {
 export function isRepositoryCheckProvider(
   provider: EvidenceProviderConfig,
 ): boolean {
-  return provider.kind === 'command' || provider.kind === 'bootstrap-rspack';
+  return (
+    provider.kind === 'command' ||
+    provider.kind === 'bootstrap-rspack' ||
+    provider.kind === 'bootstrap-babel'
+  );
 }
 
 export function normalizeEvidenceConfig(value?: mixed): EvidenceConfig {

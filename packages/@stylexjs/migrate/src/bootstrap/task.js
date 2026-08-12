@@ -20,11 +20,18 @@ import { canonicalJson } from '../state/json';
 import { readConfig } from '../state/project';
 import { inspectBootstrap } from './discover';
 import { VERSION } from '../version';
+import fs from 'fs';
+import path from 'path';
 import {
   bootstrapRspackProviderId,
   RSPACK_SENTINEL_CHECK_VERSION,
   RSPACK_SENTINEL_LIMITATION,
 } from './provider';
+import {
+  BABEL_SENTINEL_CHECK_VERSION,
+  BABEL_SENTINEL_LIMITATION,
+  bootstrapBabelProviderId,
+} from './babelProvider';
 import type { ContextOpenResult } from '../context/lifecycle';
 import type { Cluster } from '../inventory/model';
 import type { ProjectState } from '../state/project';
@@ -45,16 +52,29 @@ type DependencyIntent = {
 };
 
 function dependencyIntents(
+  integration: BuildIntegrationKind,
   stylexSpec: string,
   integrationSpec: string,
   unpluginSpec: string,
+  integrationSection: 'dependencies' | 'devDependencies' = 'devDependencies',
 ): $ReadOnlyArray<DependencyIntent> {
+  const runtime = Object.freeze({
+    name: '@stylexjs/stylex',
+    spec: stylexSpec,
+    section: 'dependencies',
+  });
+  if (integration === 'babel') {
+    return Object.freeze([
+      runtime,
+      Object.freeze({
+        name: '@stylexjs/babel-plugin',
+        spec: integrationSpec,
+        section: integrationSection,
+      }),
+    ]);
+  }
   return Object.freeze([
-    Object.freeze({
-      name: '@stylexjs/stylex',
-      spec: stylexSpec,
-      section: 'dependencies',
-    }),
+    runtime,
     Object.freeze({
       name: '@stylexjs/unplugin',
       spec: integrationSpec,
@@ -66,6 +86,25 @@ function dependencyIntents(
       section: 'devDependencies',
     }),
   ]);
+}
+
+function integrationDependencySection(
+  repositoryRoot: string,
+  manifestPath: string,
+): 'dependencies' | 'devDependencies' {
+  try {
+    const manifest = JSON.parse(
+      fs.readFileSync(path.join(repositoryRoot, manifestPath), 'utf8'),
+    );
+    if (
+      manifest?.private === true &&
+      manifest.devDependencies == null &&
+      manifest.dependencies != null
+    ) {
+      return 'dependencies';
+    }
+  } catch (_error) {}
+  return 'devDependencies';
 }
 
 function installCommands({
@@ -82,16 +121,18 @@ function installCommands({
   if (packageRoot !== '' && packageName == null) {
     throw new Error('A nested bootstrap package requires a package name');
   }
-  const runtime = dependencies.find(
+  const runtime = dependencies.filter(
     (dependency) => dependency.section === 'dependencies',
   );
   const development = dependencies.filter(
     (dependency) => dependency.section === 'devDependencies',
   );
-  if (runtime == null || development.length === 0) {
+  if (runtime.length === 0) {
     throw new Error('Bootstrap dependency intent is incomplete');
   }
-  const runtimeSpec = `${runtime.name}@${runtime.spec}`;
+  const runtimeSpecs = runtime.map(
+    (dependency) => `${dependency.name}@${dependency.spec}`,
+  );
   const developmentSpecs = development.map(
     (dependency) => `${dependency.name}@${dependency.spec}`,
   );
@@ -105,51 +146,85 @@ function installCommands({
         ...target,
         'add',
         '--save-exact',
-        runtimeSpec,
+        ...runtimeSpecs,
       ]),
-      Object.freeze([
-        'corepack',
-        'pnpm',
-        ...target,
-        'add',
-        '--save-exact',
-        '--save-dev',
-        ...developmentSpecs,
-      ]),
+      ...(developmentSpecs.length === 0
+        ? []
+        : [
+            Object.freeze([
+              'corepack',
+              'pnpm',
+              ...target,
+              'add',
+              '--save-exact',
+              '--save-dev',
+              ...developmentSpecs,
+            ]),
+          ]),
     ]);
   }
   if (manager === 'yarn') {
     const prefix =
       packageRoot === ''
-        ? ['corepack', 'yarn']
+        ? ['corepack', 'yarn', 'add', '--ignore-workspace-root-check']
         : ['corepack', 'yarn', 'workspace', String(packageName)];
+    if (packageRoot === '') {
+      return Object.freeze([
+        Object.freeze([...prefix, '--exact', ...runtimeSpecs]),
+        ...(developmentSpecs.length === 0
+          ? []
+          : [
+              Object.freeze([
+                ...prefix,
+                '--exact',
+                '--dev',
+                ...developmentSpecs,
+              ]),
+            ]),
+      ]);
+    }
     return Object.freeze([
-      Object.freeze([...prefix, 'add', '--exact', runtimeSpec]),
-      Object.freeze([
-        ...prefix,
-        'add',
-        '--exact',
-        '--dev',
-        ...developmentSpecs,
-      ]),
+      Object.freeze([...prefix, 'add', '--exact', ...runtimeSpecs]),
+      ...(developmentSpecs.length === 0
+        ? []
+        : [
+            Object.freeze([
+              ...prefix,
+              'add',
+              '--exact',
+              '--dev',
+              ...developmentSpecs,
+            ]),
+          ]),
     ]);
   }
   const target = packageRoot === '' ? [] : ['--workspace', String(packageName)];
   return Object.freeze([
-    Object.freeze(['npm', 'install', ...target, '--save-exact', runtimeSpec]),
     Object.freeze([
       'npm',
       'install',
       ...target,
       '--save-exact',
-      '--save-dev',
-      ...developmentSpecs,
+      ...runtimeSpecs,
     ]),
+    ...(developmentSpecs.length === 0
+      ? []
+      : [
+          Object.freeze([
+            'npm',
+            'install',
+            ...target,
+            '--save-exact',
+            '--save-dev',
+            ...developmentSpecs,
+          ]),
+        ]),
   ]);
 }
 
 function preferredBuildScript(
   integration: BuildIntegrationInspection,
+  manifestPath: string,
 ): { +manifestPath: string, +name: string } | null {
   const scripts = integration.packageScripts.map((entry) => {
     const marker = '#scripts.';
@@ -161,12 +236,20 @@ function preferredBuildScript(
           name: entry.slice(index + marker.length),
         };
   });
-  const available = scripts.filter(Boolean) as $FlowFixMe;
+  const available = (scripts.filter(Boolean) as $FlowFixMe).filter(
+    (script) => script.manifestPath === manifestPath,
+  );
+  const candidates =
+    available.length > 0
+      ? available
+      : integration.kind === 'babel'
+        ? (scripts.filter(Boolean) as $FlowFixMe)
+        : available;
   for (const preferred of ['build-production', 'build']) {
-    const match = available.find((script) => script.name === preferred);
+    const match = candidates.find((script) => script.name === preferred);
     if (match != null) return match;
   }
-  return available.length === 1 ? available[0] : null;
+  return candidates.length === 1 ? candidates[0] : null;
 }
 
 function buildCommand({
@@ -223,6 +306,19 @@ function choosePackage(
   const nested = inspection.packages.filter((target) => target.root !== '');
   if (nested.length === 1) return nested[0];
   return 'Bootstrap package ownership is ambiguous; select an exact package root.';
+}
+
+function packageForSourceFiles(
+  inspection: BootstrapInspection,
+  files: $ReadOnlyArray<string>,
+): BootstrapPackageInspection | null {
+  const matches = inspection.packages.filter((candidate) =>
+    files.some(
+      (file) => candidate.root !== '' && file.startsWith(`${candidate.root}/`),
+    ),
+  );
+  matches.sort((a, b) => b.root.length - a.root.length);
+  return matches[0] ?? null;
 }
 
 function chooseIntegration(
@@ -331,7 +427,15 @@ export function openBootstrapTask({
     };
   }
   const packageManager = manager.name;
-  const selectedPackage = choosePackage(inspection, packageRoot);
+  const selectedPackage =
+    packageRoot == null
+      ? (packageForSourceFiles(
+          inspection,
+          inventory.files
+            .filter((file) => file.siteIds.length > 0)
+            .map((file) => file.path),
+        ) ?? choosePackage(inspection, null))
+      : choosePackage(inspection, packageRoot);
   if (typeof selectedPackage === 'string') {
     return {
       ok: false,
@@ -375,7 +479,8 @@ export function openBootstrapTask({
     };
   }
   if (
-    selectedIntegration.kind !== 'rspack' ||
+    (selectedIntegration.kind !== 'rspack' &&
+      selectedIntegration.kind !== 'babel') ||
     selectedIntegration.stylexConfigured
   ) {
     return {
@@ -388,10 +493,16 @@ export function openBootstrapTask({
       ]),
     };
   }
-  const selectedBuildScript = preferredBuildScript(selectedIntegration);
+  const selectedBuildScript = preferredBuildScript(
+    selectedIntegration,
+    selectedPackage.manifestPath,
+  );
   if (
     selectedBuildScript == null ||
-    selectedBuildScript.manifestPath !== selectedPackage.manifestPath
+    !inspection.packages.some(
+      (candidate) =>
+        candidate.manifestPath === selectedBuildScript.manifestPath,
+    )
   ) {
     return {
       ok: false,
@@ -435,9 +546,14 @@ export function openBootstrapTask({
   }
   const cluster = workUnit({ inspection, changeFiles });
   const dependencies = dependencyIntents(
+    selectedIntegration.kind,
     stylexSpec,
     integrationSpec,
     unpluginSpec,
+    integrationDependencySection(
+      project.repositoryRoot,
+      selectedPackage.manifestPath,
+    ),
   );
   const commands = installCommands({
     manager: packageManager,
@@ -447,8 +563,16 @@ export function openBootstrapTask({
   });
   const repositoryBuildCommand = buildCommand({
     manager: packageManager,
-    packageName: selectedPackage.name,
-    packageRoot: selectedPackage.root,
+    packageName:
+      inspection.packages.find(
+        (candidate) =>
+          candidate.manifestPath === selectedBuildScript.manifestPath,
+      )?.name ?? null,
+    packageRoot:
+      inspection.packages.find(
+        (candidate) =>
+          candidate.manifestPath === selectedBuildScript.manifestPath,
+      )?.root ?? '',
     script: selectedBuildScript.name,
   });
   const task = createContextTaskCapsule({
@@ -492,11 +616,21 @@ export function openBootstrapTask({
         limitations: provider.limitations,
       })),
       {
-        id: bootstrapRspackProviderId(inspection.id),
+        id:
+          selectedIntegration.kind === 'babel'
+            ? bootstrapBabelProviderId(inspection.id)
+            : bootstrapRspackProviderId(inspection.id),
         check: 'build',
-        checkVersion: RSPACK_SENTINEL_CHECK_VERSION,
+        checkVersion:
+          selectedIntegration.kind === 'babel'
+            ? BABEL_SENTINEL_CHECK_VERSION
+            : RSPACK_SENTINEL_CHECK_VERSION,
         subject: 'candidate',
-        limitations: [RSPACK_SENTINEL_LIMITATION],
+        limitations: [
+          selectedIntegration.kind === 'babel'
+            ? BABEL_SENTINEL_LIMITATION
+            : RSPACK_SENTINEL_LIMITATION,
+        ],
       },
     ],
     limitations: [
@@ -506,7 +640,7 @@ export function openBootstrapTask({
         : []),
       ...(config.evidence.providers.length === 0
         ? [
-            'Only the built-in isolated Rspack sentinel is configured; the repository application build is not covered.',
+            `Only the built-in isolated ${selectedIntegration.kind} sentinel is configured; the repository application build is not covered.`,
           ]
         : []),
     ],

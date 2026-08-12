@@ -11,7 +11,7 @@ stylex-migrate plan
 stylex-migrate mechanical propose <cluster-id>
 stylex-migrate styled propose <cluster-id>
 stylex-migrate bootstrap inspect
-stylex-migrate bootstrap open "<goal>" [package-root] [stylex-spec] [integration-spec] [unplugin-spec]
+stylex-migrate bootstrap open "<goal>" [package-root] [stylex-spec] [integration-spec] [unplugin-spec] [integration-kind]
 stylex-migrate candidate diff <candidate-id>
 stylex-migrate dynamic strategy draft <json-file> <agent|human> <author>
 stylex-migrate dynamic strategy inspect <draft-id>
@@ -67,19 +67,19 @@ evidence remains a prominent limitation.
 
 `bootstrap inspect` reports the exact package-manager, package ownership,
 lockfile, build integration, config inputs, and existing StyleX dependencies
-seen from the current inventory. `bootstrap open` currently accepts one
-unambiguous Rspack target and creates a normal contextual task whose
-`bootstrapPaths` authorize only the discovered manifest, lockfile, and config.
-Submission requires the StyleX packages, a changed lockfile, and syntactic
-`.rspack(...)` adapter wiring. Verification automatically installs the locked
-candidate dependencies, compiles a real emitted-CSS sentinel, and runs the exact
-selected repository application build command. Without a real migrated consumer,
-only the isolated sentinel proves emitted StyleX CSS. The optional StyleX and
-integration specs default to the migrate package version; omitting only the
-integration spec reuses the StyleX spec. The unplugin peer defaults to
-`^2.3.11`. Supplying another literal is an explicit developer choice recorded in
-the task origin. The agent must run the returned `installCommands` argv arrays
-exactly.
+seen from the current inventory. `bootstrap open` accepts an exact Rspack or
+Babel target and creates a normal contextual task whose `bootstrapPaths`
+authorize only the discovered manifest, lockfile, and config. Submission
+requires the integration-specific StyleX packages, a changed lockfile, and
+bounded syntactic wiring. Verification automatically installs the locked
+candidate dependencies, compiles a real emitted-CSS sentinel (including runtime
+injection for Babel), and runs the exact selected repository application build
+command. Without a real migrated consumer, only the isolated sentinel proves
+emitted StyleX CSS. The optional StyleX and integration specs default to the
+migrate package version; omitting only the integration spec reuses the StyleX
+spec. The unplugin peer defaults to `^2.3.11`. Supplying another literal is an
+explicit developer choice recorded in the task origin. The agent must run the
+returned `installCommands` argv arrays exactly.
 
 `dynamic strategy draft` validates exact coverage of every observed prop path in
 one current planned `styled-dynamic-intrinsic` cluster and activates the

@@ -180,6 +180,109 @@ function pluginArray(node: $FlowFixMe): boolean {
   );
 }
 
+function babelPluginEntry(node: $FlowFixMe): boolean {
+  if (
+    node?.type === 'StringLiteral' &&
+    node.value === '@stylexjs/babel-plugin'
+  ) {
+    return true;
+  }
+  if (
+    node?.type !== 'ArrayExpression' ||
+    node.elements?.[0]?.type !== 'StringLiteral' ||
+    node.elements[0].value !== '@stylexjs/babel-plugin'
+  ) {
+    return false;
+  }
+  const options = node.elements[1];
+  return (
+    options?.type === 'ObjectExpression' &&
+    options.properties.some(
+      (property) =>
+        property?.type === 'ObjectProperty' &&
+        property.computed !== true &&
+        ((property.key?.type === 'Identifier' &&
+          property.key.name === 'runtimeInjection') ||
+          (property.key?.type === 'StringLiteral' &&
+            property.key.value === 'runtimeInjection')) &&
+        property.value?.type === 'BooleanLiteral' &&
+        property.value.value === true,
+    )
+  );
+}
+
+function normalizedBabelConfigAst(
+  value: mixed,
+  inPlugins: boolean = false,
+): mixed {
+  if (Array.isArray(value)) {
+    return value
+      .filter((item) => !(inPlugins && babelPluginEntry(item)))
+      .map((item) => normalizedBabelConfigAst(item, false));
+  }
+  if (value == null || typeof value !== 'object') return value;
+  const node: $FlowFixMe = value;
+  const output: { [string]: mixed } = {};
+  for (const key of Object.keys(node).sort()) {
+    if (
+      key === 'start' ||
+      key === 'end' ||
+      key === 'loc' ||
+      key === 'extra' ||
+      key === 'comments' ||
+      key === 'leadingComments' ||
+      key === 'trailingComments' ||
+      key === 'innerComments' ||
+      key === 'tokens' ||
+      key === 'errors'
+    ) {
+      continue;
+    }
+    const childInPlugins =
+      (pluginArray(node) && key === 'value') ||
+      (inPlugins && node.type === 'ArrayExpression' && key === 'elements');
+    output[key] = normalizedBabelConfigAst(node[key], childInPlugins);
+  }
+  return output;
+}
+
+function babelConfigChangeIsBounded(
+  source: string,
+  target: string,
+  file: string,
+): boolean {
+  const before = parseSource(source, file);
+  const after = parseSource(target, file);
+  return (
+    before.ok &&
+    after.ok &&
+    canonicalJson(normalizedBabelConfigAst(before.ast) as $FlowFixMe) ===
+      canonicalJson(normalizedBabelConfigAst(after.ast) as $FlowFixMe)
+  );
+}
+
+function babelWired(source: string, file: string): boolean {
+  const parsed = parseSource(source, file);
+  if (!parsed.ok) return false;
+  let wired = false;
+  walk(parsed.ast, (node) => {
+    if (
+      pluginArray(node) &&
+      node.value.elements.some((element) => babelPluginEntry(element))
+    ) {
+      wired = true;
+    }
+  });
+  return wired;
+}
+
+function integrationConfigPath(integration: string, file: string): boolean {
+  if (integration === 'babel') {
+    return /(?:^|\/)(?:\.babelrc(?:\.[^/]+)?|babel\.config\.[^/]+)$/.test(file);
+  }
+  return file.includes(`${integration}.config.`);
+}
+
 function normalizedConfigAst(
   value: mixed,
   bindings: Set<string>,
@@ -336,7 +439,7 @@ export function inspectBootstrapCandidate({
   }
 
   const configPaths = bootstrapPaths.filter((file) =>
-    file.includes(`${origin.integration}.config.`),
+    integrationConfigPath(origin.integration, file),
   );
   if (configPaths.length === 0) {
     violations.push(
@@ -362,6 +465,29 @@ export function inspectBootstrapCandidate({
       ) {
         violations.push(
           `${file}: bootstrap may add only the StyleX unplugin import and direct rspack adapter entries in plugins arrays.`,
+        );
+      }
+    }
+  } else if (origin.integration === 'babel') {
+    const wired = configPaths.some((file) => {
+      const source = sourceAt(candidate, file);
+      return source != null && babelWired(source, file);
+    });
+    if (!wired) {
+      violations.push(
+        'No authorized Babel config enables @stylexjs/babel-plugin with runtimeInjection: true.',
+      );
+    }
+    for (const file of configPaths) {
+      const source = baseSourceAt(candidate, file);
+      const target = sourceAt(candidate, file);
+      if (
+        source != null &&
+        target != null &&
+        !babelConfigChangeIsBounded(source, target, file)
+      ) {
+        violations.push(
+          `${file}: bootstrap may add only the StyleX Babel plugin entry with runtime injection enabled.`,
         );
       }
     }

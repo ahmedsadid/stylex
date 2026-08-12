@@ -112,7 +112,7 @@ Commands:
   styled propose <cluster>
                           freeze a checked closed-intrinsic styled candidate
   bootstrap inspect       inspect package manager, package, and build wiring
-  bootstrap open <goal> [package-root] [stylex-spec] [integration-spec] [unplugin-spec]
+  bootstrap open <goal> [package-root] [stylex-spec] [integration-spec] [unplugin-spec] [integration-kind]
                           open a bounded StyleX installation/config task
   candidate diff <candidate>
                           print the exact frozen patch without applying it
@@ -732,9 +732,10 @@ export function runCli(
           inspection: inspection as $FlowFixMe,
           next: inspection.integrations.some(
             (integration) =>
-              integration.kind === 'rspack' && !integration.stylexConfigured,
+              (integration.kind === 'rspack' || integration.kind === 'babel') &&
+              !integration.stylexConfigured,
           )
-            ? 'Run stylex-migrate bootstrap open "Install StyleX and wire the discovered Rspack build."'
+            ? 'Run stylex-migrate bootstrap open with the exact package root and integration kind when discovery is ambiguous.'
             : null,
         },
         json,
@@ -749,12 +750,14 @@ export function runCli(
         args.length === 4 ||
         args.length === 5 ||
         args.length === 6 ||
-        args.length === 7)
+        args.length === 7 ||
+        args.length === 8)
     ) {
       const result = openBootstrapTask({
         project: openProject(cwd),
         goal: args[2],
         packageRoot: args[3] == null ? null : args[3] === '.' ? '' : args[3],
+        integration: args[7] == null ? null : (args[7] as $FlowFixMe),
         stylexSpec: args[4] ?? VERSION,
         integrationSpec: args[5] ?? args[4] ?? VERSION,
         unpluginSpec: args[6] ?? '^2.3.11',
@@ -780,7 +783,7 @@ export function runCli(
               requiredChecks: result.task.requiredChecks,
               warnings: result.task.limitations,
               stopConditions: result.task.stopConditions,
-              next: `Run the exact installCommands in the workspace, update only the authorized Rspack config bytes, then run stylex-migrate context submit ${result.task.id} <agent|human> <name> <version> [skill-version].`,
+              next: `Run the exact installCommands in the workspace, update only the authorized ${result.task.origin.kind === 'bootstrap' ? result.task.origin.integration : 'build'} config bytes, then run stylex-migrate context submit ${result.task.id} <agent|human> <name> <version> [skill-version].`,
             }
           : {
               command: 'bootstrap open',

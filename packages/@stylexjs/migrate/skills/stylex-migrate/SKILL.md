@@ -71,24 +71,25 @@ StyleX build integration.
    an open `bootstrap` task. Read its complete capsule and stop conditions.
 3. Work only in the returned workspace. For this task alone, the exact
    `scope.bootstrapPaths` entries authorize the discovered package manifest,
-   lockfile, and Rspack config. They do not authorize any other configuration or
-   application source.
+   lockfile, and Rspack or Babel config. They do not authorize any other
+   configuration or application source.
 4. Run each exact argv array in `task.origin.installCommands` directly in the
    workspace without a shell. Do not substitute another version, source,
-   package, package manager, flag, or working tree. Then wire the unplugin's
-   `.rspack(...)` adapter into the discovered config while preserving existing
-   plugins and options. Do not add unrelated dependencies, scripts, entry files,
-   or migrations.
+   package, package manager, flag, or working tree. For Rspack, wire the
+   unplugin's `.rspack(...)` adapter. For Babel, add
+   `['@stylexjs/babel-plugin', {runtimeInjection: true}]` to the existing plugin
+   array. Preserve existing plugins and options. Do not add unrelated
+   dependencies, scripts, entry files, or migrations.
 5. Submit with `stylex-migrate context submit`, then inspect the frozen patch
    and run `stylex-migrate verify <candidate-id>` and
    `stylex-migrate review <candidate-id>`.
 6. Report the two different evidence boundaries. The frozen wiring guard proves
-   required declarations and syntactic adapter wiring. The built-in Rspack
+   required declarations and syntactic adapter wiring. The integration-specific
    sentinel performs a frozen-lockfile install and requires transformed
-   JavaScript plus emitted CSS, then runs the capsule's exact repository build
-   argv against the candidate config. Until a real migrated StyleX consumer is
-   in that build, the sentinel—not the application output—is the emitted-CSS
-   proof. Keep that limitation explicit.
+   JavaScript plus emitted CSS (and Babel runtime injection), then runs the
+   capsule's exact repository build argv against the candidate config. Until a
+   real migrated StyleX consumer is in that build, the sentinel—not the
+   application output—is the emitted-CSS proof. Keep that limitation explicit.
 
 ## Run a mechanical proposal
 

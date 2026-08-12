@@ -338,7 +338,12 @@ function scriptsForKind(
     }
     for (const name of Object.keys(values).sort()) {
       const command = values[name];
-      if (typeof command === 'string' && command.includes(needle)) {
+      if (
+        typeof command === 'string' &&
+        (command.includes(needle) ||
+          (kind === 'babel' &&
+            (name === 'build' || name === 'build-production')))
+      ) {
         scripts.push(`${manifest.path}#scripts.${name}`);
       }
     }
@@ -419,7 +424,10 @@ function inspectIntegrations(
         }
       }
     }
-    const scripts = scriptsForKind(manifests, kind);
+    const scripts =
+      kind === 'babel' && configs.length === 0
+        ? Object.freeze([])
+        : scriptsForKind(manifests, kind);
     if (configs.length === 0 && scripts.length === 0 && !readFailed) {
       continue;
     }

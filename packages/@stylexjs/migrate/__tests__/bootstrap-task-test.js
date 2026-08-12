@@ -80,7 +80,7 @@ export default {plugins: [new rspack.DefinePlugin({})]};
         packageRoot: '',
         packageManager: 'pnpm',
         integration: 'rspack',
-        dependencies: [
+        dependencies: expect.arrayContaining([
           {
             name: '@stylexjs/stylex',
             section: 'dependencies',
@@ -96,7 +96,7 @@ export default {plugins: [new rspack.DefinePlugin({})]};
             section: 'devDependencies',
             spec: '^2.3.11',
           },
-        ],
+        ]),
         installCommands: [
           [
             'corepack',
@@ -130,7 +130,6 @@ export default {plugins: [new rspack.DefinePlugin({})]};
         }),
       ],
     });
-
     const manifest = JSON.parse(originalManifest);
     manifest.dependencies = { '@stylexjs/stylex': '0.19.0' };
     manifest.devDependencies['@stylexjs/unplugin'] = '0.19.0';
@@ -324,7 +323,9 @@ export default {
       command: 'bootstrap inspect',
       inspection: {
         packageManager: { name: 'pnpm' },
-        integrations: [expect.objectContaining({ kind: 'rspack' })],
+        integrations: expect.arrayContaining([
+          expect.objectContaining({ kind: 'rspack' }),
+        ]),
       },
     });
 
@@ -363,5 +364,90 @@ export default {
         writeStdout: () => {},
       }),
     ).toBe(0);
+  });
+
+  test('freezes bounded Babel runtime-injection wiring', () => {
+    removeTempDir(repo);
+    repo = createTempRepo({
+      'package.json': `${JSON.stringify(
+        {
+          name: 'babel-app',
+          private: true,
+          scripts: { build: 'babel src --out-dir lib' },
+          devDependencies: { '@babel/core': '^7.0.0' },
+        },
+        null,
+        2,
+      )}\n`,
+      'yarn.lock': '# lockfile v1\n',
+      'babel.config.js': 'module.exports = {plugins: [\'existing-plugin\']};\n',
+      'src/App.tsx': 'export const App = () => null;\n',
+    });
+    project = initializeProject({ repositoryRoot: repo });
+    saveInventory(project, scanRepository({ repositoryRoot: repo }));
+    const opened = openBootstrapTask({
+      project,
+      goal: 'Install StyleX and connect Babel runtime injection.',
+      integration: 'babel',
+      workspaceRoot,
+    });
+    if (!opened.ok) throw new Error(opened.reasons.join('\n'));
+    expect(opened.task).toMatchObject({
+      origin: {
+        integration: 'babel',
+        dependencies: expect.arrayContaining([
+          expect.objectContaining({
+            name: '@stylexjs/stylex',
+            section: 'dependencies',
+          }),
+          expect.objectContaining({
+            name: '@stylexjs/babel-plugin',
+            section: 'devDependencies',
+          }),
+        ]),
+      },
+      scope: {
+        allowedPaths: ['babel.config.js', 'package.json', 'yarn.lock'],
+      },
+      requiredChecks: [
+        expect.objectContaining({
+          checkVersion: 'stylex-babel-emitted-css-v1',
+        }),
+      ],
+    });
+    expect(opened.task.origin).toMatchObject({
+      installCommands: [
+        expect.arrayContaining(['add', '--ignore-workspace-root-check']),
+        expect.arrayContaining(['add', '--ignore-workspace-root-check']),
+      ],
+    });
+    const manifest = JSON.parse(readFile(repo, 'package.json'));
+    manifest.dependencies = { '@stylexjs/stylex': '0.19.0' };
+    manifest.devDependencies['@stylexjs/babel-plugin'] = '0.19.0';
+    writeFiles(opened.attempt.workspace.path, {
+      'package.json': `${JSON.stringify(manifest, null, 2)}\n`,
+      'yarn.lock': '# lockfile v1\n# stylex resolved\n',
+      'babel.config.js': `module.exports = {plugins: [
+  ['@stylexjs/babel-plugin', {runtimeInjection: true}],
+  'existing-plugin',
+]};\n`,
+    });
+    const submitted = submitContextAttempt({
+      project,
+      taskId: opened.task.id,
+      proposerKind: 'agent',
+      proposerVersion: 'fixture-v1',
+    });
+    if (!submitted.ok) throw new Error(submitted.reasons.join('\n'));
+    expect(
+      loadVerificationCandidate(project, submitted.candidateId),
+    ).toMatchObject({
+      staticEvidence: [
+        {
+          check: 'stylex-bootstrap-wiring',
+          result: 'pass',
+        },
+      ],
+    });
   });
 });

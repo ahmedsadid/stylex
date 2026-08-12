@@ -56,6 +56,12 @@ export {
   bootstrapRspackProviderId,
   runBootstrapRspackProvider,
 } from './bootstrap/provider';
+export {
+  BABEL_SENTINEL_CHECK_VERSION,
+  BABEL_SENTINEL_LIMITATION,
+  bootstrapBabelProviderId,
+  runBootstrapBabelProvider,
+} from './bootstrap/babelProvider';
 
 export {
   RECORD_COLLECTIONS,
@@ -160,6 +166,7 @@ export type {
   EvidenceProviderRunner,
 } from './evidence/registry';
 export type {
+  BootstrapBabelProviderConfig,
   BootstrapRspackProviderConfig,
   CommandProviderConfig,
   EvidenceConfig,

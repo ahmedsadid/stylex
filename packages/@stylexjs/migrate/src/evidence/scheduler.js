@@ -250,7 +250,8 @@ export function createEvidenceSchedule({
           ? 2
           : provider.kind === 'generated-runtime-probe'
             ? 1
-            : provider.kind === 'bootstrap-rspack'
+            : provider.kind === 'bootstrap-rspack' ||
+                provider.kind === 'bootstrap-babel'
               ? 3
               : 1),
       0,
@@ -322,12 +323,14 @@ export async function runEvidenceSchedule({
       skipped.push(...tierItems.map((item) => item.providerId));
       continue;
     }
-    const setupItems = tierItems.filter(
-      (item) => selected.get(item.providerId)?.kind === 'bootstrap-rspack',
-    );
-    const comparisonItems = tierItems.filter(
-      (item) => selected.get(item.providerId)?.kind !== 'bootstrap-rspack',
-    );
+    const setupItems = tierItems.filter((item) => {
+      const kind = selected.get(item.providerId)?.kind;
+      return kind === 'bootstrap-rspack' || kind === 'bootstrap-babel';
+    });
+    const comparisonItems = tierItems.filter((item) => {
+      const kind = selected.get(item.providerId)?.kind;
+      return kind !== 'bootstrap-rspack' && kind !== 'bootstrap-babel';
+    });
     const runItems = async (
       items: $ReadOnlyArray<EvidenceScheduleItem>,
     ): Promise<$ReadOnlyArray<EvidenceRunEntry>> =>

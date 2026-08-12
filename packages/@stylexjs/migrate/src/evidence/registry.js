@@ -11,6 +11,7 @@ import { runCommandProvider } from './command';
 import { runRuntimeCommandProvider } from '../runtime/provider';
 import { runGeneratedRuntimeProbeProvider } from '../runtime/generatedProbe';
 import { runBootstrapRspackProvider } from '../bootstrap/provider';
+import { runBootstrapBabelProvider } from '../bootstrap/babelProvider';
 import type { CommandExecution, CommandExecutionContext } from './command';
 import type { EvidenceProviderConfig } from './config';
 
@@ -74,6 +75,12 @@ export function createEvidenceProviderRegistry(): EvidenceProviderRegistry {
       throw new Error('Bootstrap Rspack runner received another provider kind');
     }
     return runBootstrapRspackProvider(config, context);
+  });
+  registry.register('bootstrap-babel', (config, context) => {
+    if (config.kind !== 'bootstrap-babel') {
+      throw new Error('Bootstrap Babel runner received another provider kind');
+    }
+    return runBootstrapBabelProvider(config, context);
   });
   return Object.freeze(registry);
 }

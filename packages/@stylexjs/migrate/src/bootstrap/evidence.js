@@ -14,6 +14,11 @@ import {
   RSPACK_SENTINEL_CHECK_VERSION,
   RSPACK_SENTINEL_LIMITATION,
 } from './provider';
+import {
+  BABEL_SENTINEL_CHECK_VERSION,
+  BABEL_SENTINEL_LIMITATION,
+  bootstrapBabelProviderId,
+} from './babelProvider';
 import type { VerificationCandidate } from '../evidence/candidates';
 import type { EvidenceConfig, EvidenceSubjectKind } from '../evidence/config';
 import type { ProjectState } from '../state/project';
@@ -41,7 +46,10 @@ export function withBootstrapEvidenceProviders({
     if (taskId == null) continue;
     const inspection = inspectContextTask(project, taskId);
     const origin = inspection.task.origin;
-    if (origin.kind !== 'bootstrap' || origin.integration !== 'rspack') {
+    if (
+      origin.kind !== 'bootstrap' ||
+      (origin.integration !== 'rspack' && origin.integration !== 'babel')
+    ) {
       continue;
     }
     if (
@@ -65,11 +73,16 @@ export function withBootstrapEvidenceProviders({
         ),
       ]),
     ].sort();
+    const babel = origin.integration === 'babel';
     generated.push({
-      id: bootstrapRspackProviderId(origin.inspectionId),
-      kind: 'bootstrap-rspack',
+      id: babel
+        ? bootstrapBabelProviderId(origin.inspectionId)
+        : bootstrapRspackProviderId(origin.inspectionId),
+      kind: babel ? 'bootstrap-babel' : 'bootstrap-rspack',
       check: 'build',
-      checkVersion: RSPACK_SENTINEL_CHECK_VERSION,
+      checkVersion: babel
+        ? BABEL_SENTINEL_CHECK_VERSION
+        : RSPACK_SENTINEL_CHECK_VERSION,
       subject,
       cost: 'expensive',
       packageManager: origin.packageManager,
@@ -78,7 +91,9 @@ export function withBootstrapEvidenceProviders({
       cwd: '.',
       allowedEnv: ['CI', 'PATH'],
       fileGlobs,
-      limitations: [RSPACK_SENTINEL_LIMITATION],
+      limitations: [
+        babel ? BABEL_SENTINEL_LIMITATION : RSPACK_SENTINEL_LIMITATION,
+      ],
       timeoutMs: 15 * 60 * 1000,
     });
   }
