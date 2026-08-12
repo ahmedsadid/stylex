@@ -15,6 +15,8 @@ import type {
   RuntimeCaseDefinition,
   RuntimeExpectedObservations,
 } from '../runtime/model';
+import type { RuntimeSyntheticCssExpectations } from '../runtime/evidenceSurfaceModel';
+import { normalizeSyntheticCssExpectations } from '../runtime/evidenceSurfaceModel';
 
 export type RepositoryCheck = 'focused-test' | 'typecheck' | 'lint' | 'build';
 export type RuntimeCheck = 'runtime-render';
@@ -79,7 +81,8 @@ export type GeneratedRuntimeProbeProviderConfig = {
   +timeoutMs: number,
   +cases: $ReadOnlyArray<RuntimeCaseDefinition>,
   +assumptionArtifactHash: string,
-  +expectedObservations: RuntimeExpectedObservations,
+  +expectedObservations?: RuntimeExpectedObservations | null,
+  +syntheticCssExpectations?: RuntimeSyntheticCssExpectations | null,
 };
 
 export type BootstrapRspackProviderConfig = {
@@ -246,9 +249,13 @@ function normalizeProvider(value: mixed): EvidenceProviderConfig {
     if (
       provider.kind === 'generated-runtime-probe' &&
       (typeof provider.assumptionArtifactHash !== 'string' ||
-        !/^[a-f0-9]{64}$/.test(provider.assumptionArtifactHash))
+        !/^[a-f0-9]{64}$/.test(provider.assumptionArtifactHash) ||
+        (provider.expectedObservations == null) ===
+          (provider.syntheticCssExpectations == null))
     ) {
-      throw new Error('Invalid generated runtime probe assumption hash');
+      throw new Error(
+        'Invalid generated runtime probe assumption or expectation source',
+      );
     }
     return Object.freeze({
       ...commonFields(provider),
@@ -259,9 +266,18 @@ function normalizeProvider(value: mixed): EvidenceProviderConfig {
       ...(provider.kind === 'generated-runtime-probe'
         ? {
             assumptionArtifactHash: provider.assumptionArtifactHash,
-            expectedObservations: normalizeExpectedRuntimeObservations(
-              provider.expectedObservations,
-            ),
+            expectedObservations:
+              provider.expectedObservations == null
+                ? null
+                : normalizeExpectedRuntimeObservations(
+                    provider.expectedObservations,
+                  ),
+            syntheticCssExpectations:
+              provider.syntheticCssExpectations == null
+                ? null
+                : normalizeSyntheticCssExpectations(
+                    provider.syntheticCssExpectations,
+                  ),
           }
         : {}),
     });

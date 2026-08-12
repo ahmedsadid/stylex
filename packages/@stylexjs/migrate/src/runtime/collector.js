@@ -8,7 +8,7 @@
  */
 
 export const GENERATED_RUNTIME_COLLECTOR_VERSION: string =
-  'stylex-migrate-generated-collector-v1';
+  'stylex-migrate-generated-collector-v2';
 
 export function emitGeneratedRuntimeCollector(): string {
   return String.raw`'use strict';
@@ -61,15 +61,48 @@ async function observe(page, target) {
     for (const name of definition.attributes) attributes[name] = element.getAttribute(name);
     return {
       computed,
-      dom: {
+      dom: definition.observeDom ? {
         tagName: element.tagName,
         childCount: element.children.length,
         text: element.textContent,
-      },
+      } : null,
       attributes,
-      ref: {attached: element.isConnected, tagName: element.tagName},
+      ref: definition.observeRef
+        ? {attached: element.isConnected, tagName: element.tagName}
+        : null,
     };
   }, target);
+}
+async function normalizeSyntheticCss(page, expectedCase, runtimeCase) {
+  await page.setContent('<!doctype html><html><body></body></html>');
+  const computedStyles = await page.evaluate(definition => {
+    const output = {};
+    for (const [targetId, declarations] of Object.entries(definition)) {
+      const element = document.createElement('div');
+      document.body.append(element);
+      for (const [property, rawValue] of Object.entries(declarations)) {
+        if (property.startsWith('--')) element.style.setProperty(property, rawValue);
+        else element.style[property] = rawValue;
+        const assigned = property.startsWith('--')
+          ? element.style.getPropertyValue(property)
+          : element.style[property];
+        if (assigned === '') throw new Error('invalid synthetic CSS declaration ' + property + ': ' + rawValue);
+      }
+      const style = getComputedStyle(element);
+      output[targetId] = {};
+      for (const property of Object.keys(declarations)) {
+        output[targetId][property] = property.startsWith('--')
+          ? style.getPropertyValue(property).trim()
+          : style[property];
+      }
+    }
+    return output;
+  }, expectedCase.computedStyles);
+  const attributes = {};
+  for (const target of runtimeCase.targets) attributes[target.id] = {};
+  const interactions = {};
+  for (const action of runtimeCase.actions) interactions[action.id] = {completed: true};
+  return {computedStyles, dom: {}, attributes, refs: {}, interactions};
 }
 async function main() {
   const server = spawn(config.server.argv[0], config.server.argv.slice(1), {
@@ -86,27 +119,38 @@ async function main() {
     await waitForServer(config.server.url, config.server.timeoutMs, server);
     browser = await playwright.chromium.launch({headless: true});
     const results = [];
+    const expectedResults = [];
     for (const runtimeCase of config.cases) {
       const context = await browser.newContext({
         viewport: {width: runtimeCase.viewport.width, height: runtimeCase.viewport.height},
         deviceScaleFactor: runtimeCase.viewport.deviceScaleFactor,
       });
       const page = await context.newPage();
+      if (config.syntheticCssExpectations != null) {
+        const expectedCase = config.syntheticCssExpectations.cases.find(item => item.id === runtimeCase.id);
+        if (expectedCase == null) throw new Error('missing synthetic CSS case ' + runtimeCase.id);
+        const normalizerPage = await context.newPage();
+        expectedResults.push({
+          id: runtimeCase.id,
+          observation: await normalizeSyntheticCss(normalizerPage, expectedCase, runtimeCase),
+        });
+        await normalizerPage.close();
+      }
       await page.goto(new URL(runtimeCase.path, config.server.url).toString());
       for (const action of runtimeCase.actions) await applyAction(page, action);
       const observation = {computedStyles: {}, dom: {}, attributes: {}, refs: {}, interactions: {}};
       for (const target of runtimeCase.targets) {
         const result = await observe(page, target);
         observation.computedStyles[target.id] = result.computed;
-        observation.dom[target.id] = result.dom;
+        if (result.dom != null) observation.dom[target.id] = result.dom;
         observation.attributes[target.id] = result.attributes;
-        observation.refs[target.id] = result.ref;
+        if (result.ref != null) observation.refs[target.id] = result.ref;
       }
       for (const action of runtimeCase.actions) observation.interactions[action.id] = {completed: true};
       results.push({id: runtimeCase.id, observation});
       await context.close();
     }
-    process.stdout.write(JSON.stringify({
+    const candidate = {
       protocolVersion: 'stylex-migrate-runtime-v1',
       environment: {
         renderer: 'playwright',
@@ -116,7 +160,18 @@ async function main() {
         platform: os.platform() + '-' + os.arch(),
       },
       cases: results,
-    }));
+    };
+    process.stdout.write(JSON.stringify(config.syntheticCssExpectations == null
+      ? candidate
+      : {
+          protocolVersion: 'stylex-migrate-generated-runtime-result-v1',
+          expected: {
+            protocolVersion: 'stylex-migrate-runtime-v1',
+            environment: candidate.environment,
+            cases: expectedResults,
+          },
+          candidate,
+        }));
   } finally {
     if (browser != null) await browser.close();
     server.kill('SIGTERM');

@@ -24,6 +24,7 @@ import {
   loadTestAssumption,
 } from '../assumption/records';
 import { inspectRuntimeSurfaces } from './discover';
+import { loadThemeDecisionDraft } from '../theme/decisions';
 import { emitGeneratedRuntimeCollector } from './collector';
 import {
   EVIDENCE_SURFACE_PROTOCOL_VERSION,
@@ -142,6 +143,23 @@ export function openEvidenceSurfaceTask({
   }
   assertCurrentTestAssumption(project, assumption);
   const definition = normalizeEvidenceSurfaceDefinition(input);
+  const syntheticSource = definition.syntheticCssExpectations?.source;
+  if (syntheticSource != null) {
+    const draft = loadThemeDecisionDraft(project, syntheticSource.id);
+    if (
+      draft == null ||
+      draft.definitionHash !== syntheticSource.definitionHash
+    ) {
+      throw new Error(
+        `Synthetic CSS expectation source ${syntheticSource.id} is unavailable or does not match`,
+      );
+    }
+    if (draft.inventoryId !== inventory.id) {
+      throw new Error(
+        `Synthetic CSS expectation source ${syntheticSource.id} belongs to a stale inventory`,
+      );
+    }
+  }
   const serverProblem = repositoryServerCommandProblem(
     project.repositoryRoot,
     definition,
@@ -216,6 +234,7 @@ export function openEvidenceSurfaceTask({
       nativeSurfaceDisposition: definition.nativeSurfaceDisposition,
       server: definition.server,
       cases: definition.cases,
+      syntheticCssExpectations: definition.syntheticCssExpectations,
     } as $FlowFixMe)}\n`,
     'utf8',
   );
@@ -252,6 +271,7 @@ export function openEvidenceSurfaceTask({
       collectorPath: COLLECTOR_PATH,
       configPath: CONFIG_PATH,
       expectedObservations: definition.expectedObservations,
+      syntheticCssExpectations: definition.syntheticCssExpectations,
       cases: definition.cases.map(
         ({
           path: _path,
@@ -296,6 +316,8 @@ export function openEvidenceSurfaceTask({
         mutable: false,
       },
     ],
+    decisionArtifactHashes:
+      syntheticSource == null ? [] : [syntheticSource.definitionHash],
     assumptionArtifactHashes: [assumption.artifactHash],
     requiredChecks: [],
     limitations: [

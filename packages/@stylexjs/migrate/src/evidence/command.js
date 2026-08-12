@@ -60,6 +60,7 @@ export type RepositoryEvidenceResult = {
         +baselineKind: 'generated-probe',
         +runtimeInterface: RuntimeInterface,
         +assumptionArtifactHash: string,
+        +expectationSourceHash: string,
         +expectedReportHash: string,
         +candidateCommand: CommandRecord,
         +comparison: RuntimeComparison,

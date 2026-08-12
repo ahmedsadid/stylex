@@ -20,6 +20,7 @@ import {
 } from '../evidence/command';
 import {
   compareExpectedRuntimeObservations,
+  compareRuntimeReports,
   normalizeRuntimeReport,
 } from './model';
 import type {
@@ -71,6 +72,15 @@ function caseScopeProblem(
   ) {
     return 'generated runtime probe assumption is not bound to the evidence subject';
   }
+  const syntheticSource = config.syntheticCssExpectations?.source;
+  if (
+    syntheticSource != null &&
+    !context.subject.decisionArtifactHashes?.includes(
+      syntheticSource.definitionHash,
+    )
+  ) {
+    return `synthetic CSS source ${syntheticSource.id} is not bound to the evidence subject`;
+  }
   for (const runtimeCase of config.cases) {
     for (const changePath of runtimeCase.changePaths) {
       if (!changes.has(changePath)) {
@@ -113,6 +123,7 @@ export async function runGeneratedRuntimeProbeProvider(
   let result: 'pass' | 'fail' | 'unavailable' | 'not-applicable';
   let detail;
   let comparison = null;
+  let resolvedExpectedForHash: mixed = config.expectedObservations;
   let candidate = emptyProcess();
 
   if (config.subject !== context.subject.kind) {
@@ -164,13 +175,33 @@ export async function runGeneratedRuntimeProbeProvider(
             : `generated runtime probe exited ${String(candidate.exitCode)}`;
         } else {
           try {
-            comparison = compareExpectedRuntimeObservations({
-              cases: config.cases,
-              expected: config.expectedObservations,
-              candidate: normalizeRuntimeReport(
-                JSON.parse(candidate.stdout.toString('utf8')),
-              ),
-            });
+            const parsed: any = JSON.parse(candidate.stdout.toString('utf8'));
+            if (config.syntheticCssExpectations == null) {
+              if (config.expectedObservations == null) {
+                throw new Error('generated probe has no expectation source');
+              }
+              comparison = compareExpectedRuntimeObservations({
+                cases: config.cases,
+                expected: config.expectedObservations,
+                candidate: normalizeRuntimeReport(parsed),
+              });
+            } else {
+              if (
+                parsed == null ||
+                Array.isArray(parsed) ||
+                typeof parsed !== 'object' ||
+                String(parsed.protocolVersion) !==
+                  'stylex-migrate-generated-runtime-result-v1'
+              ) {
+                throw new Error('invalid synthetic CSS runtime result');
+              }
+              comparison = compareRuntimeReports({
+                cases: config.cases,
+                baseline: normalizeRuntimeReport(parsed.expected),
+                candidate: normalizeRuntimeReport(parsed.candidate),
+              });
+              resolvedExpectedForHash = normalizeRuntimeReport(parsed.expected);
+            }
             result =
               comparison.result === 'matched'
                 ? 'pass'
@@ -192,8 +223,13 @@ export async function runGeneratedRuntimeProbeProvider(
   }
 
   const output = Buffer.concat([
-    Buffer.from('[expected-observations]\n'),
-    Buffer.from(canonicalJson(config.expectedObservations as $FlowFixMe)),
+    Buffer.from('[expectation-source]\n'),
+    Buffer.from(
+      canonicalJson(
+        (config.expectedObservations ??
+          config.syntheticCssExpectations) as $FlowFixMe,
+      ),
+    ),
     Buffer.from('\n[candidate]\n'),
     fullEvidenceOutput(candidate),
   ]);
@@ -203,8 +239,14 @@ export async function runGeneratedRuntimeProbeProvider(
     environment.fingerprint,
     candidate.exitCode,
   );
+  const expectationSourceHash = hashString(
+    canonicalJson(
+      (config.expectedObservations ??
+        config.syntheticCssExpectations) as $FlowFixMe,
+    ),
+  );
   const expectedReportHash = hashString(
-    canonicalJson(config.expectedObservations as $FlowFixMe),
+    canonicalJson(resolvedExpectedForHash as $FlowFixMe),
   );
   const stable = {
     id: '',
@@ -227,7 +269,9 @@ export async function runGeneratedRuntimeProbeProvider(
     limitations: Object.freeze([
       ...new Set([
         ...config.limitations,
-        'Generated expected observations are bound test assumptions, not retained repository behavior or owner approval.',
+        config.syntheticCssExpectations == null
+          ? 'Generated expected observations are bound test assumptions, not retained repository behavior or owner approval.'
+          : 'Synthetic CSS expectations are browser-normalized values from a bound theme decision draft, not retained repository behavior or owner approval.',
         ...(comparison?.limitations ?? []),
       ]),
     ]),
@@ -239,6 +283,7 @@ export async function runGeneratedRuntimeProbeProvider(
           baselineKind: 'generated-probe' as 'generated-probe',
           runtimeInterface: config.runtimeInterface,
           assumptionArtifactHash: config.assumptionArtifactHash,
+          expectationSourceHash,
           expectedReportHash,
           candidateCommand,
           comparison,

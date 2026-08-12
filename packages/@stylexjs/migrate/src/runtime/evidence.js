@@ -86,6 +86,7 @@ export function withGeneratedRuntimeProbeProviders({
       cases: origin.cases,
       assumptionArtifactHash: origin.assumptionArtifactHash,
       expectedObservations: origin.expectedObservations,
+      syntheticCssExpectations: origin.syntheticCssExpectations ?? null,
     });
   }
   if (generated.length === 0) return config;

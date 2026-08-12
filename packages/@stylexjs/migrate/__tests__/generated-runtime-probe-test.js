@@ -109,6 +109,27 @@ function provider(): GeneratedRuntimeProbeProviderConfig {
   };
 }
 
+function syntheticProvider(): GeneratedRuntimeProbeProviderConfig {
+  return {
+    ...provider(),
+    expectedObservations: null,
+    syntheticCssExpectations: {
+      protocolVersion: 'stylex-migrate-synthetic-css-expectations-v1',
+      source: {
+        kind: 'theme-decision-draft',
+        id: 'theme-draft-1234567890abcdef',
+        definitionHash: 'd'.repeat(64),
+      },
+      cases: [
+        {
+          id: 'card-dark',
+          computedStyles: { card: { color: '#ff0000' } },
+        },
+      ],
+    },
+  };
+}
+
 describe('generated runtime probe evidence', () => {
   let workspace: string;
 
@@ -233,6 +254,54 @@ describe('generated runtime probe evidence', () => {
     ).toMatchObject({
       result: 'fail',
       detail: expect.stringContaining('not bound'),
+    });
+  });
+
+  test('compares independently normalized CSS expectations bound to a theme draft', async () => {
+    const normalized = report('rgb(255, 0, 0)');
+    fs.writeFileSync(
+      path.join(workspace, 'report.json'),
+      JSON.stringify({
+        protocolVersion: 'stylex-migrate-generated-runtime-result-v1',
+        expected: normalized,
+        candidate: normalized,
+      }),
+    );
+    const config = syntheticProvider();
+    const subject = {
+      ...SUBJECT,
+      decisionArtifactHashes: ['d'.repeat(64)],
+    };
+    const execution = await runGeneratedRuntimeProbeProvider(config, {
+      workspaceRoot: workspace,
+      subject,
+    });
+    expect(execution.evidence).toMatchObject({
+      result: 'pass',
+      runtime: {
+        baselineKind: 'generated-probe',
+        expectationSourceHash: expect.stringMatching(/^[a-f0-9]{64}$/),
+        expectedReportHash: expect.stringMatching(/^[a-f0-9]{64}$/),
+        comparison: { result: 'matched' },
+      },
+      limitations: expect.arrayContaining([
+        expect.stringContaining('browser-normalized values'),
+      ]),
+    });
+    expect(execution.evidence.runtime?.expectationSourceHash).not.toBe(
+      execution.evidence.runtime?.expectedReportHash,
+    );
+
+    expect(
+      (
+        await runGeneratedRuntimeProbeProvider(config, {
+          workspaceRoot: workspace,
+          subject: SUBJECT,
+        })
+      ).evidence,
+    ).toMatchObject({
+      result: 'fail',
+      detail: expect.stringContaining('is not bound'),
     });
   });
 });

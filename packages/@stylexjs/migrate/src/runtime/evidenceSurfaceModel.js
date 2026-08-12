@@ -19,7 +19,9 @@ import type {
 } from './model';
 
 export const EVIDENCE_SURFACE_PROTOCOL_VERSION: string =
-  'stylex-migrate-evidence-surface-v1';
+  'stylex-migrate-evidence-surface-v2';
+export const SYNTHETIC_CSS_EXPECTATIONS_PROTOCOL_VERSION: string =
+  'stylex-migrate-synthetic-css-expectations-v1';
 
 export type RuntimeProbeAction = {
   +id: string,
@@ -40,12 +42,29 @@ export type RuntimeProbeTarget = {
   +selector: string,
   +computedProperties: $ReadOnlyArray<string>,
   +attributes: $ReadOnlyArray<string>,
+  +observeDom: boolean,
+  +observeRef: boolean,
 };
 
 export type RuntimeProbeCase = RuntimeCaseDefinition & {
   +path: string,
   +actions: $ReadOnlyArray<RuntimeProbeAction>,
   +targets: $ReadOnlyArray<RuntimeProbeTarget>,
+};
+
+export type RuntimeSyntheticCssExpectations = {
+  +protocolVersion: string,
+  +source: {
+    +kind: 'theme-decision-draft',
+    +id: string,
+    +definitionHash: string,
+  },
+  +cases: $ReadOnlyArray<{
+    +id: string,
+    +computedStyles: {
+      +[target: string]: { +[property: string]: string },
+    },
+  }>,
 };
 
 export type EvidenceSurfaceDefinition = {
@@ -61,7 +80,8 @@ export type EvidenceSurfaceDefinition = {
     +timeoutMs: number,
   },
   +cases: $ReadOnlyArray<RuntimeProbeCase>,
-  +expectedObservations: RuntimeExpectedObservations,
+  +expectedObservations: RuntimeExpectedObservations | null,
+  +syntheticCssExpectations: RuntimeSyntheticCssExpectations | null,
   +rationale: string,
   +limitations: $ReadOnlyArray<string>,
 };
@@ -169,7 +189,94 @@ function target(value: mixed): RuntimeProbeTarget {
     selector: text(input.selector, 'target selector'),
     computedProperties,
     attributes: texts(input.attributes ?? [], 'target attributes'),
+    observeDom:
+      input.observeDom == null
+        ? true
+        : input.observeDom === true
+          ? true
+          : input.observeDom === false
+            ? false
+            : (() => {
+                throw new Error('Invalid runtime-probe DOM observation flag');
+              })(),
+    observeRef:
+      input.observeRef == null
+        ? true
+        : input.observeRef === true
+          ? true
+          : input.observeRef === false
+            ? false
+            : (() => {
+                throw new Error('Invalid runtime-probe ref observation flag');
+              })(),
   });
+}
+
+export function normalizeSyntheticCssExpectations(
+  value: mixed,
+): RuntimeSyntheticCssExpectations {
+  if (!object(value)) throw new Error('Invalid synthetic CSS expectations');
+  const input: $FlowFixMe = value;
+  if (
+    input.protocolVersion !== SYNTHETIC_CSS_EXPECTATIONS_PROTOCOL_VERSION ||
+    !object(input.source) ||
+    input.source.kind !== 'theme-decision-draft' ||
+    typeof input.source.id !== 'string' ||
+    !/^theme-draft-[a-f0-9]{16}$/.test(input.source.id) ||
+    typeof input.source.definitionHash !== 'string' ||
+    !/^[a-f0-9]{64}$/.test(input.source.definitionHash) ||
+    !Array.isArray(input.cases) ||
+    input.cases.length === 0
+  ) {
+    throw new Error('Invalid synthetic CSS expectations');
+  }
+  const cases = input.cases.map((value) => {
+    if (!object(value)) throw new Error('Invalid synthetic CSS case');
+    const item: $FlowFixMe = value;
+    if (!ID.test(item.id) || !object(item.computedStyles)) {
+      throw new Error('Invalid synthetic CSS case');
+    }
+    const computedStyles = Object.fromEntries(
+      Object.entries(item.computedStyles)
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([targetId, properties]) => {
+          if (!ID.test(targetId) || !object(properties)) {
+            throw new Error('Invalid synthetic CSS target');
+          }
+          const normalized = Object.fromEntries(
+            Object.entries(properties)
+              .sort(([left], [right]) => left.localeCompare(right))
+              .map(([property, rawValue]) => {
+                if (
+                  !CSS_PROPERTY.test(property) ||
+                  typeof rawValue !== 'string' ||
+                  rawValue.trim() === '' ||
+                  rawValue.includes('\0')
+                ) {
+                  throw new Error('Invalid synthetic CSS declaration');
+                }
+                return [property, rawValue];
+              }),
+          );
+          if (Object.keys(normalized).length === 0) {
+            throw new Error('Synthetic CSS targets require declarations');
+          }
+          return [targetId, normalized];
+        }),
+    );
+    if (Object.keys(computedStyles).length === 0) {
+      throw new Error('Synthetic CSS cases require targets');
+    }
+    return Object.freeze({ id: item.id, computedStyles });
+  });
+  if (new Set(cases.map((item) => item.id)).size !== cases.length) {
+    throw new Error('Synthetic CSS case ids must be unique');
+  }
+  return immutableJson({
+    protocolVersion: SYNTHETIC_CSS_EXPECTATIONS_PROTOCOL_VERSION,
+    source: input.source,
+    cases: cases.sort((left, right) => left.id.localeCompare(right.id)),
+  }) as $FlowFixMe;
 }
 
 export function normalizeEvidenceSurfaceDefinition(
@@ -239,16 +346,74 @@ export function normalizeEvidenceSurfaceDefinition(
       targets: Object.freeze(targets),
     });
   });
-  const expectedObservations = normalizeExpectedRuntimeObservations(
-    input.expectedObservations,
-  );
+  const hasLockedExpectations = input.expectedObservations != null;
+  const hasSyntheticExpectations = input.syntheticCssExpectations != null;
+  if (hasLockedExpectations === hasSyntheticExpectations) {
+    throw new Error(
+      'Evidence surfaces require exactly one locked or synthetic expectation source',
+    );
+  }
+  const expectedObservations = hasLockedExpectations
+    ? normalizeExpectedRuntimeObservations(input.expectedObservations)
+    : null;
+  const normalizedSynthetic = hasSyntheticExpectations
+    ? normalizeSyntheticCssExpectations(input.syntheticCssExpectations)
+    : null;
   const caseIds = cases.map((item) => item.id).sort();
-  const expectedIds = expectedObservations.cases.map((item) => item.id).sort();
+  const expectedIds = (
+    expectedObservations?.cases ??
+    normalizedSynthetic?.cases ??
+    []
+  )
+    .map((item) => item.id)
+    .sort();
   if (
     caseIds.length !== expectedIds.length ||
     caseIds.some((id, index) => id !== expectedIds[index])
   ) {
     throw new Error('Evidence-surface cases and expected observations differ');
+  }
+  if (normalizedSynthetic != null) {
+    const syntheticById = new Map(
+      normalizedSynthetic.cases.map((item) => [item.id, item]),
+    );
+    for (const runtimeCase of cases) {
+      const expectedCase = syntheticById.get(runtimeCase.id);
+      if (expectedCase == null) {
+        throw new Error('Synthetic CSS expectations are incomplete');
+      }
+      const targetsById = new Map(
+        runtimeCase.targets.map((item) => [item.id, item]),
+      );
+      const expectedTargetIds = Object.keys(expectedCase.computedStyles).sort();
+      const targetIds = runtimeCase.targets.map((item) => item.id).sort();
+      if (
+        targetIds.length !== expectedTargetIds.length ||
+        targetIds.some((id, index) => id !== expectedTargetIds[index])
+      ) {
+        throw new Error('Synthetic CSS targets differ from probe targets');
+      }
+      for (const [targetId, properties] of Object.entries(
+        expectedCase.computedStyles,
+      )) {
+        const probeTarget = targetsById.get(targetId);
+        const expectedProperties = Object.keys(properties).sort();
+        if (
+          probeTarget == null ||
+          probeTarget.observeDom ||
+          probeTarget.observeRef ||
+          probeTarget.attributes.length > 0 ||
+          probeTarget.computedProperties.length !== expectedProperties.length ||
+          probeTarget.computedProperties.some(
+            (property, index) => property !== expectedProperties[index],
+          )
+        ) {
+          throw new Error(
+            'Synthetic CSS probes may compare only their exact computed declarations',
+          );
+        }
+      }
+    }
   }
   return immutableJson({
     protocolVersion: EVIDENCE_SURFACE_PROTOCOL_VERSION,
@@ -268,6 +433,7 @@ export function normalizeEvidenceSurfaceDefinition(
     },
     cases: cases.sort((left, right) => left.id.localeCompare(right.id)),
     expectedObservations,
+    syntheticCssExpectations: normalizedSynthetic,
     rationale: text(input.rationale, 'rationale'),
     limitations: texts(input.limitations, 'limitations'),
   }) as $FlowFixMe;

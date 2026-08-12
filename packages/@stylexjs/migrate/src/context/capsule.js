@@ -15,6 +15,7 @@ import type {
   RuntimeCaseDefinition,
   RuntimeExpectedObservations,
 } from '../runtime/model';
+import type { RuntimeSyntheticCssExpectations } from '../runtime/evidenceSurfaceModel';
 
 export const CONTEXT_PROTOCOL_VERSION: string = 'stylex-migrate-context-v6';
 export const CONTEXT_MAX_ATTEMPTS: number = 2;
@@ -59,7 +60,8 @@ export type ContextTaskOrigin =
       +packageRoot: string,
       +collectorPath: string,
       +configPath: string,
-      +expectedObservations: RuntimeExpectedObservations,
+      +expectedObservations: RuntimeExpectedObservations | null,
+      +syntheticCssExpectations?: RuntimeSyntheticCssExpectations | null,
       +cases: $ReadOnlyArray<RuntimeCaseDefinition>,
       +limitations: $ReadOnlyArray<string>,
     }
