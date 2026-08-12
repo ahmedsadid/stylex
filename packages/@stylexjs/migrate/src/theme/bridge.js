@@ -21,6 +21,8 @@ export type ThemeBridgeObservation = {
   +status: 'observed' | 'not-observed' | 'resolution-failed',
   +importedVariants: $ReadOnlyArray<string>,
   +appliedVariants: $ReadOnlyArray<string>,
+  +globalHosts: $ReadOnlyArray<string>,
+  +globalHostWiring: 'not-applicable' | 'complete' | 'incomplete',
   +detail: string,
 };
 
@@ -90,6 +92,8 @@ function observeSource(
       status: 'resolution-failed',
       importedVariants: Object.freeze([]),
       appliedVariants: Object.freeze([]),
+      globalHosts: Object.freeze([]),
+      globalHostWiring: 'not-applicable',
       detail: parsed.reason,
     });
   }
@@ -121,6 +125,12 @@ function observeSource(
     }
   }
   const aliases = new Map<string, Set<string>>();
+  type DerivedThemeValue = {
+    +kind: 'props' | 'class-name' | 'tokens',
+    +variants: $ReadOnlySet<string>,
+  };
+  const derived = new Map<string, DerivedThemeValue>();
+  const globalHostAliases = new Map<string, string>();
   const declarators: Array<$FlowFixMe> = [];
   const declarationCounts = new Map<string, number>();
   const parameterNames = new Set<string>();
@@ -150,6 +160,19 @@ function observeSource(
     !parameterNames.has(name) && (declarationCounts.get(name) ?? 0) === 0;
   const unshadowedAlias = (name: string): boolean =>
     !parameterNames.has(name) && declarationCounts.get(name) === 1;
+  const variantsIn = (node: $FlowFixMe): Set<string> => {
+    const found = new Set<string>();
+    walk(node, (child) => {
+      if (child.type !== 'Identifier') return;
+      const name = String(child.name);
+      const exported = imported.get(name);
+      if (exported != null && unshadowedImport(name)) found.add(exported);
+      if (unshadowedAlias(name)) {
+        for (const variant of aliases.get(name) ?? []) found.add(variant);
+      }
+    });
+    return found;
+  };
   for (let pass = 0; pass <= declarators.length; pass++) {
     let changed = false;
     for (const declarator of declarators) {
@@ -172,7 +195,93 @@ function observeSource(
     }
     if (!changed) break;
   }
+  const stylexPropsCall = (node: $FlowFixMe): boolean =>
+    node?.type === 'CallExpression' &&
+    node.callee?.type === 'MemberExpression' &&
+    node.callee.computed !== true &&
+    node.callee.object?.type === 'Identifier' &&
+    stylexNamespaces.has(String(node.callee.object.name)) &&
+    unshadowedImport(String(node.callee.object.name)) &&
+    node.callee.property?.type === 'Identifier' &&
+    node.callee.property.name === 'props';
+  const derivedValue = (node: $FlowFixMe): DerivedThemeValue | null => {
+    if (node?.type === 'Identifier' && unshadowedAlias(String(node.name))) {
+      return derived.get(String(node.name)) ?? null;
+    }
+    if (stylexPropsCall(node)) {
+      return Object.freeze({
+        kind: 'props',
+        variants: variantsIn(node),
+      });
+    }
+    if (
+      node?.type === 'MemberExpression' &&
+      node.computed !== true &&
+      node.property?.type === 'Identifier' &&
+      node.property.name === 'className'
+    ) {
+      const parent = derivedValue(node.object);
+      return parent?.kind === 'props'
+        ? Object.freeze({ kind: 'class-name', variants: parent.variants })
+        : null;
+    }
+    if (
+      node?.type === 'CallExpression' &&
+      node.callee?.type === 'MemberExpression' &&
+      node.callee.computed !== true &&
+      node.callee.property?.type === 'Identifier'
+    ) {
+      const method = String(node.callee.property.name);
+      const parent = derivedValue(node.callee.object);
+      if (method === 'split' && parent?.kind === 'class-name') {
+        return Object.freeze({ kind: 'tokens', variants: parent.variants });
+      }
+      if (method === 'filter' && parent?.kind === 'tokens') {
+        return parent;
+      }
+    }
+    return null;
+  };
+  const globalHost = (node: $FlowFixMe): string | null => {
+    if (node?.type === 'Identifier' && unshadowedAlias(String(node.name))) {
+      return globalHostAliases.get(String(node.name)) ?? null;
+    }
+    if (
+      node?.type === 'MemberExpression' &&
+      node.computed !== true &&
+      node.object?.type === 'Identifier' &&
+      node.object.name === 'document' &&
+      node.property?.type === 'Identifier' &&
+      (node.property.name === 'body' ||
+        node.property.name === 'documentElement')
+    ) {
+      return `document.${String(node.property.name)}`;
+    }
+    return null;
+  };
+  for (let pass = 0; pass <= declarators.length; pass++) {
+    let changed = false;
+    for (const declarator of declarators) {
+      const name = String(declarator.id.name);
+      if (!unshadowedAlias(name)) continue;
+      const next = derivedValue(declarator.init);
+      if (next != null && derived.get(name)?.kind !== next.kind) {
+        derived.set(name, next);
+        changed = true;
+      }
+      const host = globalHost(declarator.init);
+      if (host != null && globalHostAliases.get(name) !== host) {
+        globalHostAliases.set(name, host);
+        changed = true;
+      }
+    }
+    if (!changed) break;
+  }
   const applied = new Set<string>();
+  const globalOperations = new Map<
+    string,
+    { add: boolean, remove: boolean, unsafe: boolean },
+  >();
   walk(parsed.ast, (node) => {
     if (
       node.type !== 'CallExpression' ||
@@ -199,15 +308,66 @@ function observeSource(
       });
     }
   });
+  walk(parsed.ast, (node) => {
+    if (
+      node.type !== 'CallExpression' ||
+      node.callee?.type !== 'MemberExpression' ||
+      node.callee.computed === true ||
+      node.callee.property?.type !== 'Identifier' ||
+      (node.callee.property.name !== 'add' &&
+        node.callee.property.name !== 'remove') ||
+      node.callee.object?.type !== 'MemberExpression' ||
+      node.callee.object.computed === true ||
+      node.callee.object.property?.type !== 'Identifier' ||
+      node.callee.object.property.name !== 'classList'
+    ) {
+      return;
+    }
+    const host = globalHost(node.callee.object.object);
+    if (host == null) return;
+    for (const argument of node.arguments ?? []) {
+      const value = derivedValue(
+        argument?.type === 'SpreadElement' ? argument.argument : argument,
+      );
+      if (value == null || value.variants.size === 0) continue;
+      const key = `${host}:${[...value.variants].sort().join(',')}`;
+      const operation = globalOperations.get(key) ?? {
+        add: false,
+        remove: false,
+        unsafe: false,
+      };
+      const safe =
+        argument?.type === 'SpreadElement' && value.kind === 'tokens';
+      operation.unsafe = operation.unsafe || !safe;
+      operation[node.callee.property.name] = true;
+      globalOperations.set(key, operation);
+    }
+  });
+  const globalHosts = [
+    ...new Set([...globalOperations.keys()].map((key) => key.split(':', 1)[0])),
+  ].sort();
+  const globalHostWiring =
+    globalOperations.size === 0
+      ? 'not-applicable'
+      : [...globalOperations.values()].every(
+            (operation) =>
+              operation.add && operation.remove && !operation.unsafe,
+          )
+        ? 'complete'
+        : 'incomplete';
   return Object.freeze({
     file,
     status: applied.size > 0 ? 'observed' : 'not-observed',
     importedVariants: Object.freeze([...new Set(imported.values())].sort()),
     appliedVariants: Object.freeze([...applied].sort()),
+    globalHosts: Object.freeze(globalHosts),
+    globalHostWiring,
     detail:
-      applied.size > 0
-        ? 'observed a generated theme variant passed to stylex.props'
-        : 'no generated theme variant application was observed',
+      globalHostWiring === 'incomplete'
+        ? 'global DOM theme classes must split the StyleX className and spread the tokens into matching classList.add/remove calls'
+        : applied.size > 0
+          ? 'observed a generated theme variant passed to stylex.props'
+          : 'no generated theme variant application was observed',
   });
 }
 
@@ -248,6 +408,8 @@ export function inspectThemeBridgeSources({
         status: 'resolution-failed' as 'resolution-failed',
         importedVariants: empty,
         appliedVariants: empty,
+        globalHosts: empty,
+        globalHostWiring: 'not-applicable' as 'not-applicable',
         detail: 'bridge boundary source was unavailable',
       });
     }
@@ -260,6 +422,8 @@ export function inspectThemeBridgeSources({
         status: 'resolution-failed' as 'resolution-failed',
         importedVariants: empty,
         appliedVariants: empty,
+        globalHosts: empty,
+        globalHostWiring: 'not-applicable' as 'not-applicable',
         detail: error instanceof Error ? error.message : String(error),
       });
     }
@@ -286,6 +450,7 @@ export function inspectThemeBridgeSources({
     missingVariants: Object.freeze(missingVariants),
     complete:
       missingVariants.length === 0 &&
+      observations.every((item) => item.globalHostWiring !== 'incomplete') &&
       observations.every((item) => item.status !== 'resolution-failed'),
     limitation:
       'Static observation of stylex.props does not prove bridge coverage, nesting, portals, inverted themes, SSR, hydration, or runtime behavior.',

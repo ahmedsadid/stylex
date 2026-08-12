@@ -1308,7 +1308,11 @@ export function submitContextAttempt({
             ? 'The theme bridge task has no declared bridge scope.'
             : bridge.missingVariants.length > 0
               ? `The frozen bridge does not apply every generated variant: ${bridge.missingVariants.join(', ')}.`
-              : 'The frozen bridge boundary could not be inspected completely.',
+              : bridge.observations.some(
+                    (item) => item.globalHostWiring === 'incomplete',
+                  )
+                ? 'The frozen global-host bridge does not split the StyleX className and spread its tokens into matching classList.add/remove calls.'
+                : 'The frozen bridge boundary could not be inspected completely.',
         ],
         now,
       });
@@ -1325,11 +1329,17 @@ export function submitContextAttempt({
           file: evidenceChange.path,
           sourceHash: record.snapshot.fileHashes[evidenceChange.path] ?? null,
           targetHash: evidenceChange.contentHash,
-          model: 'theme-bridge-wiring-v1',
+          model: 'theme-bridge-wiring-v2',
         },
         scope: record.task.scope.allowedPaths,
         result: 'pass',
-        detail: `Every generated variant was referenced by stylex.props: ${bridge.appliedVariants.join(', ')}.`,
+        detail:
+          `Every generated variant was referenced by stylex.props: ${bridge.appliedVariants.join(', ')}.` +
+          (bridge.observations.some(
+            (item) => item.globalHostWiring === 'complete',
+          )
+            ? ' Global-host StyleX class names were split and spread into matching DOMTokenList add/remove calls.'
+            : ''),
         limitations: [bridge.limitation],
       }),
     );

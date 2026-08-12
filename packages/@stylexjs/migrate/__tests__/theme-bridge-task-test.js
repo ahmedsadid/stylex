@@ -191,7 +191,7 @@ export const App = ({children, dark}) => {
         {
           check: 'theme-bridge-wiring',
           result: 'pass',
-          subject: { model: 'theme-bridge-wiring-v1' },
+          subject: { model: 'theme-bridge-wiring-v2' },
         },
       ],
     });

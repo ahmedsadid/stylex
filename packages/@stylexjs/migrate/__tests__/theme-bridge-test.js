@@ -142,4 +142,62 @@ export const App = ({stylex, darkTheme, lightTheme}) =>
       missingVariants: ['darkTheme', 'lightTheme'],
     });
   });
+
+  test('rejects an unsplit StyleX class name on a global DOM host', () => {
+    repo = createTempRepo({
+      'src/App.tsx': `import * as stylex from '@stylexjs/stylex';
+import {darkTheme, lightTheme} from './theme/tokens.stylex';
+export function applyTheme(dark) {
+  const theme = dark ? darkTheme : lightTheme;
+  const className = stylex.props(theme).className;
+  document.body.classList.remove(className);
+  document.body.classList.add(className);
+}
+`,
+    });
+    expect(
+      inspectThemeBridge({
+        repositoryRoot: repo,
+        draft: draft('src/App.tsx'),
+      }),
+    ).toMatchObject({
+      complete: false,
+      observations: [
+        {
+          globalHosts: ['document.body'],
+          globalHostWiring: 'incomplete',
+          detail: expect.stringContaining('must split'),
+        },
+      ],
+    });
+  });
+
+  test('accepts split StyleX tokens spread into global add and remove', () => {
+    repo = createTempRepo({
+      'src/App.tsx': `import * as stylex from '@stylexjs/stylex';
+import {darkTheme, lightTheme} from './theme/tokens.stylex';
+export function applyTheme(dark) {
+  const theme = dark ? darkTheme : lightTheme;
+  const tokens = stylex.props(theme).className.split(/\\s+/).filter(Boolean);
+  document.body.classList.remove(...tokens);
+  document.body.classList.add(...tokens);
+}
+`,
+    });
+    expect(
+      inspectThemeBridge({
+        repositoryRoot: repo,
+        draft: draft('src/App.tsx'),
+      }),
+    ).toMatchObject({
+      complete: true,
+      observations: [
+        {
+          appliedVariants: ['darkTheme', 'lightTheme'],
+          globalHosts: ['document.body'],
+          globalHostWiring: 'complete',
+        },
+      ],
+    });
+  });
 });
