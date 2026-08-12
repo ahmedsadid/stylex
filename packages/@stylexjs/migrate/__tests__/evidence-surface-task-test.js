@@ -329,4 +329,61 @@ describe('generated evidence-surface tasks', () => {
       }),
     ).toThrow('arbitrary executables');
   });
+
+  test('pins a direct server script relative to a nested package root', () => {
+    const nestedRepo = createTempRepo({
+      'package.json': JSON.stringify({ private: true }),
+      'apps/web/package.json': JSON.stringify({
+        private: true,
+        devDependencies: { playwright: '1.0.0' },
+      }),
+      'apps/web/scripts/serve.cjs':
+        'require("http").createServer().listen(4173);\n',
+      'src/Card.jsx': 'export const Card = () => <div>Card</div>;\n',
+    });
+    try {
+      const nestedProject = initializeProject({ repositoryRoot: nestedRepo });
+      const inventory = scanRepository({ repositoryRoot: nestedRepo });
+      saveInventory(nestedProject, inventory);
+      const nestedAssumption = persistTestAssumption({
+        project: nestedProject,
+        input: {
+          purpose: 'Exercise a nested-package probe.',
+          facts: [
+            {
+              statement: 'The card is selected for the nested probe.',
+              status: 'known',
+              inputFiles: ['src/Card.jsx'],
+              detail: 'Fixture source.',
+            },
+          ],
+          scope: { files: ['src/Card.jsx'], cases: ['card-dark'] },
+          rationale: 'Fixture.',
+          alternatives: [],
+          limitations: [],
+        },
+        authorKind: 'agent',
+        authoredBy: 'fixture-agent',
+      });
+      const nestedDefinition = {
+        ...definition(),
+        packageRoot: 'apps/web',
+        server: {
+          ...definition().server,
+          inputFiles: ['apps/web/scripts/serve.cjs'],
+        },
+      };
+      expect(
+        openEvidenceSurfaceTask({
+          project: nestedProject,
+          assumptionId: nestedAssumption.id,
+          input: nestedDefinition,
+          goal: 'Open a nested-package probe.',
+          workspaceRoot,
+        }),
+      ).toMatchObject({ ok: true });
+    } finally {
+      removeTempDir(nestedRepo);
+    }
+  });
 });

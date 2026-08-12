@@ -43,16 +43,18 @@ function repositoryServerCommandProblem(
   definition: $FlowFixMe,
 ): string | null {
   const command = definition.server.argv;
-  const cwd = definition.server.cwd === '.' ? '' : definition.server.cwd;
-  const manifestPath = cwd === '' ? 'package.json' : `${cwd}/package.json`;
+  const serverRoot = [definition.packageRoot, definition.server.cwd]
+    .filter((segment) => segment !== '.')
+    .join('/');
+  const repositoryPath = (file: string): string =>
+    serverRoot === '' ? file : `${serverRoot}/${file}`;
+  const manifestPath = repositoryPath('package.json');
   const executable = command[0];
   if (executable === 'node' || executable === process.execPath) {
     if (
       command.length < 2 ||
       command[1].startsWith('-') ||
-      !definition.server.inputFiles.includes(
-        cwd === '' ? command[1] : `${cwd}/${command[1]}`,
-      )
+      !definition.server.inputFiles.includes(repositoryPath(command[1]))
     ) {
       return 'A direct Node evidence server must execute a declared tracked input file; inline evaluation and undeclared scripts are forbidden.';
     }
