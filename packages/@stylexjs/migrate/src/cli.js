@@ -86,6 +86,7 @@ import { VERSION } from './version';
 import { inspectRuntimeSurfaces } from './runtime/discover';
 import { openEvidenceSurfaceTask } from './runtime/evidenceSurfaceTask';
 import { inspectThemeTopology } from './theme/topology';
+import { openThemeRuntimeProbeTask } from './theme/runtimeProbe';
 
 type WriteOutput = (text: string) => mixed;
 
@@ -122,6 +123,8 @@ Commands:
   runtime inspect         find repository-native rendering/test surfaces
   runtime probe open <assumption> <json-file> <goal>
                           open a locked generated Playwright evidence surface
+  theme probe open <draft> <assumption> <json-file> <goal>
+                          generate the standard light/dark root/portal probe
   theme draft <json-file> <author>
                           validate and persist a theme token-map draft
   theme candidates        list exact styled-theme consumer batches and blockers
@@ -1140,6 +1143,49 @@ export function runCli(
         stdout,
       );
       return 0;
+    }
+    if (
+      args[0] === 'theme' &&
+      args[1] === 'probe' &&
+      args[2] === 'open' &&
+      args.length === 7
+    ) {
+      const project = openProject(cwd);
+      const source = path.resolve(cwd, args[5]);
+      const value = parseJson(fs.readFileSync(source, 'utf8'), source);
+      const result = openThemeRuntimeProbeTask({
+        project,
+        draftId: args[3],
+        assumptionId: args[4],
+        value,
+        goal: args[6],
+      });
+      present(
+        result.ok
+          ? {
+              command: 'theme probe open',
+              state: result.state,
+              taskId: result.task.id,
+              attemptId: result.attempt.id,
+              workspace: result.attempt.workspace.path,
+              cases:
+                result.task.origin.kind === 'evidence-surface'
+                  ? result.task.origin.cases.map((item) => item.id)
+                  : [],
+              warnings: result.task.limitations.filter((item) =>
+                item.startsWith('WARNING:'),
+              ),
+              next: `Submit the immutable four-case surface with stylex-migrate context submit ${result.task.id} <agent|human> <name> <version> [skill-version], then verify it with the exact theme/bridge/consumer candidates named by its cases.`,
+            }
+          : {
+              command: 'theme probe open',
+              state: result.state,
+              reasons: result.reasons,
+            },
+        json,
+        stdout,
+      );
+      return result.ok ? 0 : result.state === 'needs-owner-decision' ? 3 : 2;
     }
     if (
       args[0] === 'runtime' &&

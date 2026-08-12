@@ -22,6 +22,16 @@ const resolveFromPackage = name => require.resolve(name, {paths: [packageRoot]})
 const playwright = require(resolveFromPackage(config.playwrightPackage));
 const {version: playwrightVersion} = require(resolveFromPackage(config.playwrightPackage + '/package.json'));
 
+function browserExecutablePath() {
+  const systemCandidates = process.platform === 'darwin'
+    ? ['/Applications/Google Chrome.app/Contents/MacOS/Google Chrome']
+    : process.platform === 'linux'
+      ? ['/usr/bin/google-chrome', '/usr/bin/chromium', '/usr/bin/chromium-browser']
+      : [];
+  return systemCandidates.find(candidate => fs.existsSync(candidate))
+    || playwright.chromium.executablePath();
+}
+
 function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
 async function waitForServer(url, timeoutMs, server) {
   const deadline = Date.now() + timeoutMs;
@@ -117,7 +127,10 @@ async function main() {
   let browser = null;
   try {
     await waitForServer(config.server.url, config.server.timeoutMs, server);
-    browser = await playwright.chromium.launch({headless: true});
+    browser = await playwright.chromium.launch({
+      headless: true,
+      executablePath: browserExecutablePath(),
+    });
     const results = [];
     const expectedResults = [];
     for (const runtimeCase of config.cases) {

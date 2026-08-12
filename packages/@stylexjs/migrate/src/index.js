@@ -305,13 +305,16 @@ export type {
 export { aggregateRuntimeCoverage } from './runtime/coverage';
 export {
   EVIDENCE_SURFACE_PROTOCOL_VERSION,
+  SYNTHETIC_CSS_EXPECTATIONS_PROTOCOL_VERSION,
   normalizeEvidenceSurfaceDefinition,
+  normalizeSyntheticCssExpectations,
 } from './runtime/evidenceSurfaceModel';
 export type {
   EvidenceSurfaceDefinition,
   RuntimeProbeAction,
   RuntimeProbeCase,
   RuntimeProbeTarget,
+  RuntimeSyntheticCssExpectations,
 } from './runtime/evidenceSurfaceModel';
 export {
   EVIDENCE_SURFACE_TASK_VERSION,
@@ -322,6 +325,16 @@ export {
   emitGeneratedRuntimeCollector,
 } from './runtime/collector';
 export { withGeneratedRuntimeProbeProviders } from './runtime/evidence';
+export {
+  THEME_RUNTIME_PROBE_PROTOCOL_VERSION,
+  createThemeRuntimeProbeDefinition,
+  openThemeRuntimeProbeTask,
+} from './theme/runtimeProbe';
+export type {
+  ThemeProbeProperty,
+  ThemeProbeTarget,
+  ThemeRuntimeProbeInput,
+} from './theme/runtimeProbe';
 export type {
   RuntimeCaseCoverageEntry,
   RuntimeCaseCoverageStatus,
