@@ -75,6 +75,7 @@ export function withGeneratedRuntimeProbeProviders({
         ...new Set([
           origin.collectorPath,
           origin.configPath,
+          ...(origin.supportPaths ?? []),
           ...origin.cases.flatMap((item) => item.changePaths),
         ]),
       ],

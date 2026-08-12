@@ -14,7 +14,7 @@ import { canonicalJson, immutableJson } from '../state/json';
 import type { FactStatus } from '../inventory/model';
 
 export const RUNTIME_SURFACE_DISCOVERY_VERSION: string =
-  'stylex-migrate-runtime-surface-discovery-v1';
+  'stylex-migrate-runtime-surface-discovery-v2';
 
 export type RuntimeSurfaceKind = 'playwright' | 'storybook' | 'component-test';
 
@@ -36,6 +36,7 @@ export type RuntimeSurfaceDiscovery = {
   +protocolVersion: string,
   +id: string,
   +repositoryRoot: string,
+  +packageRoot: string,
   +surfaces: $ReadOnlyArray<RuntimeSurfaceInspection>,
   +inputFiles: $ReadOnlyArray<string>,
   +inspectedAt: string,
@@ -136,21 +137,60 @@ function manifest(root: string, file: string): ManifestObservation {
 
 export function inspectRuntimeSurfaces({
   repositoryRoot,
+  packageRoot = '.',
   now = () => new Date().toISOString(),
 }: {
   +repositoryRoot: string,
+  +packageRoot?: string,
   +now?: () => string,
 }): RuntimeSurfaceDiscovery {
   const root = canonicalRoot(repositoryRoot);
-  const tracked = trackedFiles(root);
+  if (
+    packageRoot !== '.' &&
+    (packageRoot === '' ||
+      packageRoot.startsWith('/') ||
+      packageRoot.includes('\\') ||
+      packageRoot
+        .split('/')
+        .some((segment) => segment === '' || segment === '..'))
+  ) {
+    throw new Error(`Invalid runtime package root: ${packageRoot}`);
+  }
+  const prefix = packageRoot === '.' ? '' : `${packageRoot}/`;
+  const tracked = trackedFiles(root).filter((file) =>
+    prefix === ''
+      ? !file.includes('/')
+      : file.startsWith(prefix) && !file.slice(prefix.length).includes('/'),
+  );
+  const allTracked = trackedFiles(root);
+  const selectedManifest = `${prefix}package.json`;
+  const nestedPackageRoots = allTracked
+    .filter(
+      (file) =>
+        file.endsWith('/package.json') &&
+        file !== selectedManifest &&
+        file.startsWith(prefix),
+    )
+    .map((file) => file.slice(0, -'package.json'.length));
   const manifests = tracked
     .filter((file) => file === 'package.json' || file.endsWith('/package.json'))
     .map((file) => manifest(root, file));
   const surfaces = (Object.keys(CONFIG_PATTERNS) as Array<RuntimeSurfaceKind>)
     .map((kind) => {
-      const configFiles = tracked.filter((file) =>
-        CONFIG_PATTERNS[kind].some((pattern) => pattern.test(file)),
-      );
+      const configFiles = allTracked.filter((file) => {
+        const relative =
+          prefix === ''
+            ? file
+            : file.startsWith(prefix)
+              ? file.slice(prefix.length)
+              : null;
+        return (
+          relative != null &&
+          !relative.startsWith('../') &&
+          !nestedPackageRoots.some((nested) => file.startsWith(nested)) &&
+          CONFIG_PATTERNS[kind].some((pattern) => pattern.test(relative))
+        );
+      });
       const dependencies = [
         ...new Set(
           manifests.flatMap((item) =>
@@ -227,6 +267,7 @@ export function inspectRuntimeSurfaces({
   const definition = {
     protocolVersion: RUNTIME_SURFACE_DISCOVERY_VERSION,
     repositoryRoot: root,
+    packageRoot,
     surfaces,
     inputFiles,
   };

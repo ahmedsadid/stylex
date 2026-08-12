@@ -60,6 +60,7 @@ export type ContextTaskOrigin =
       +packageRoot: string,
       +collectorPath: string,
       +configPath: string,
+      +supportPaths?: $ReadOnlyArray<string>,
       +expectedObservations: RuntimeExpectedObservations | null,
       +syntheticCssExpectations?: RuntimeSyntheticCssExpectations | null,
       +cases: $ReadOnlyArray<RuntimeCaseDefinition>,
@@ -73,7 +74,8 @@ export type ContextRequiredOutput = {
   +role:
     | 'generated-theme-module'
     | 'runtime-probe-collector'
-    | 'runtime-probe-config',
+    | 'runtime-probe-config'
+    | 'runtime-probe-support',
   +mutable: false,
 };
 
@@ -232,6 +234,11 @@ function normalizeOrigin(
       !safeRelativePath(origin.collectorPath) ||
       !safeRelativePath(origin.configPath) ||
       origin.collectorPath === origin.configPath ||
+      (origin.supportPaths != null &&
+        (!Array.isArray(origin.supportPaths) ||
+          origin.supportPaths.some(
+            (file) => typeof file !== 'string' || !safeRelativePath(file),
+          ))) ||
       !Array.isArray(origin.cases) ||
       origin.cases.length === 0 ||
       !Array.isArray(origin.limitations)
@@ -332,6 +339,7 @@ function normalizeRequiredOutputs(
         'generated-theme-module',
         'runtime-probe-collector',
         'runtime-probe-config',
+        'runtime-probe-support',
       ].includes(output.role) ||
       output.mutable !== false ||
       !scope.allowedPaths.includes(output.path) ||

@@ -14,6 +14,10 @@ import {
   normalizeEvidenceSurfaceDefinition,
 } from '../runtime/evidenceSurfaceModel';
 import { openEvidenceSurfaceTask } from '../runtime/evidenceSurfaceTask';
+import {
+  emitThemeProbeHarness,
+  generatedThemeProbeServer,
+} from './probeHarness';
 import type { ContextOpenResult } from '../context/lifecycle';
 import type { ProjectState } from '../state/project';
 import type { ThemeDecisionDraft, ThemeValue } from './model';
@@ -23,7 +27,9 @@ import type {
 } from '../runtime/evidenceSurfaceModel';
 
 export const THEME_RUNTIME_PROBE_PROTOCOL_VERSION: string =
-  'stylex-migrate-theme-runtime-probe-v1';
+  'stylex-migrate-theme-runtime-probe-v2';
+const GENERATED_ROOT_SELECTOR = '[data-stylex-migrate-probe="root"]';
+const GENERATED_PORTAL_SELECTOR = '[data-stylex-migrate-probe="portal"]';
 
 export type ThemeProbeProperty = {
   +sourcePath: string,
@@ -41,7 +47,8 @@ export type ThemeRuntimeProbeInput = {
   +packageRoot: string,
   +playwrightPackage: 'playwright' | '@playwright/test',
   +nativeSurfaceDisposition: 'none-known' | 'known-insufficient',
-  +server: EvidenceSurfaceDefinition['server'],
+  +surface: 'repository' | 'generated-rspack',
+  +server?: EvidenceSurfaceDefinition['server'],
   +path: string,
   +testedConsumerFiles: $ReadOnlyArray<string>,
   +siteIds: $ReadOnlyArray<string>,
@@ -80,11 +87,13 @@ function input(value: mixed): ThemeRuntimeProbeInput {
   const source: $FlowFixMe = value;
   if (
     source.protocolVersion !== THEME_RUNTIME_PROBE_PROTOCOL_VERSION ||
-    !object(source.server) ||
+    (source.surface !== 'repository' &&
+      source.surface !== 'generated-rspack') ||
+    (source.surface === 'repository' && !object(source.server)) ||
+    (source.surface === 'generated-rspack' && source.server != null) ||
     typeof source.path !== 'string' ||
     source.path === '' ||
     !strings(source.testedConsumerFiles) ||
-    source.testedConsumerFiles.length === 0 ||
     !strings(source.siteIds) ||
     !object(source.viewport) ||
     !object(source.activation) ||
@@ -188,6 +197,15 @@ export function createThemeRuntimeProbeDefinition({
   +value: mixed,
 }): EvidenceSurfaceDefinition {
   const definition = input(value);
+  if (
+    definition.surface === 'generated-rspack' &&
+    (definition.targets.root.selector !== GENERATED_ROOT_SELECTOR ||
+      definition.targets.portal.selector !== GENERATED_PORTAL_SELECTOR)
+  ) {
+    throw new Error(
+      'Generated Rspack theme probes require the standard root and portal selectors',
+    );
+  }
   const variantNames = new Set(draft.variants.map((variant) => variant.name));
   if (!variantNames.has('light') || !variantNames.has('dark')) {
     throw new Error(
@@ -195,6 +213,11 @@ export function createThemeRuntimeProbeDefinition({
     );
   }
   const consumers = [...new Set(definition.testedConsumerFiles)].sort();
+  if (definition.surface === 'repository' && consumers.length === 0) {
+    throw new Error(
+      'Repository theme runtime probes require at least one tested consumer file',
+    );
+  }
   if (consumers.some((file) => !draft.consumerFiles.includes(file))) {
     throw new Error(
       'Theme runtime probe consumer files must belong to the theme decision',
@@ -203,13 +226,19 @@ export function createThemeRuntimeProbeDefinition({
   if (draft.bridge == null) {
     throw new Error('Theme runtime probes require declared bridge boundaries');
   }
-  const changePaths = [
-    ...new Set([
-      draft.targetModule,
-      ...draft.bridge.boundaryFiles,
-      ...consumers,
-    ]),
-  ].sort();
+  const changePaths =
+    definition.surface === 'generated-rspack'
+      ? [draft.targetModule]
+      : [
+          ...new Set([
+            draft.targetModule,
+            ...draft.bridge.boundaryFiles,
+            ...consumers,
+          ]),
+        ].sort();
+  const generatedPort =
+    30000 + (Number.parseInt(draft.definitionHash.slice(0, 8), 16) % 20000);
+  const generatedServer = generatedThemeProbeServer(generatedPort);
   const cases = [];
   const expectedCases = [];
   const variants: $ReadOnlyArray<'light' | 'dark'> = ['light', 'dark'];
@@ -230,8 +259,14 @@ export function createThemeRuntimeProbeDefinition({
         theme: variant,
         interaction: 'initial',
         viewport: definition.viewport,
-        path: definition.path,
-        actions: definition.activation[variant],
+        path:
+          definition.surface === 'generated-rspack'
+            ? `/?theme=${variant}`
+            : definition.path,
+        actions:
+          definition.surface === 'generated-rspack'
+            ? []
+            : definition.activation[variant],
         targets: [target.probe],
       });
       expectedCases.push({
@@ -245,7 +280,10 @@ export function createThemeRuntimeProbeDefinition({
     packageRoot: definition.packageRoot,
     playwrightPackage: definition.playwrightPackage,
     nativeSurfaceDisposition: definition.nativeSurfaceDisposition,
-    server: definition.server,
+    server:
+      definition.surface === 'generated-rspack'
+        ? generatedServer
+        : definition.server,
     cases,
     expectedObservations: null,
     syntheticCssExpectations: {
@@ -287,10 +325,21 @@ export function openThemeRuntimeProbeTask({
       reasons: Object.freeze([`No theme decision found for ${draftId}.`]),
     };
   }
+  const definitionInput = input(value);
   return openEvidenceSurfaceTask({
     project,
     assumptionId,
     input: createThemeRuntimeProbeDefinition({ draft, value }),
+    supportOutputs:
+      definitionInput.surface === 'generated-rspack'
+        ? emitThemeProbeHarness({
+            draft,
+            targets: definitionInput.targets,
+            port:
+              30000 +
+              (Number.parseInt(draft.definitionHash.slice(0, 8), 16) % 20000),
+          })
+        : [],
     goal,
     workspaceRoot,
     now,

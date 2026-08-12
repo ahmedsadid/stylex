@@ -19,6 +19,7 @@ import {
   persistThemeDecisionDraft,
   saveInventory,
   scanRepository,
+  submitContextAttempt,
 } from '../src/index';
 import { runCli } from '../src/cli';
 import type {
@@ -133,6 +134,7 @@ export const Card = styled.div\`color: \${p => p.theme.colors.foreground};\`;
       packageRoot: '.',
       playwrightPackage: 'playwright',
       nativeSurfaceDisposition: 'none-known',
+      surface: 'repository',
       server: {
         argv: ['node', 'scripts/serve.cjs'],
         cwd: '.',
@@ -221,6 +223,80 @@ export const Card = styled.div\`color: \${p => p.theme.colors.foreground};\`;
         syntheticCssExpectations: { source: { id: draft.id } },
       },
     });
+  });
+
+  test('generates a complete locked Rspack probe when no route is usable', () => {
+    const generatedInput = input();
+    generatedInput.surface = 'generated-rspack';
+    generatedInput.testedConsumerFiles = [];
+    delete generatedInput.server;
+    generatedInput.targets.root.selector = '[data-stylex-migrate-probe="root"]';
+    generatedInput.targets.portal.selector =
+      '[data-stylex-migrate-probe="portal"]';
+    const opened = openThemeRuntimeProbeTask({
+      project,
+      draftId: draft.id,
+      assumptionId: assumption.id,
+      value: generatedInput,
+      goal: 'Generate an isolated Rspack theme probe.',
+      workspaceRoot,
+    });
+    if (!opened.ok) throw new Error(opened.reasons.join('\n'));
+    expect(opened.task.origin).toMatchObject({
+      kind: 'evidence-surface',
+      supportPaths: [
+        '.stylex-migrate-probes/theme-probe-entry.js',
+        '.stylex-migrate-probes/theme-probe-rspack.cjs',
+        '.stylex-migrate-probes/theme-probe-server.cjs',
+      ],
+    });
+    expect(opened.task.requiredOutputs.map((output) => output.role)).toEqual([
+      'runtime-probe-collector',
+      'runtime-probe-config',
+      'runtime-probe-support',
+      'runtime-probe-support',
+      'runtime-probe-support',
+    ]);
+    const config = JSON.parse(
+      fs.readFileSync(
+        path.join(
+          opened.attempt.workspace.path,
+          '.stylex-migrate-probes/runtime-probe.json',
+        ),
+        'utf8',
+      ),
+    );
+    expect(config).toMatchObject({
+      server: {
+        argv: ['node', '.stylex-migrate-probes/theme-probe-server.cjs'],
+        inputFiles: [],
+      },
+      cases: expect.arrayContaining([
+        expect.objectContaining({
+          id: 'theme-dark-root',
+          path: '/?theme=dark',
+          actions: [],
+        }),
+      ]),
+    });
+    expect(config.cases[0].changePaths).toEqual(['src/tokens.stylex.ts']);
+    expect(
+      submitContextAttempt({
+        project,
+        taskId: opened.task.id,
+        proposerKind: 'agent',
+        proposerVersion: 'fixture-agent-v1',
+      }),
+    ).toMatchObject({ ok: true, state: 'awaiting-verification' });
+  });
+
+  test('rejects arbitrary selectors for the locked generated harness', () => {
+    const generatedInput = input();
+    generatedInput.surface = 'generated-rspack';
+    delete generatedInput.server;
+    expect(() =>
+      createThemeRuntimeProbeDefinition({ draft, value: generatedInput }),
+    ).toThrow('standard root and portal selectors');
   });
 
   test('opens through the stable CLI', () => {

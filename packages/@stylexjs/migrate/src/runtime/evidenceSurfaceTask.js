@@ -35,13 +35,19 @@ import type { Cluster } from '../inventory/model';
 import type { ProjectState } from '../state/project';
 
 export const EVIDENCE_SURFACE_TASK_VERSION: string =
-  'stylex-migrate-evidence-surface-task-v1';
+  'stylex-migrate-evidence-surface-task-v2';
 const COLLECTOR_PATH = '.stylex-migrate-probes/runtime-collector.cjs';
 const CONFIG_PATH = '.stylex-migrate-probes/runtime-probe.json';
+
+export type EvidenceSurfaceSupportOutput = {
+  +path: string,
+  +contents: Buffer,
+};
 
 function repositoryServerCommandProblem(
   root: string,
   definition: $FlowFixMe,
+  generatedPaths: $ReadOnlySet<string>,
 ): string | null {
   const command = definition.server.argv;
   const serverRoot = [definition.packageRoot, definition.server.cwd]
@@ -55,7 +61,8 @@ function repositoryServerCommandProblem(
     if (
       command.length < 2 ||
       command[1].startsWith('-') ||
-      !definition.server.inputFiles.includes(repositoryPath(command[1]))
+      (!definition.server.inputFiles.includes(repositoryPath(command[1])) &&
+        !generatedPaths.has(repositoryPath(command[1])))
     ) {
       return 'A direct Node evidence server must execute a declared tracked input file; inline evaluation and undeclared scripts are forbidden.';
     }
@@ -114,6 +121,7 @@ export function openEvidenceSurfaceTask({
   input,
   goal,
   workspaceRoot,
+  supportOutputs = [],
   now = () => new Date().toISOString(),
 }: {
   +project: ProjectState,
@@ -121,6 +129,7 @@ export function openEvidenceSurfaceTask({
   +input: mixed,
   +goal: string,
   +workspaceRoot?: string,
+  +supportOutputs?: $ReadOnlyArray<EvidenceSurfaceSupportOutput>,
   +now?: () => string,
 }): ContextOpenResult {
   const inventory = loadCurrentInventory(project);
@@ -160,9 +169,25 @@ export function openEvidenceSurfaceTask({
       );
     }
   }
+  const supportPaths = supportOutputs.map((output) => output.path).sort();
+  if (
+    new Set(supportPaths).size !== supportPaths.length ||
+    supportPaths.some(
+      (file) =>
+        file === COLLECTOR_PATH ||
+        file === CONFIG_PATH ||
+        file === '' ||
+        file.startsWith('/') ||
+        file.includes('\\') ||
+        file.split('/').some((segment) => segment === '' || segment === '..'),
+    )
+  ) {
+    throw new Error('Invalid generated evidence-surface support output');
+  }
   const serverProblem = repositoryServerCommandProblem(
     project.repositoryRoot,
     definition,
+    new Set(supportPaths),
   );
   if (serverProblem != null) throw new Error(serverProblem);
   const definitionCaseIds = definition.cases.map((item) => item.id);
@@ -181,6 +206,7 @@ export function openEvidenceSurfaceTask({
   }
   const discovered = inspectRuntimeSurfaces({
     repositoryRoot: project.repositoryRoot,
+    packageRoot: definition.packageRoot,
   });
   const knownSurfaces = discovered.surfaces
     .filter((surface) => surface.status === 'known')
@@ -199,6 +225,8 @@ export function openEvidenceSurfaceTask({
   }
   const config = readConfig(project);
   const configHash = hashString(canonicalJson(config as $FlowFixMe));
+  const decisionArtifactHashes =
+    syntheticSource == null ? [] : [syntheticSource.definitionHash];
   const declaredInputs = [
     ...new Set([
       ...assumption.declaredInputs.map((item) => item.path),
@@ -210,6 +238,7 @@ export function openEvidenceSurfaceTask({
     repositoryRoot: project.repositoryRoot,
     files: declaredInputs,
     configHash,
+    decisionArtifactHashes,
     assumptionArtifactHashes: [assumption.artifactHash],
   });
   const stale = detectStaleFiles(snapshot);
@@ -249,7 +278,7 @@ export function openEvidenceSurfaceTask({
   const cluster: Cluster = Object.freeze({
     id: `evidence-surface-${workId}`,
     siteIds: Object.freeze([]),
-    changeFiles: Object.freeze([COLLECTOR_PATH, CONFIG_PATH]),
+    changeFiles: Object.freeze([COLLECTOR_PATH, CONFIG_PATH, ...supportPaths]),
     couplingFiles: Object.freeze(declaredInputs),
     declaredInputs: Object.freeze(declaredInputs),
     factIds: Object.freeze([]),
@@ -270,6 +299,7 @@ export function openEvidenceSurfaceTask({
       packageRoot: definition.packageRoot,
       collectorPath: COLLECTOR_PATH,
       configPath: CONFIG_PATH,
+      supportPaths,
       expectedObservations: definition.expectedObservations,
       syntheticCssExpectations: definition.syntheticCssExpectations,
       cases: definition.cases.map(
@@ -296,7 +326,7 @@ export function openEvidenceSurfaceTask({
     })),
     facts: [],
     scope: {
-      allowedPaths: [COLLECTOR_PATH, CONFIG_PATH],
+      allowedPaths: [COLLECTOR_PATH, CONFIG_PATH, ...supportPaths],
       protectedPaths: ['.stylex-migrate/**', ...declaredInputs],
       allowedDeletions: [],
       ownerDecisionPaths: [],
@@ -315,9 +345,14 @@ export function openEvidenceSurfaceTask({
         role: 'runtime-probe-config',
         mutable: false,
       },
+      ...supportOutputs.map((output) => ({
+        path: output.path,
+        targetHash: hashBytes(output.contents),
+        role: 'runtime-probe-support' as 'runtime-probe-support',
+        mutable: false as false,
+      })),
     ],
-    decisionArtifactHashes:
-      syntheticSource == null ? [] : [syntheticSource.definitionHash],
+    decisionArtifactHashes,
     assumptionArtifactHashes: [assumption.artifactHash],
     requiredChecks: [],
     limitations: [
@@ -345,6 +380,7 @@ export function openEvidenceSurfaceTask({
     requiredOutputContents: [
       { path: COLLECTOR_PATH, contents: collectorBytes },
       { path: CONFIG_PATH, contents: configBytes },
+      ...supportOutputs,
     ],
     workspaceRoot,
     now,

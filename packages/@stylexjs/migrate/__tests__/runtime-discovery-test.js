@@ -96,4 +96,25 @@ describe('runtime surface discovery', () => {
       ],
     });
   });
+
+  test('does not couple a root-package probe to nested package manifests', () => {
+    repo = createTempRepo({
+      'package.json': JSON.stringify({
+        scripts: { e2e: 'playwright test' },
+        devDependencies: { '@playwright/test': '1.61.1' },
+      }),
+      'playwright.config.ts': 'export default {};\n',
+      'nested/package.json': '{not-json',
+      'nested/playwright.config.ts': 'export default {};\n',
+    });
+    expect(
+      inspectRuntimeSurfaces({ repositoryRoot: repo, packageRoot: '.' }),
+    ).toMatchObject({
+      packageRoot: '.',
+      inputFiles: ['package.json', 'playwright.config.ts'],
+      surfaces: expect.arrayContaining([
+        expect.objectContaining({ kind: 'playwright', status: 'known' }),
+      ]),
+    });
+  });
 });
