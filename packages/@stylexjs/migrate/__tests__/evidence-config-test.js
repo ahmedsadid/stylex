@@ -73,6 +73,7 @@ const BOOTSTRAP_RSPACK = {
   cost: 'expensive',
   packageManager: 'pnpm',
   packageRoot: '',
+  buildCommand: ['corepack', 'pnpm', 'run', 'build'],
   cwd: '.',
   allowedEnv: ['PATH'],
   fileGlobs: ['package.json', 'pnpm-lock.yaml', 'rspack.config.ts'],

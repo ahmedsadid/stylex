@@ -65,6 +65,7 @@ export type BootstrapRspackProviderConfig = {
   +cost: EvidenceCost,
   +packageManager: 'pnpm' | 'yarn' | 'npm',
   +packageRoot: string,
+  +buildCommand: $ReadOnlyArray<string>,
   +argv: $ReadOnlyArray<string>,
   +versionArgv: $ReadOnlyArray<string>,
   +cwd: string,
@@ -228,7 +229,8 @@ function normalizeProvider(value: mixed): EvidenceProviderConfig {
     (provider.packageManager === 'pnpm' ||
       provider.packageManager === 'yarn' ||
       provider.packageManager === 'npm') &&
-    validRelativePath(provider.packageRoot)
+    validRelativePath(provider.packageRoot) &&
+    nonEmptyStrings(provider.buildCommand)
   ) {
     return Object.freeze({
       ...bootstrapFields(provider),
@@ -236,6 +238,7 @@ function normalizeProvider(value: mixed): EvidenceProviderConfig {
       check: 'build',
       packageManager: provider.packageManager,
       packageRoot: provider.packageRoot,
+      buildCommand: Object.freeze([...provider.buildCommand]),
     });
   }
   throw new Error('Invalid repository evidence provider configuration');

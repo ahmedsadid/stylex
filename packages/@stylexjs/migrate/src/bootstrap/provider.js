@@ -26,7 +26,7 @@ import type { BootstrapRspackProviderConfig } from '../evidence/config';
 export const RSPACK_SENTINEL_CHECK_VERSION: string =
   'stylex-rspack-emitted-css-v1';
 export const RSPACK_SENTINEL_LIMITATION: string =
-  'The sentinel compiles with the candidate dependency graph in an isolated minimal Rspack compilation. It proves that the installed StyleX adapter transforms a StyleX call and emits CSS, but it does not prove the repository application config executes the adapter or that the full application build succeeds.';
+  'The sentinel compiles with the candidate dependency graph in an isolated minimal Rspack compilation. The repository build runs separately against the candidate config, but without a migrated application consumer it does not prove that the real application pipeline emits StyleX CSS.';
 
 export function bootstrapRspackProviderId(inspectionId: string): string {
   return `stylex-bootstrap-rspack-${inspectionId}`;
@@ -154,12 +154,15 @@ compiler.run((error, stats) => {
 function combinedOutput(
   install: ProcessResult,
   sentinel: ProcessResult,
+  repositoryBuild: ProcessResult,
 ): Buffer {
   return Buffer.concat([
     Buffer.from('[dependency-install]\n'),
     fullEvidenceOutput(install),
     Buffer.from('\n[rspack-sentinel]\n'),
     fullEvidenceOutput(sentinel),
+    Buffer.from('\n[repository-build]\n'),
+    fullEvidenceOutput(repositoryBuild),
   ]);
 }
 
@@ -214,9 +217,10 @@ export async function runBootstrapRspackProvider(
 
   let installResult = emptyProcessResult();
   let sentinelResult = emptyProcessResult();
+  let buildResult = emptyProcessResult();
   let result: 'pass' | 'fail' | 'unavailable' | 'not-applicable' = 'pass';
   let detail =
-    'Locked dependencies installed; StyleX transformed the sentinel and Rspack emitted its CSS.';
+    'Locked dependencies installed; StyleX transformed the sentinel and emitted CSS; the repository application build passed.';
   let commandCwd = config.cwd;
   try {
     const installCwd = evidenceCommandDirectory(
@@ -255,6 +259,21 @@ export async function runBootstrapRspackProvider(
       ) {
         result = sentinelResult.error == null ? 'fail' : 'unavailable';
         detail = failureDetail('Rspack sentinel compilation', sentinelResult);
+      } else {
+        buildResult = await runEvidenceProcess({
+          argv: config.buildCommand,
+          cwd: installCwd,
+          environment: environment.values,
+          timeoutMs: config.timeoutMs,
+        });
+        if (
+          buildResult.error != null ||
+          buildResult.timedOut ||
+          buildResult.exitCode !== 0
+        ) {
+          result = buildResult.error == null ? 'fail' : 'unavailable';
+          detail = failureDetail('repository application build', buildResult);
+        }
       }
     }
   } catch (error) {
@@ -262,14 +281,15 @@ export async function runBootstrapRspackProvider(
     detail = error instanceof Error ? error.message : String(error);
   }
 
-  const output = combinedOutput(installResult, sentinelResult);
+  const output = combinedOutput(installResult, sentinelResult, buildResult);
   const command = Object.freeze({
     argv: invocation,
     versionArgv,
     cwd: commandCwd,
     allowedEnvKeys: config.allowedEnv,
     environmentFingerprint: environment.fingerprint,
-    exitCode: sentinelResult.exitCode ?? installResult.exitCode,
+    exitCode:
+      buildResult.exitCode ?? sentinelResult.exitCode ?? installResult.exitCode,
   });
   const stable = {
     check: config.check,

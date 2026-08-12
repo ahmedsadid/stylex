@@ -163,6 +163,7 @@ describe('M7 contextual task capsules', () => {
             '@stylexjs/stylex@0.19.0',
           ],
         ],
+        buildCommand: ['corepack', 'pnpm', 'run', 'build'],
       },
       cluster: {
         ...base.cluster,
@@ -206,6 +207,7 @@ describe('M7 contextual task capsules', () => {
           '@stylexjs/stylex@0.19.0',
         ],
       ],
+      buildCommand: ['corepack', 'pnpm', 'run', 'build'],
     });
     expect(capsule.scope.bootstrapPaths).toEqual(paths);
 
@@ -235,6 +237,7 @@ describe('M7 contextual task capsules', () => {
             },
           ],
           installCommands: [['corepack', 'pnpm', 'add']],
+          buildCommand: ['corepack', 'pnpm', 'run', 'build'],
         },
         scope: {
           ...base.scope,

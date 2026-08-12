@@ -27,6 +27,7 @@ export type BootstrapContextTaskOrigin = {
     +section: 'dependencies' | 'devDependencies',
   }>,
   +installCommands: $ReadOnlyArray<$ReadOnlyArray<string>>,
+  +buildCommand: $ReadOnlyArray<string>,
 };
 
 export type ContextTaskOrigin =
@@ -202,6 +203,7 @@ function normalizeOrigin(
   if (origin.kind === 'bootstrap') {
     const dependencies = origin.dependencies;
     const installCommands = origin.installCommands;
+    const buildCommand = origin.buildCommand;
     if (
       origin.inspectionId === '' ||
       origin.packageRoot.includes('\0') ||
@@ -240,6 +242,14 @@ function normalizeOrigin(
               argument === '' ||
               argument.includes('\0'),
           ),
+      ) ||
+      !Array.isArray(buildCommand) ||
+      buildCommand.length === 0 ||
+      buildCommand.some(
+        (argument) =>
+          typeof argument !== 'string' ||
+          argument === '' ||
+          argument.includes('\0'),
       )
     ) {
       throw new Error('Invalid bootstrap task origin');
@@ -254,6 +264,7 @@ function normalizeOrigin(
       installCommands: Object.freeze(
         installCommands.map((argv) => Object.freeze([...argv])),
       ),
+      buildCommand: Object.freeze([...buildCommand]),
     });
   }
   if (

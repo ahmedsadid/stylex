@@ -65,8 +65,9 @@ unambiguous Rspack target and creates a normal contextual task whose
 `bootstrapPaths` authorize only the discovered manifest, lockfile, and config.
 Submission requires the StyleX packages, a changed lockfile, and syntactic
 `.rspack(...)` adapter wiring. Verification automatically installs the locked
-candidate dependencies and compiles a real emitted-CSS sentinel. That isolated
-probe does not replace a configured repository application build.
+candidate dependencies, compiles a real emitted-CSS sentinel, and runs the
+exact selected repository application build command. Without a real migrated
+consumer, only the isolated sentinel proves emitted StyleX CSS.
 The optional package spec defaults to the migrate package version. Supplying a
 different literal is an explicit developer choice recorded in the task origin;
 the agent must run the returned `installCommands` argv arrays exactly.

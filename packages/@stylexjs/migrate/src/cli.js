@@ -623,6 +623,10 @@ export function runCli(
                 result.task.origin.kind === 'bootstrap'
                   ? result.task.origin.installCommands
                   : [],
+              buildCommand:
+                result.task.origin.kind === 'bootstrap'
+                  ? result.task.origin.buildCommand
+                  : [],
               allowedPaths: result.task.scope.allowedPaths,
               requiredChecks: result.task.requiredChecks,
               warnings: result.task.limitations,

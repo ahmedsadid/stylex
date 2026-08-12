@@ -58,6 +58,7 @@ export function withBootstrapEvidenceProviders({
       cost: 'expensive',
       packageManager: origin.packageManager,
       packageRoot: origin.packageRoot,
+      buildCommand: origin.buildCommand,
       cwd: '.',
       allowedEnv: ['CI', 'PATH'],
       fileGlobs: inspection.task.scope.bootstrapPaths ?? [],

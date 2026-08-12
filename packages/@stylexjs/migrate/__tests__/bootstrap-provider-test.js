@@ -45,6 +45,11 @@ describe('Rspack bootstrap emitted-CSS evidence', () => {
     const corepack = path.join(bin, 'corepack');
     fs.writeFileSync(corepack, '#!/bin/sh\nexit 0\n', 'utf8');
     fs.chmodSync(corepack, 0o755);
+    fs.writeFileSync(
+      path.join(workspace, 'build.js'),
+      "process.stdout.write('repository build passed\\n');\n",
+      'utf8',
+    );
     fs.symlinkSync(
       path.resolve(__dirname, '../../../..', 'node_modules'),
       path.join(workspace, 'node_modules'),
@@ -64,6 +69,7 @@ describe('Rspack bootstrap emitted-CSS evidence', () => {
       cost: 'expensive',
       packageManager: 'pnpm',
       packageRoot: '',
+      buildCommand: [process.execPath, 'build.js'],
       argv: ['stylex-migrate', 'internal', 'bootstrap-rspack'],
       versionArgv: ['stylex-migrate', '--version'],
       cwd: '.',
@@ -85,7 +91,7 @@ describe('Rspack bootstrap emitted-CSS evidence', () => {
       check: 'build',
       checkVersion: RSPACK_SENTINEL_CHECK_VERSION,
       result: 'pass',
-      detail: expect.stringContaining('emitted its CSS'),
+      detail: expect.stringContaining('repository application build passed'),
       command: {
         argv: expect.arrayContaining(['bootstrap-rspack']),
         exitCode: 0,

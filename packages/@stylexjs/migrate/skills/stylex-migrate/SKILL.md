@@ -75,10 +75,10 @@ StyleX build integration.
 6. Report the two different evidence boundaries. The frozen wiring guard proves
    required declarations and syntactic adapter wiring. The built-in Rspack
    sentinel performs a frozen-lockfile install and requires transformed
-   JavaScript plus emitted CSS. It uses a minimal isolated compilation; it does
-   not prove that the repository's full application config executes the adapter
-   or that the application build succeeds. Require a repository build check and
-   later real migrated consumers before making those stronger claims.
+   JavaScript plus emitted CSS, then runs the capsule's exact repository build
+   argv against the candidate config. Until a real migrated StyleX consumer is
+   in that build, the sentinel—not the application output—is the emitted-CSS
+   proof. Keep that limitation explicit.
 
 ## Run a mechanical proposal
 

@@ -111,6 +111,7 @@ export default {plugins: [new rspack.DefinePlugin({})]};
             '@stylexjs/unplugin@0.19.0',
           ],
         ],
+        buildCommand: ['corepack', 'pnpm', 'run', 'build'],
       },
       scope: {
         allowedPaths: ['package.json', 'pnpm-lock.yaml', 'rspack.config.ts'],

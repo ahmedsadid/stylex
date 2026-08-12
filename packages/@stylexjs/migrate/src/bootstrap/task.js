@@ -133,6 +133,59 @@ function installCommands({
   ]);
 }
 
+function preferredBuildScript(
+  integration: BuildIntegrationInspection,
+): { +manifestPath: string, +name: string } | null {
+  const scripts = integration.packageScripts.map((entry) => {
+    const marker = '#scripts.';
+    const index = entry.indexOf(marker);
+    return index < 0
+      ? null
+      : {
+          manifestPath: entry.slice(0, index),
+          name: entry.slice(index + marker.length),
+        };
+  });
+  const available = scripts.filter(Boolean) as $FlowFixMe;
+  for (const preferred of ['build-production', 'build']) {
+    const match = available.find((script) => script.name === preferred);
+    if (match != null) return match;
+  }
+  return available.length === 1 ? available[0] : null;
+}
+
+function buildCommand({
+  manager,
+  packageName,
+  packageRoot,
+  script,
+}: {
+  +manager: 'pnpm' | 'yarn' | 'npm',
+  +packageName: string | null,
+  +packageRoot: string,
+  +script: string,
+}): $ReadOnlyArray<string> {
+  if (manager === 'pnpm') {
+    return Object.freeze(
+      packageRoot === ''
+        ? ['corepack', 'pnpm', 'run', script]
+        : ['corepack', 'pnpm', '--filter', String(packageName), 'run', script],
+    );
+  }
+  if (manager === 'yarn') {
+    return Object.freeze(
+      packageRoot === ''
+        ? ['corepack', 'yarn', 'run', script]
+        : ['corepack', 'yarn', 'workspace', String(packageName), 'run', script],
+    );
+  }
+  return Object.freeze(
+    packageRoot === ''
+      ? ['npm', 'run', script]
+      : ['npm', 'run', '--workspace', String(packageName), script],
+  );
+}
+
 function expectedLockfile(manager: 'pnpm' | 'yarn' | 'npm'): string {
   if (manager === 'pnpm') return 'pnpm-lock.yaml';
   if (manager === 'yarn') return 'yarn.lock';
@@ -309,6 +362,19 @@ export function openBootstrapTask({
       ]),
     };
   }
+  const selectedBuildScript = preferredBuildScript(selectedIntegration);
+  if (
+    selectedBuildScript == null ||
+    selectedBuildScript.manifestPath !== selectedPackage.manifestPath
+  ) {
+    return {
+      ok: false,
+      state: 'blocked',
+      reasons: Object.freeze([
+        `No unambiguous ${selectedIntegration.kind} application build script belongs to ${selectedPackage.manifestPath}.`,
+      ]),
+    };
+  }
 
   const lockfile = manager.lockfile ?? expectedLockfile(packageManager);
   const changeFiles = [
@@ -349,6 +415,12 @@ export function openBootstrapTask({
     packageRoot: selectedPackage.root,
     dependencies,
   });
+  const repositoryBuildCommand = buildCommand({
+    manager: packageManager,
+    packageName: selectedPackage.name,
+    packageRoot: selectedPackage.root,
+    script: selectedBuildScript.name,
+  });
   const task = createContextTaskCapsule({
     goal,
     origin: {
@@ -359,6 +431,7 @@ export function openBootstrapTask({
       integration: selectedIntegration.kind,
       dependencies,
       installCommands: commands,
+      buildCommand: repositoryBuildCommand,
     },
     inventoryId: inventory.id,
     planId: null,
