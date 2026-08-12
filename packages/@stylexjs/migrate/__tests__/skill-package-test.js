@@ -34,6 +34,10 @@ describe('M7 vendor-neutral skill package', () => {
     expect(skill).toContain('dynamic strategy draft');
     expect(skill).toContain('stylex-migrate bootstrap inspect');
     expect(skill).toContain('scope.bootstrapPaths');
+    expect(skill).toContain('stylex-migrate runtime inspect');
+    expect(skill).toContain('stylex-migrate theme topology');
+    expect(skill).toContain('stylex-migrate assumption record');
+    expect(skill).toContain('classList.add');
     const dynamicReference = fs.readFileSync(
       path.join(SKILL_ROOT, 'references', 'themes-and-runtime-values.md'),
       'utf8',
@@ -51,6 +55,14 @@ describe('M7 vendor-neutral skill package', () => {
     expect(commands).toContain('dynamic strategy draft');
     expect(commands).toContain('behavioral evidence');
     expect(commands).toContain('stylex-migrate bootstrap open');
+    expect(commands).toContain('assumption inspect');
+    expect(commands).toContain('runtime inspect');
+    const runtime = fs.readFileSync(
+      path.join(SKILL_ROOT, 'references', 'runtime-evidence.md'),
+      'utf8',
+    );
+    expect(runtime).toContain('generated probe');
+    expect(runtime).toContain('not a retained baseline');
     const protocol = fs.readFileSync(
       path.join(SKILL_ROOT, 'references', 'protocol.md'),
       'utf8',

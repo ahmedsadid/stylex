@@ -49,6 +49,14 @@ definitions plus mapped Emotion theme reads or providers. Use the contextual
 task workflow for other non-mechanical clusters. Do not force a cluster into a
 different lane.
 
+Before choosing runtime evidence for theme or dynamic work, run
+`stylex-migrate runtime inspect`. Prefer a repository-native surface whose
+status is `known`. `inferred` means supporting packages exist but no executable
+surface was established; do not invent an argv from that. Run
+`stylex-migrate theme topology` before proposing a root/global theme host. Its
+observations may justify a labelled test assumption, but they are syntactic
+facts rather than topology approval.
+
 ## Bootstrap StyleX in the repository
 
 Use this workflow when the repository has Emotion migration work but no usable
@@ -122,6 +130,10 @@ StyleX build integration.
    recorded hash.
 4. Treat every fact status literally. `unknown` and `resolution-failed` do not
    mean false. Stop when a capsule stop condition applies.
+   When a developer authorizes a disposable test assumption, record it with
+   `stylex-migrate assumption record`, inspect it, and pass its ID after the
+   goal in `context open`. Bound assumptions are exact test inputs, never owner
+   decisions. Do not delete their warnings from reports.
 5. Select only the relevant playbooks:
    - Read [emotion-css-prop.md](references/emotion-css-prop.md) for `css` prop
      conversion and declaration composition.
@@ -172,11 +184,15 @@ unknowns or earn `runtime-matched`.
    `mappings` entry, variant source, bridge declaration, limitation, and the
    approval command to a human. If a bridge is declared and
    `bridgeEvidence.complete` is not true, do not recommend approval. Run
-   `stylex-migrate theme bridge open <draft-id> "<goal>"` to open the bounded
+   `stylex-migrate theme bridge open <draft-id> "<goal>" [assumption-id...]` to open the bounded
    prerequisite integration task. Its generated theme module is a locked
    required output. Edit only the named boundary files, keep the Emotion
    provider, reuse its exact variant-selection source, avoid new semantic DOM
-   wrappers or unreviewed global DOM mutation, then submit through the normal
+   wrappers or unreviewed global DOM mutation. A body/document host experiment
+   requires a bound test assumption. Split `stylex.props(theme).className` on
+   whitespace, filter empty tokens, and spread the same token list into both
+   `classList.add` and `classList.remove`; the frozen guard rejects unsplit or
+   asymmetric wiring. Then submit through the normal
    contextual protocol. Every generated variant must reach `stylex.props` in the
    frozen candidate. Static observation remains only a wiring guard; require
    repository checks and relevant light/dark runtime cases. The developer, not

@@ -15,7 +15,11 @@ stylex-migrate bootstrap open "<goal>" [package-root] [stylex-spec] [integration
 stylex-migrate candidate diff <candidate-id>
 stylex-migrate dynamic strategy draft <json-file> <agent|human> <author>
 stylex-migrate dynamic strategy inspect <draft-id>
-stylex-migrate context open <cluster-id> "<goal>"
+stylex-migrate assumption record <json-file> <agent|human> <author>
+stylex-migrate assumption inspect <assumption-id>
+stylex-migrate runtime inspect
+stylex-migrate theme topology
+stylex-migrate context open <cluster-id> "<goal>" [assumption-id...]
 stylex-migrate context open <task-id>
 stylex-migrate context inspect <task-id>
 stylex-migrate context submit <task-id> <agent|human> <name> <version> [skill-version]
@@ -23,7 +27,7 @@ stylex-migrate context abandon <task-id>
 stylex-migrate theme candidates
 stylex-migrate theme draft <json-file> <author>
 stylex-migrate theme inspect <draft-id>
-stylex-migrate theme bridge open <draft-id> "<goal>"
+stylex-migrate theme bridge open <draft-id> "<goal>" [assumption-id...]
 stylex-migrate theme approve <draft-id> <reviewer> --human-confirm
 stylex-migrate theme propose <draft-id>
 stylex-migrate verify <candidate-id>
@@ -86,6 +90,19 @@ The first `context open` creates a task from the current plan. The second form
 opens attempt two only when the kernel recorded `needs-replan`. It cannot reopen
 an owner decision, blocked task, abandoned task, or exhausted task.
 
+`assumption record` persists a content-addressed test-only artifact with exact
+facts, repository input fingerprints, rationale, scope, alternatives, author,
+and limitations. Both agents and humans may author one. It never becomes
+`approved`. `assumption inspect` reports current or stale. Passing IDs after a
+context or bridge goal binds them separately from decision artifacts through
+the task, candidate, and evidence subject.
+
+`runtime inspect` reports repository-native Playwright, Storybook, and
+component-test surfaces as `known`, dependency-only possibilities as
+`inferred`, and absence as `unknown`. `theme topology` records direct global
+hosts, class mutations, portals, secondary windows, and secondary-document
+access. Neither command supplies runtime proof.
+
 `context submit` freezes the worktree diff, validates its actual paths, stores a
 content-addressed candidate, removes the external worktree, and returns the
 candidate ID. The name and versions describe the proposer; they grant no
@@ -96,7 +113,10 @@ guard does not replace repository or runtime evidence.
 `theme bridge open` creates a contextual task directly from an exact current
 theme draft before approval. It permits changes only to the draft's boundary
 files and target module, seeds the deterministic module as an immutable required
-output, and binds the draft definition hash to the snapshot and candidate. Use
+output, and binds the draft definition hash to the snapshot and candidate.
+Bound test assumptions may authorize named global-host experiments without
+claiming production intent. Global-host wiring must split the StyleX class name
+and spread identical tokens into DOMTokenList add/remove calls. Use
 the normal `context inspect`, `context submit`, `candidate diff`, `verify`, and
 `review` commands afterward. The command never edits the source checkout.
 
