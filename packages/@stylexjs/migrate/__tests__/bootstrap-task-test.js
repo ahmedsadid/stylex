@@ -17,6 +17,7 @@ import {
   submitContextAttempt,
 } from '../src/index';
 import { withBootstrapEvidenceProviders } from '../src/bootstrap/evidence';
+import { runCli } from '../src/cli';
 import type { ProjectState } from '../src/index';
 import {
   createTempDir,
@@ -173,5 +174,60 @@ export default {plugins: []};
       state: 'needs-replan',
       reasons: [expect.stringContaining('invokes its rspack adapter')],
     });
+  });
+
+  test('exposes bootstrap discovery and task opening through the CLI', () => {
+    let inspected = '';
+    expect(
+      runCli(['bootstrap', 'inspect', '--json'], {
+        cwd: repo,
+        writeStdout: (text) => {
+          inspected += text;
+        },
+      }),
+    ).toBe(0);
+    expect(JSON.parse(inspected)).toMatchObject({
+      command: 'bootstrap inspect',
+      inspection: {
+        packageManager: { name: 'pnpm' },
+        integrations: [expect.objectContaining({ kind: 'rspack' })],
+      },
+    });
+
+    let opened = '';
+    expect(
+      runCli(
+        [
+          'bootstrap',
+          'open',
+          'Install StyleX and wire the discovered Rspack build.',
+          '--json',
+        ],
+        {
+          cwd: repo,
+          writeStdout: (text) => {
+            opened += text;
+          },
+        },
+      ),
+    ).toBe(0);
+    const output = JSON.parse(opened);
+    expect(output).toMatchObject({
+      command: 'bootstrap open',
+      state: 'open',
+      origin: { kind: 'bootstrap', integration: 'rspack' },
+      allowedPaths: ['package.json', 'pnpm-lock.yaml', 'rspack.config.ts'],
+      requiredChecks: [
+        expect.objectContaining({
+          checkVersion: 'stylex-rspack-emitted-css-v1',
+        }),
+      ],
+    });
+    expect(
+      runCli(['context', 'abandon', output.taskId, '--json'], {
+        cwd: repo,
+        writeStdout: () => {},
+      }),
+    ).toBe(0);
   });
 });

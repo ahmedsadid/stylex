@@ -10,6 +10,8 @@ stylex-migrate readiness
 stylex-migrate plan
 stylex-migrate mechanical propose <cluster-id>
 stylex-migrate styled propose <cluster-id>
+stylex-migrate bootstrap inspect
+stylex-migrate bootstrap open "<goal>"
 stylex-migrate candidate diff <candidate-id>
 stylex-migrate dynamic strategy draft <json-file> <agent|human> <author>
 stylex-migrate dynamic strategy inspect <draft-id>
@@ -55,6 +57,16 @@ all of its known direct JSX consumers. It freezes only output that passed the
 built-in StyleX and static CSS checks. The candidate remains
 repeatable-contextual: repository checks are mandatory, and missing runtime
 evidence remains a prominent limitation.
+
+`bootstrap inspect` reports the exact package-manager, package ownership,
+lockfile, build integration, config inputs, and existing StyleX dependencies
+seen from the current inventory. `bootstrap open` currently accepts one
+unambiguous Rspack target and creates a normal contextual task whose
+`bootstrapPaths` authorize only the discovered manifest, lockfile, and config.
+Submission requires the StyleX packages, a changed lockfile, and syntactic
+`.rspack(...)` adapter wiring. Verification automatically installs the locked
+candidate dependencies and compiles a real emitted-CSS sentinel. That isolated
+probe does not replace a configured repository application build.
 
 `dynamic strategy draft` validates exact coverage of every observed prop path in
 one current planned `styled-dynamic-intrinsic` cluster and activates the

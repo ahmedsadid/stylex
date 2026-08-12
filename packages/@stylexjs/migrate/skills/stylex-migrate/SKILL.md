@@ -2,8 +2,8 @@
 name: stylex-migrate
 description:
   'Guide agents through vendor-neutral stylex-migrate repository readiness,
-  mechanical and contextual tasks, dynamic styled values, and approved theme
-  token-map migrations.'
+  StyleX dependency/build bootstrap, mechanical and contextual tasks, dynamic
+  styled values, and approved theme token-map migrations.'
 ---
 
 # StyleX Migrate
@@ -48,6 +48,36 @@ theme-decision workflow when inventory facts show bounded literal theme
 definitions plus mapped Emotion theme reads or providers. Use the contextual
 task workflow for other non-mechanical clusters. Do not force a cluster into a
 different lane.
+
+## Bootstrap StyleX in the repository
+
+Use this workflow when the repository has Emotion migration work but no usable
+StyleX build integration.
+
+1. Run `stylex-migrate scan`, then `stylex-migrate bootstrap inspect`. Treat
+   package-manager and build-integration statuses literally. Stop on ambiguity
+   or `resolution-failed`; do not choose a lockfile or compiler by guesswork.
+2. Run `stylex-migrate bootstrap open "<goal>"`. Continue only when it returns
+   an open `bootstrap` task. Read its complete capsule and stop conditions.
+3. Work only in the returned workspace. For this task alone, the exact
+   `scope.bootstrapPaths` entries authorize the discovered package manifest,
+   lockfile, and Rspack config. They do not authorize any other configuration or
+   application source.
+4. Use the discovered package manager in the workspace to add
+   `@stylexjs/stylex` and `@stylexjs/unplugin` and update the existing lockfile.
+   Wire the unplugin's `.rspack(...)` adapter into the discovered config while
+   preserving existing plugins and options. Do not add unrelated dependencies,
+   scripts, entry files, or migrations.
+5. Submit with `stylex-migrate context submit`, then inspect the frozen patch
+   and run `stylex-migrate verify <candidate-id>` and
+   `stylex-migrate review <candidate-id>`.
+6. Report the two different evidence boundaries. The frozen wiring guard proves
+   required declarations and syntactic adapter wiring. The built-in Rspack
+   sentinel performs a frozen-lockfile install and requires transformed
+   JavaScript plus emitted CSS. It uses a minimal isolated compilation; it does
+   not prove that the repository's full application config executes the adapter
+   or that the application build succeeds. Require a repository build check and
+   later real migrated consumers before making those stronger claims.
 
 ## Run a mechanical proposal
 

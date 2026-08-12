@@ -74,6 +74,8 @@ import {
   inspectDynamicStrategy,
   persistDynamicStrategyDraft,
 } from './dynamic/decisions';
+import { inspectBootstrap } from './bootstrap/discover';
+import { openBootstrapTask } from './bootstrap/task';
 
 type WriteOutput = (text: string) => mixed;
 
@@ -94,6 +96,8 @@ Commands:
                           freeze a checked candidate from a mechanical cluster
   styled propose <cluster>
                           freeze a checked closed-intrinsic styled candidate
+  bootstrap inspect       inspect package manager, package, and build wiring
+  bootstrap open <goal>   open a bounded StyleX installation/config task
   candidate diff <candidate>
                           print the exact frozen patch without applying it
   dynamic strategy draft <json-file> <agent|human> <author>
@@ -559,6 +563,64 @@ export function runCli(
               reason: result.reason,
               file: result.file,
               evidence: result.evidence,
+            },
+        json,
+        stdout,
+      );
+      return result.ok ? 0 : 3;
+    }
+    if (args[0] === 'bootstrap' && args[1] === 'inspect' && args.length === 2) {
+      const project = openProject(cwd);
+      const inventory = loadCurrentInventory(project);
+      if (inventory == null) {
+        throw new Error(
+          'Run stylex-migrate scan before inspecting repository bootstrap requirements',
+        );
+      }
+      const inspection = inspectBootstrap({
+        repositoryRoot: project.repositoryRoot,
+        sourceFiles: inventory.files.map((file) => file.path),
+      });
+      present(
+        {
+          command: 'bootstrap inspect',
+          inspection: inspection as $FlowFixMe,
+          next: inspection.integrations.some(
+            (integration) =>
+              integration.kind === 'rspack' && !integration.stylexConfigured,
+          )
+            ? 'Run stylex-migrate bootstrap open "Install StyleX and wire the discovered Rspack build."'
+            : null,
+        },
+        json,
+        stdout,
+      );
+      return 0;
+    }
+    if (args[0] === 'bootstrap' && args[1] === 'open' && args.length === 3) {
+      const result = openBootstrapTask({
+        project: openProject(cwd),
+        goal: args[2],
+      });
+      present(
+        result.ok
+          ? {
+              command: 'bootstrap open',
+              state: result.state,
+              taskId: result.task.id,
+              attemptId: result.attempt.id,
+              workspace: result.attempt.workspace.path,
+              origin: result.task.origin,
+              allowedPaths: result.task.scope.allowedPaths,
+              requiredChecks: result.task.requiredChecks,
+              warnings: result.task.limitations,
+              stopConditions: result.task.stopConditions,
+              next: `Update only the authorized dependency, lockfile, and Rspack config bytes in the workspace, then run stylex-migrate context submit ${result.task.id} <agent|human> <name> <version> [skill-version].`,
+            }
+          : {
+              command: 'bootstrap open',
+              state: result.state,
+              reasons: result.reasons,
             },
         json,
         stdout,

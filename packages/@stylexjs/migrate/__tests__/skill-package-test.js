@@ -32,6 +32,8 @@ describe('M7 vendor-neutral skill package', () => {
     expect(skill).toContain('emotion-styled-dynamic-value');
     expect(skill).toContain('styled-dynamic-intrinsic');
     expect(skill).toContain('dynamic strategy draft');
+    expect(skill).toContain('stylex-migrate bootstrap inspect');
+    expect(skill).toContain('scope.bootstrapPaths');
     const dynamicReference = fs.readFileSync(
       path.join(SKILL_ROOT, 'references', 'themes-and-runtime-values.md'),
       'utf8',
@@ -48,6 +50,13 @@ describe('M7 vendor-neutral skill package', () => {
     );
     expect(commands).toContain('dynamic strategy draft');
     expect(commands).toContain('behavioral evidence');
+    expect(commands).toContain('stylex-migrate bootstrap open');
+    const protocol = fs.readFileSync(
+      path.join(SKILL_ROOT, 'references', 'protocol.md'),
+      'utf8',
+    );
+    expect(protocol).toContain('`bootstrap` origin');
+    expect(protocol).toContain('`scope.bootstrapPaths`');
     for (const reference of [
       'protocol.md',
       'commands.md',

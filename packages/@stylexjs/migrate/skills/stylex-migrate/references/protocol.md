@@ -6,7 +6,10 @@ required generated outputs, checks, limitations, stop conditions, and maximum
 attempt count. The attempt capsule is also immutable and binds the external
 worktree, required outputs, and prior failures. A `plan-cluster` origin comes
 from normal planning. A `theme-bridge` origin is a first-class workflow bound to
-one exact theme draft; it does not pretend to be a persisted plan cluster.
+one exact theme draft; it does not pretend to be a persisted plan cluster. A
+`bootstrap` origin binds one inspected package manager, package root, build
+integration, and exact configuration surface without pretending configuration
+edits are ordinary migration edits.
 
 ## Authority
 
@@ -70,6 +73,12 @@ Edit only `scope.allowedPaths`. Treat `scope.protectedPaths`, lockfiles,
 configuration, `.stylex-migrate`, undeclared deletions, symlinks, submodules,
 binary files, and mode changes as unavailable. If a correct conversion requires
 one, stop and request replanning or an owner decision.
+
+The only exception is a kernel-created `bootstrap` task: its exact
+`scope.bootstrapPaths` entries authorize the named manifest, lockfile, and build
+config. Wildcards and any other configuration path remain forbidden. This
+exception authorizes proposal bytes in the external worktree, not direct writes
+to the source checkout and not application or commit authority.
 
 The source checkout may contain unrelated dirt. Never copy it into the task.
 Declared task inputs are already bound to HEAD and a dirty declared input blocks
