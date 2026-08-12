@@ -17,7 +17,7 @@ import type { CandidatePatch } from '../candidate/patch';
 import type { BootstrapContextTaskOrigin } from '../context/capsule';
 import type { EvidenceResult } from '../kernel/evidence';
 
-export const BOOTSTRAP_WIRING_MODEL: string = 'stylex-bootstrap-wiring-v1';
+export const BOOTSTRAP_WIRING_MODEL: string = 'stylex-bootstrap-wiring-v2';
 export const BOOTSTRAP_WIRING_LIMITATION: string =
   'This frozen-byte check confirms declared StyleX dependencies and syntactic build-plugin wiring. It does not prove dependency installation, compiler execution, CSS emission, repository build success, or runtime behavior.';
 

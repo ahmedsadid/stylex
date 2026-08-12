@@ -246,10 +246,11 @@ export function createEvidenceSchedule({
     estimatedCommandRuns: selected.reduce(
       (total, provider) =>
         total +
-        (provider.kind === 'runtime-command' ||
-        provider.kind === 'bootstrap-rspack'
+        (provider.kind === 'runtime-command'
           ? 2
-          : 1),
+          : provider.kind === 'bootstrap-rspack'
+            ? 3
+            : 1),
       0,
     ),
     estimatedDurationMs: estimatedWallTime(items, config.concurrency),

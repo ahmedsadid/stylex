@@ -68,7 +68,7 @@ const BOOTSTRAP_RSPACK = {
   id: 'stylex-bootstrap-rspack-fixture',
   kind: 'bootstrap-rspack',
   check: 'build',
-  checkVersion: 'stylex-rspack-emitted-css-v1',
+  checkVersion: 'stylex-rspack-emitted-css-v2',
   subject: 'candidate',
   cost: 'expensive',
   packageManager: 'pnpm',

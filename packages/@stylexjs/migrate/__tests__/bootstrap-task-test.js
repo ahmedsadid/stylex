@@ -126,7 +126,7 @@ export default {plugins: [new rspack.DefinePlugin({})]};
       requiredChecks: [
         expect.objectContaining({
           id: expect.stringContaining('stylex-bootstrap-rspack-'),
-          checkVersion: 'stylex-rspack-emitted-css-v1',
+          checkVersion: 'stylex-rspack-emitted-css-v2',
         }),
       ],
     });
@@ -160,7 +160,7 @@ export default {
         {
           check: 'stylex-bootstrap-wiring',
           result: 'pass',
-          subject: { model: 'stylex-bootstrap-wiring-v1' },
+          subject: { model: 'stylex-bootstrap-wiring-v2' },
         },
       ],
     });
@@ -338,7 +338,7 @@ export default {
       allowedPaths: ['package.json', 'pnpm-lock.yaml', 'rspack.config.ts'],
       requiredChecks: [
         expect.objectContaining({
-          checkVersion: 'stylex-rspack-emitted-css-v1',
+          checkVersion: 'stylex-rspack-emitted-css-v2',
         }),
       ],
     });

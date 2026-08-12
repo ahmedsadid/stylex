@@ -52,7 +52,8 @@ function provider({
   +delayMs: number,
   +log: string,
 }): CommandProviderConfig {
-  const script = 'const fs=require(\'fs\');const [log,id,delay,code]=process.argv.slice(1);fs.appendFileSync(log,id+\'-start\\n\');setTimeout(()=>{fs.appendFileSync(log,id+\'-end\\n\');process.exit(Number(code))},Number(delay))';
+  const script =
+    "const fs=require('fs');const [log,id,delay,code]=process.argv.slice(1);fs.appendFileSync(log,id+'-start\\n');setTimeout(()=>{fs.appendFileSync(log,id+'-end\\n');process.exit(Number(code))},Number(delay))";
   return {
     id,
     kind: 'command',
@@ -196,5 +197,38 @@ describe('M5 evidence scheduling and history', () => {
       'standard-fail-start',
       'standard-fail-end',
     ]);
+  });
+
+  test('counts every process in the bootstrap verifier', () => {
+    const schedule = createEvidenceSchedule({
+      project,
+      subject: SUBJECT,
+      config: {
+        concurrency: 1,
+        outputPreviewBytes: 1024,
+        providers: [
+          {
+            id: 'bootstrap-rspack',
+            kind: 'bootstrap-rspack',
+            check: 'build',
+            checkVersion: 'bootstrap-v1',
+            subject: 'candidate',
+            cost: 'expensive',
+            packageManager: 'pnpm',
+            packageRoot: '',
+            buildCommand: ['corepack', 'pnpm', 'run', 'build'],
+            argv: ['stylex-migrate', 'internal', 'bootstrap-rspack'],
+            versionArgv: ['stylex-migrate', '--version'],
+            cwd: '.',
+            allowedEnv: ['PATH'],
+            fileGlobs: ['package.json'],
+            limitations: [],
+            timeoutMs: 1000,
+          },
+        ],
+      },
+    });
+
+    expect(schedule.estimatedCommandRuns).toBe(3);
   });
 });
