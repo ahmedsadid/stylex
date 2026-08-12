@@ -9,6 +9,7 @@
 
 import { runCommandProvider } from './command';
 import { runRuntimeCommandProvider } from '../runtime/provider';
+import { runGeneratedRuntimeProbeProvider } from '../runtime/generatedProbe';
 import { runBootstrapRspackProvider } from '../bootstrap/provider';
 import type { CommandExecution, CommandExecutionContext } from './command';
 import type { EvidenceProviderConfig } from './config';
@@ -59,6 +60,14 @@ export function createEvidenceProviderRegistry(): EvidenceProviderRegistry {
       throw new Error('Runtime runner received another provider kind');
     }
     return runRuntimeCommandProvider(config, context);
+  });
+  registry.register('generated-runtime-probe', (config, context) => {
+    if (config.kind !== 'generated-runtime-probe') {
+      throw new Error(
+        'Generated runtime runner received another provider kind',
+      );
+    }
+    return runGeneratedRuntimeProbeProvider(config, context);
   });
   registry.register('bootstrap-rspack', (config, context) => {
     if (config.kind !== 'bootstrap-rspack') {

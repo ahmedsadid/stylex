@@ -184,6 +184,7 @@ describe('M5 shell-free command evidence provider', () => {
     expect(registry.kinds()).toEqual([
       'bootstrap-rspack',
       'command',
+      'generated-runtime-probe',
       'runtime-command',
     ]);
     expect(() => registry.register('command', registry.get('command'))).toThrow(

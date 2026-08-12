@@ -248,9 +248,11 @@ export function createEvidenceSchedule({
         total +
         (provider.kind === 'runtime-command'
           ? 2
-          : provider.kind === 'bootstrap-rspack'
-            ? 3
-            : 1),
+          : provider.kind === 'generated-runtime-probe'
+            ? 1
+            : provider.kind === 'bootstrap-rspack'
+              ? 3
+              : 1),
       0,
     ),
     estimatedDurationMs: estimatedWallTime(items, config.concurrency),

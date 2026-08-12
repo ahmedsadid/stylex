@@ -76,7 +76,9 @@ export function aggregateRuntimeCoverage({
 }): RuntimeCoverageSummary {
   const runtimeProviders = providers.filter(
     (provider) =>
-      provider.kind === 'runtime-command' && provider.subject === subject.kind,
+      (provider.kind === 'runtime-command' ||
+        provider.kind === 'generated-runtime-probe') &&
+      provider.subject === subject.kind,
   );
   const evidenceByProvider = new Map(
     entries.map((entry) => [entry.providerId, entry.evidence]),
@@ -84,7 +86,10 @@ export function aggregateRuntimeCoverage({
   const environments = [];
   const caseEntries: Array<RuntimeCaseCoverageEntry> = [];
   for (const provider of runtimeProviders) {
-    if (provider.kind !== 'runtime-command') {
+    if (
+      provider.kind !== 'runtime-command' &&
+      provider.kind !== 'generated-runtime-probe'
+    ) {
       continue;
     }
     const evidence = evidenceByProvider.get(provider.id);

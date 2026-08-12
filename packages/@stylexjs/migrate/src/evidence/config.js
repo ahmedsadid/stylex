@@ -7,8 +7,14 @@
  * @flow strict
  */
 
-import { normalizeRuntimeCases } from '../runtime/model';
-import type { RuntimeCaseDefinition } from '../runtime/model';
+import {
+  normalizeRuntimeCases,
+  normalizeRuntimeReport,
+} from '../runtime/model';
+import type {
+  RuntimeCaseDefinition,
+  RuntimeObservationReport,
+} from '../runtime/model';
 
 export type RepositoryCheck = 'focused-test' | 'typecheck' | 'lint' | 'build';
 export type RuntimeCheck = 'runtime-render';
@@ -56,6 +62,26 @@ export type RuntimeCommandProviderConfig = {
   +cases: $ReadOnlyArray<RuntimeCaseDefinition>,
 };
 
+export type GeneratedRuntimeProbeProviderConfig = {
+  +id: string,
+  +kind: 'generated-runtime-probe',
+  +check: RuntimeCheck,
+  +checkVersion: string,
+  +subject: EvidenceSubjectKind,
+  +cost: EvidenceCost,
+  +runtimeInterface: RuntimeInterface,
+  +argv: $ReadOnlyArray<string>,
+  +versionArgv: $ReadOnlyArray<string>,
+  +cwd: string,
+  +allowedEnv: $ReadOnlyArray<string>,
+  +fileGlobs: $ReadOnlyArray<string>,
+  +limitations: $ReadOnlyArray<string>,
+  +timeoutMs: number,
+  +cases: $ReadOnlyArray<RuntimeCaseDefinition>,
+  +assumptionArtifactHash: string,
+  +expectedReport: RuntimeObservationReport,
+};
+
 export type BootstrapRspackProviderConfig = {
   +id: string,
   +kind: 'bootstrap-rspack',
@@ -78,6 +104,7 @@ export type BootstrapRspackProviderConfig = {
 export type EvidenceProviderConfig =
   | CommandProviderConfig
   | RuntimeCommandProviderConfig
+  | GeneratedRuntimeProbeProviderConfig
   | BootstrapRspackProviderConfig;
 
 export type EvidenceConfig = {
@@ -211,16 +238,30 @@ function normalizeProvider(value: mixed): EvidenceProviderConfig {
     });
   }
   if (
-    provider.kind === 'runtime-command' &&
+    (provider.kind === 'runtime-command' ||
+      provider.kind === 'generated-runtime-probe') &&
     provider.check === 'runtime-render' &&
     RUNTIME_INTERFACES.has(provider.runtimeInterface)
   ) {
+    if (
+      provider.kind === 'generated-runtime-probe' &&
+      (typeof provider.assumptionArtifactHash !== 'string' ||
+        !/^[a-f0-9]{64}$/.test(provider.assumptionArtifactHash))
+    ) {
+      throw new Error('Invalid generated runtime probe assumption hash');
+    }
     return Object.freeze({
       ...commonFields(provider),
-      kind: 'runtime-command',
+      kind: provider.kind,
       check: 'runtime-render',
       runtimeInterface: provider.runtimeInterface,
       cases: normalizeRuntimeCases(provider.cases),
+      ...(provider.kind === 'generated-runtime-probe'
+        ? {
+            assumptionArtifactHash: provider.assumptionArtifactHash,
+            expectedReport: normalizeRuntimeReport(provider.expectedReport),
+          }
+        : {}),
     });
   }
   if (

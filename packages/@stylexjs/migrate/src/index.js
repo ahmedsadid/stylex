@@ -165,6 +165,7 @@ export type {
   EvidenceConfig,
   EvidenceCost,
   EvidenceProviderConfig,
+  GeneratedRuntimeProbeProviderConfig,
   EvidenceSubjectKind,
   RepositoryCheck,
   RuntimeCheck,
@@ -291,6 +292,7 @@ export {
 } from './dynamic/guard';
 export type { DynamicStrategyGuardResult } from './dynamic/guard';
 export { runRuntimeCommandProvider } from './runtime/provider';
+export { runGeneratedRuntimeProbeProvider } from './runtime/generatedProbe';
 export {
   RUNTIME_SURFACE_DISCOVERY_VERSION,
   inspectRuntimeSurfaces,

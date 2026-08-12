@@ -48,13 +48,22 @@ export type RepositoryEvidenceResult = {
   +outputSize: number,
   +outputPreview: string,
   +limitations: $ReadOnlyArray<string>,
-  +runtime?: {
-    +baselineKind: 'retained-repository',
-    +runtimeInterface: RuntimeInterface,
-    +baselineCommand: CommandRecord,
-    +candidateCommand: CommandRecord,
-    +comparison: RuntimeComparison,
-  },
+  +runtime?:
+    | {
+        +baselineKind: 'retained-repository',
+        +runtimeInterface: RuntimeInterface,
+        +baselineCommand: CommandRecord,
+        +candidateCommand: CommandRecord,
+        +comparison: RuntimeComparison,
+      }
+    | {
+        +baselineKind: 'generated-probe',
+        +runtimeInterface: RuntimeInterface,
+        +assumptionArtifactHash: string,
+        +expectedReportHash: string,
+        +candidateCommand: CommandRecord,
+        +comparison: RuntimeComparison,
+      },
   +detail?: string,
 };
 
