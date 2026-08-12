@@ -11,10 +11,12 @@ import {
   initializeProject,
   loadVerificationCandidate,
   openBootstrapTask,
+  readConfig,
   saveInventory,
   scanRepository,
   submitContextAttempt,
 } from '../src/index';
+import { withBootstrapEvidenceProviders } from '../src/bootstrap/evidence';
 import type { ProjectState } from '../src/index';
 import {
   createTempDir,
@@ -80,6 +82,12 @@ export default {plugins: [new rspack.DefinePlugin({})]};
         allowedPaths: ['package.json', 'pnpm-lock.yaml', 'rspack.config.ts'],
         bootstrapPaths: ['package.json', 'pnpm-lock.yaml', 'rspack.config.ts'],
       },
+      requiredChecks: [
+        expect.objectContaining({
+          id: expect.stringContaining('stylex-bootstrap-rspack-'),
+          checkVersion: 'stylex-rspack-emitted-css-v1',
+        }),
+      ],
     });
 
     const manifest = JSON.parse(originalManifest);
@@ -103,9 +111,8 @@ export default {
       proposerVersion: 'fixture-v1',
     });
     if (!submitted.ok) throw new Error(submitted.reasons.join('\n'));
-    expect(
-      loadVerificationCandidate(project, submitted.candidateId),
-    ).toMatchObject({
+    const candidate = loadVerificationCandidate(project, submitted.candidateId);
+    expect(candidate).toMatchObject({
       classification: 'repeatable-contextual',
       staticEvidence: [
         {
@@ -115,6 +122,21 @@ export default {
         },
       ],
     });
+    if (candidate == null) throw new Error('candidate was not persisted');
+    expect(
+      withBootstrapEvidenceProviders({
+        project,
+        candidates: [candidate],
+        subject: 'candidate',
+        config: readConfig(project).evidence,
+      }).providers,
+    ).toEqual([
+      expect.objectContaining({
+        kind: 'bootstrap-rspack',
+        packageManager: 'pnpm',
+        fileGlobs: ['package.json', 'pnpm-lock.yaml', 'rspack.config.ts'],
+      }),
+    ]);
     expect(readFile(repo, 'package.json')).toBe(originalManifest);
     expect(readFile(repo, 'rspack.config.ts')).toBe(originalConfig);
   });

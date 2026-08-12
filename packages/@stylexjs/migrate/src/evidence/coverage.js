@@ -8,6 +8,7 @@
  */
 
 import { matchesGlob } from '../candidate/scope';
+import { isRepositoryCheckProvider } from './config';
 import type { EvidenceProviderConfig } from './config';
 import type { RepositoryEvidenceResult } from './command';
 import type { RepositoryEvidenceSubject } from './subject';
@@ -68,7 +69,7 @@ export function aggregateRepositoryCoverage({
   const coverage = subject.changes.map((change) => {
     const applicable = providers.filter(
       (provider) =>
-        provider.kind === 'command' &&
+        isRepositoryCheckProvider(provider) &&
         provider.subject === subject.kind &&
         relevant(provider, change.path),
     );

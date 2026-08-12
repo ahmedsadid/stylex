@@ -56,9 +56,28 @@ export type RuntimeCommandProviderConfig = {
   +cases: $ReadOnlyArray<RuntimeCaseDefinition>,
 };
 
+export type BootstrapRspackProviderConfig = {
+  +id: string,
+  +kind: 'bootstrap-rspack',
+  +check: 'build',
+  +checkVersion: string,
+  +subject: EvidenceSubjectKind,
+  +cost: EvidenceCost,
+  +packageManager: 'pnpm' | 'yarn' | 'npm',
+  +packageRoot: string,
+  +argv: $ReadOnlyArray<string>,
+  +versionArgv: $ReadOnlyArray<string>,
+  +cwd: string,
+  +allowedEnv: $ReadOnlyArray<string>,
+  +fileGlobs: $ReadOnlyArray<string>,
+  +limitations: $ReadOnlyArray<string>,
+  +timeoutMs: number,
+};
+
 export type EvidenceProviderConfig =
   | CommandProviderConfig
-  | RuntimeCommandProviderConfig;
+  | RuntimeCommandProviderConfig
+  | BootstrapRspackProviderConfig;
 
 export type EvidenceConfig = {
   +concurrency: number,
@@ -115,6 +134,10 @@ function validRelativeCwd(value: mixed): boolean {
   return !value.split(/[\\/]/).includes('..');
 }
 
+function validRelativePath(value: mixed): boolean {
+  return typeof value === 'string' && (value === '' || validRelativeCwd(value));
+}
+
 function validCommonProvider(provider: $FlowFixMe): boolean {
   return (
     typeof provider.id === 'string' &&
@@ -155,9 +178,28 @@ function commonFields(provider: $FlowFixMe): $FlowFixMe {
   };
 }
 
+function bootstrapFields(provider: $FlowFixMe): $FlowFixMe {
+  return commonFields({
+    ...provider,
+    argv: ['stylex-migrate', 'internal', 'bootstrap-rspack'],
+    versionArgv: ['stylex-migrate', '--version'],
+  });
+}
+
 function normalizeProvider(value: mixed): EvidenceProviderConfig {
   const provider: $FlowFixMe = value;
-  if (!object(provider) || !validCommonProvider(provider)) {
+  if (
+    !object(provider) ||
+    !validCommonProvider(
+      provider.kind === 'bootstrap-rspack'
+        ? {
+            ...provider,
+            argv: ['stylex-migrate', 'internal', 'bootstrap-rspack'],
+            versionArgv: ['stylex-migrate', '--version'],
+          }
+        : provider,
+    )
+  ) {
     throw new Error('Invalid repository evidence provider configuration');
   }
   if (provider.kind === 'command' && CHECKS.has(provider.check)) {
@@ -180,7 +222,29 @@ function normalizeProvider(value: mixed): EvidenceProviderConfig {
       cases: normalizeRuntimeCases(provider.cases),
     });
   }
+  if (
+    provider.kind === 'bootstrap-rspack' &&
+    provider.check === 'build' &&
+    (provider.packageManager === 'pnpm' ||
+      provider.packageManager === 'yarn' ||
+      provider.packageManager === 'npm') &&
+    validRelativePath(provider.packageRoot)
+  ) {
+    return Object.freeze({
+      ...bootstrapFields(provider),
+      kind: 'bootstrap-rspack',
+      check: 'build',
+      packageManager: provider.packageManager,
+      packageRoot: provider.packageRoot,
+    });
+  }
   throw new Error('Invalid repository evidence provider configuration');
+}
+
+export function isRepositoryCheckProvider(
+  provider: EvidenceProviderConfig,
+): boolean {
+  return provider.kind === 'command' || provider.kind === 'bootstrap-rspack';
 }
 
 export function normalizeEvidenceConfig(value?: mixed): EvidenceConfig {

@@ -19,6 +19,11 @@ import { loadCurrentInventory } from '../planning/reports';
 import { canonicalJson } from '../state/json';
 import { readConfig } from '../state/project';
 import { inspectBootstrap } from './discover';
+import {
+  bootstrapRspackProviderId,
+  RSPACK_SENTINEL_CHECK_VERSION,
+  RSPACK_SENTINEL_LIMITATION,
+} from './provider';
 import type { ContextOpenResult } from '../context/lifecycle';
 import type { Cluster } from '../inventory/model';
 import type { ProjectState } from '../state/project';
@@ -263,13 +268,22 @@ export function openBootstrapTask({
       ownerDecisionPaths: [],
       bootstrapPaths: changeFiles,
     },
-    requiredChecks: config.evidence.providers.map((provider) => ({
-      id: provider.id,
-      check: provider.check,
-      checkVersion: provider.checkVersion,
-      subject: provider.subject,
-      limitations: provider.limitations,
-    })),
+    requiredChecks: [
+      ...config.evidence.providers.map((provider) => ({
+        id: provider.id,
+        check: provider.check,
+        checkVersion: provider.checkVersion,
+        subject: provider.subject,
+        limitations: provider.limitations,
+      })),
+      {
+        id: bootstrapRspackProviderId(inspection.id),
+        check: 'build',
+        checkVersion: RSPACK_SENTINEL_CHECK_VERSION,
+        subject: 'candidate',
+        limitations: [RSPACK_SENTINEL_LIMITATION],
+      },
+    ],
     limitations: [
       'Bootstrap wiring inspection is syntactic; repository compilation and emitted-CSS evidence remain required.',
       ...(manager.status === 'inferred'
@@ -277,7 +291,7 @@ export function openBootstrapTask({
         : []),
       ...(config.evidence.providers.length === 0
         ? [
-            'No repository evidence providers are configured; submission can freeze but verification will block.',
+            'Only the built-in isolated Rspack sentinel is configured; the repository application build is not covered.',
           ]
         : []),
     ],

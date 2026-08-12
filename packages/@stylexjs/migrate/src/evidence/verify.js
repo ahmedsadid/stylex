@@ -12,6 +12,7 @@ import {
   removeCandidateWorkspace,
 } from '../candidate/workspace';
 import { recordContextVerificationOutcome } from '../context/lifecycle';
+import { withBootstrapEvidenceProviders } from '../bootstrap/evidence';
 import { assertActiveThemeCandidateDecisions } from '../theme/decisions';
 import { appendStateEvent } from '../state/events';
 import { readConfig } from '../state/project';
@@ -79,7 +80,12 @@ export async function verifyPersistedCandidates({
     subjectInputs.length === 1
       ? createCandidateEvidenceSubject(subjectInputs[0])
       : createApplyPlanEvidenceSubject(subjectInputs);
-  const config = readConfig(project).evidence;
+  const config = withBootstrapEvidenceProviders({
+    project,
+    candidates,
+    subject: subject.kind,
+    config: readConfig(project).evidence,
+  });
   const workspace = createVerificationWorkspace({
     records: candidates,
     rootDir: workspaceRoot,

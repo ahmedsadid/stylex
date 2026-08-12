@@ -31,6 +31,12 @@ export {
   BOOTSTRAP_TASK_PROTOCOL_VERSION,
   openBootstrapTask,
 } from './bootstrap/task';
+export {
+  RSPACK_SENTINEL_CHECK_VERSION,
+  RSPACK_SENTINEL_LIMITATION,
+  bootstrapRspackProviderId,
+  runBootstrapRspackProvider,
+} from './bootstrap/provider';
 
 export {
   RECORD_COLLECTIONS,
@@ -135,6 +141,7 @@ export type {
   EvidenceProviderRunner,
 } from './evidence/registry';
 export type {
+  BootstrapRspackProviderConfig,
   CommandProviderConfig,
   EvidenceConfig,
   EvidenceCost,

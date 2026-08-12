@@ -9,6 +9,7 @@
 
 import { runCommandProvider } from './command';
 import { runRuntimeCommandProvider } from '../runtime/provider';
+import { runBootstrapRspackProvider } from '../bootstrap/provider';
 import type { CommandExecution, CommandExecutionContext } from './command';
 import type { EvidenceProviderConfig } from './config';
 
@@ -58,6 +59,12 @@ export function createEvidenceProviderRegistry(): EvidenceProviderRegistry {
       throw new Error('Runtime runner received another provider kind');
     }
     return runRuntimeCommandProvider(config, context);
+  });
+  registry.register('bootstrap-rspack', (config, context) => {
+    if (config.kind !== 'bootstrap-rspack') {
+      throw new Error('Bootstrap Rspack runner received another provider kind');
+    }
+    return runBootstrapRspackProvider(config, context);
   });
   return Object.freeze(registry);
 }

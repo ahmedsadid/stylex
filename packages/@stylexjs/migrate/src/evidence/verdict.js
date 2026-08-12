@@ -16,6 +16,7 @@ import {
 } from '../kernel/applyPlan';
 import { validateCandidatePatch } from '../candidate/patch';
 import { validateRepositoryEvidenceBundle } from './bundle';
+import { isRepositoryCheckProvider } from './config';
 import {
   createApplyPlanEvidenceSubject,
   createCandidateEvidenceSubject,
@@ -265,26 +266,25 @@ export function evaluateRepositoryEvidence({
   const repositoryResults = bundle.repositoryEntries.map(
     (entry) => entry.evidence,
   );
-  const providerKinds = new Map(
-    bundle.providerConfig.providers.map((provider) => [
-      provider.id,
-      provider.kind,
-    ]),
+  const repositoryProviderIds = new Set(
+    bundle.providerConfig.providers
+      .filter(isRepositoryCheckProvider)
+      .map((provider) => provider.id),
   );
-  const commandResults = repositoryResults.filter(
-    (result) => providerKinds.get(result.provider) === 'command',
+  const commandResults = repositoryResults.filter((result) =>
+    repositoryProviderIds.has(result.provider),
   );
   for (const result of repositoryResults) {
     if (result.result === 'fail') {
       failures.add(`${result.provider} failed ${result.check}`);
     } else if (
       result.result === 'unavailable' &&
-      providerKinds.get(result.provider) === 'command'
+      repositoryProviderIds.has(result.provider)
     ) {
       missing.add(`${result.provider} was unavailable for ${result.check}`);
     } else if (
       result.result !== 'pass' &&
-      providerKinds.get(result.provider) === 'command'
+      repositoryProviderIds.has(result.provider)
     ) {
       missing.add(`${result.provider} did not run ${result.check}`);
     }

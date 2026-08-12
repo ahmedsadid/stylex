@@ -64,6 +64,22 @@ const RUNTIME = {
   ],
 };
 
+const BOOTSTRAP_RSPACK = {
+  id: 'stylex-bootstrap-rspack-fixture',
+  kind: 'bootstrap-rspack',
+  check: 'build',
+  checkVersion: 'stylex-rspack-emitted-css-v1',
+  subject: 'candidate',
+  cost: 'expensive',
+  packageManager: 'pnpm',
+  packageRoot: '',
+  cwd: '.',
+  allowedEnv: ['PATH'],
+  fileGlobs: ['package.json', 'pnpm-lock.yaml', 'rspack.config.ts'],
+  limitations: ['isolated compiler sentinel'],
+  timeoutMs: 120000,
+};
+
 describe('M5 repository evidence configuration', () => {
   let repo: string;
 
@@ -86,6 +102,19 @@ describe('M5 repository evidence configuration', () => {
       allowedEnv: ['CI', 'PATH'],
     });
     expect(Object.isFrozen(config.providers[0].argv)).toBe(true);
+  });
+
+  test('normalizes the tool-owned Rspack sentinel provider', () => {
+    const config = normalizeEvidenceConfig({
+      concurrency: 1,
+      outputPreviewBytes: 1024,
+      providers: [BOOTSTRAP_RSPACK],
+    });
+    expect(config.providers[0]).toEqual({
+      ...BOOTSTRAP_RSPACK,
+      argv: ['stylex-migrate', 'internal', 'bootstrap-rspack'],
+      versionArgv: ['stylex-migrate', '--version'],
+    });
   });
 
   test('rejects shell strings, escaping cwd, and an unrecorded PATH', () => {
