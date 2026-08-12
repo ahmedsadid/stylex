@@ -126,23 +126,27 @@ const compiler = rspack({
 });
 compiler.run((error, stats) => {
   compiler.close(() => {});
-  if (error) throw error;
-  if (!stats || stats.hasErrors()) {
-    throw new Error(stats ? stats.toString({colors: false}) : 'Rspack returned no stats');
+  try {
+    if (error) throw error;
+    if (!stats || stats.hasErrors()) {
+      throw new Error(stats ? stats.toString({colors: false}) : 'Rspack returned no stats');
+    }
+    const cssPath = path.join(output, 'style.css');
+    const jsPath = path.join(output, 'sentinel.js');
+    const css = fs.readFileSync(cssPath, 'utf8');
+    const js = fs.readFileSync(jsPath, 'utf8');
+    const emittedDeclaration = /color\s*:\s*(?:#010203|rgb\(\s*1\s*,\s*2\s*,\s*3\s*\))/i.test(css);
+    const transformedCall = !js.includes('stylex.create') && !js.includes("@stylexjs/stylex");
+    if (!emittedDeclaration || !transformedCall) {
+      throw new Error('Sentinel did not produce transformed JavaScript and the expected CSS declaration');
+    }
+    process.stdout.write(JSON.stringify({
+      emittedCssBytes: Buffer.byteLength(css),
+      transformedJavaScript: true,
+    }) + '\n');
+  } finally {
+    fs.rmSync(root, {recursive: true, force: true});
   }
-  const cssPath = path.join(output, 'style.css');
-  const jsPath = path.join(output, 'sentinel.js');
-  const css = fs.readFileSync(cssPath, 'utf8');
-  const js = fs.readFileSync(jsPath, 'utf8');
-  const emittedDeclaration = /color\s*:\s*(?:#010203|rgb\(\s*1\s*,\s*2\s*,\s*3\s*\))/i.test(css);
-  const transformedCall = !js.includes('stylex.create') && !js.includes("@stylexjs/stylex");
-  if (!emittedDeclaration || !transformedCall) {
-    throw new Error('Sentinel did not produce transformed JavaScript and the expected CSS declaration');
-  }
-  process.stdout.write(JSON.stringify({
-    emittedCssBytes: Buffer.byteLength(css),
-    transformedJavaScript: true,
-  }) + '\n');
 });
 `;
 }

@@ -11,7 +11,7 @@ stylex-migrate plan
 stylex-migrate mechanical propose <cluster-id>
 stylex-migrate styled propose <cluster-id>
 stylex-migrate bootstrap inspect
-stylex-migrate bootstrap open "<goal>"
+stylex-migrate bootstrap open "<goal>" [package-root]
 stylex-migrate candidate diff <candidate-id>
 stylex-migrate dynamic strategy draft <json-file> <agent|human> <author>
 stylex-migrate dynamic strategy inspect <draft-id>

@@ -54,6 +54,8 @@ export default {plugins: [new rspack.DefinePlugin({})]};
       'pnpm-lock.yaml': 'lockfileVersion: 9\n',
       'rspack.config.ts': originalConfig,
       'src/App.tsx': 'export const App = () => null;\n',
+      'packages/tool/package.json': '{"name":"nested-tool"}\n',
+      'packages/tool/src/index.ts': 'export const tool = true;\n',
     });
     workspaceRoot = createTempDir('stylex-migrate-bootstrap-task-');
     project = initializeProject({ repositoryRoot: repo });
@@ -172,7 +174,47 @@ export default {plugins: []};
     ).toMatchObject({
       ok: false,
       state: 'needs-replan',
-      reasons: [expect.stringContaining('invokes its rspack adapter')],
+      reasons: expect.arrayContaining([
+        expect.stringContaining('invokes its rspack adapter'),
+      ]),
+    });
+  });
+
+  test('rejects unrelated manifest and Rspack configuration edits', () => {
+    const opened = openBootstrapTask({
+      project,
+      goal: 'Attempt to widen a bootstrap patch.',
+      workspaceRoot,
+    });
+    if (!opened.ok) throw new Error(opened.reasons.join('\n'));
+    const manifest = JSON.parse(originalManifest);
+    manifest.scripts.unrelated = 'node unexpected.js';
+    manifest.dependencies = { '@stylexjs/stylex': '^0.19.0' };
+    manifest.devDependencies['@stylexjs/unplugin'] = '^0.19.0';
+    writeFiles(opened.attempt.workspace.path, {
+      'package.json': `${JSON.stringify(manifest, null, 2)}\n`,
+      'pnpm-lock.yaml': 'lockfileVersion: 9\n# StyleX packages resolved\n',
+      'rspack.config.ts': `import stylexPlugin from '@stylexjs/unplugin';
+export default {
+  mode: 'production',
+  plugins: [stylexPlugin.rspack()],
+};
+`,
+    });
+
+    expect(
+      submitContextAttempt({
+        project,
+        taskId: opened.task.id,
+        proposerKind: 'agent',
+        proposerVersion: 'fixture-v1',
+      }),
+    ).toMatchObject({
+      ok: false,
+      reasons: expect.arrayContaining([
+        expect.stringContaining('required StyleX dependency entries'),
+        expect.stringContaining('direct rspack adapter entries'),
+      ]),
     });
   });
 

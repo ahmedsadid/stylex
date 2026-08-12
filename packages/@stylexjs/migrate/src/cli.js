@@ -97,7 +97,8 @@ Commands:
   styled propose <cluster>
                           freeze a checked closed-intrinsic styled candidate
   bootstrap inspect       inspect package manager, package, and build wiring
-  bootstrap open <goal>   open a bounded StyleX installation/config task
+  bootstrap open <goal> [package-root]
+                          open a bounded StyleX installation/config task
   candidate diff <candidate>
                           print the exact frozen patch without applying it
   dynamic strategy draft <json-file> <agent|human> <author>
@@ -597,10 +598,17 @@ export function runCli(
       );
       return 0;
     }
-    if (args[0] === 'bootstrap' && args[1] === 'open' && args.length === 3) {
+    if (
+      args[0] === 'bootstrap' &&
+      args[1] === 'open' &&
+      (args.length === 3 || args.length === 4)
+    ) {
       const result = openBootstrapTask({
         project: openProject(cwd),
         goal: args[2],
+        ...(args[3] == null
+          ? {}
+          : { packageRoot: args[3] === '.' ? '' : args[3] }),
       });
       present(
         result.ok

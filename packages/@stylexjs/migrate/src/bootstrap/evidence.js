@@ -59,7 +59,7 @@ export function withBootstrapEvidenceProviders({
       packageManager: origin.packageManager,
       packageRoot: origin.packageRoot,
       cwd: '.',
-      allowedEnv: ['CI', 'NODE_ENV', 'PATH'],
+      allowedEnv: ['CI', 'PATH'],
       fileGlobs: inspection.task.scope.bootstrapPaths ?? [],
       limitations: [RSPACK_SENTINEL_LIMITATION],
       timeoutMs: 15 * 60 * 1000,

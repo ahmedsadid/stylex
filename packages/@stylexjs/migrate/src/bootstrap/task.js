@@ -54,6 +54,8 @@ function choosePackage(
     );
   }
   if (inspection.packages.length === 1) return inspection.packages[0];
+  const root = inspection.packages.find((target) => target.root === '');
+  if (root != null) return root;
   const nested = inspection.packages.filter((target) => target.root !== '');
   if (nested.length === 1) return nested[0];
   return 'Bootstrap package ownership is ambiguous; select an exact package root.';
